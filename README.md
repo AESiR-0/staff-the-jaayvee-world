@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Staff Portal - The Jaayvee World
+
+A modern staff portal for The Jaayvee World with face authentication, QR code management, and event tracking.
+
+## Features
+
+- **Face Authentication**: Secure login with camera capture
+- **Dashboard**: Overview of events, referrals, and QR tools
+- **QR Management**: Generate and assign QR code batches
+- **Referral System**: Track referral performance and analytics
+- **Event Management**: View and manage Talaash events
+- **Modern UI**: Clean design with custom theme
+
+## Tech Stack
+
+- Next.js 14 with App Router
+- React 18
+- TypeScript
+- Tailwind CSS
+- Lucide React Icons
+
+## Theme
+
+- **Background**: White (#FFFFFF)
+- **Foreground**: Black (#0C0C0C)
+- **Accent**: Blue (#00719C)
+- **Border**: Light Gray (#E0E0E0)
+- **Muted**: Gray (#777777)
 
 ## Getting Started
 
-First, run the development server:
-
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Run the development server:
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Pages
 
-## Learn More
+- `/login` - Face authentication login
+- `/dashboard` - Main dashboard with overview
+- `/qr` - QR code generation and management
+- `/referrals` - Referral tracking and analytics
+- `/events` - Event management and tracking
 
-To learn more about Next.js, take a look at the following resources:
+## Components
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `Sidebar` - Unified navigation sidebar
+- `FaceLogin` - Camera-based authentication
+- `ReferralCard` - Referral information display
+- `QrTools` - QR code generation tools
+- `EventTable` - Event listing and management
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## API Endpoints (Mock)
 
-## Deploy on Vercel
+- `POST /api/staff/auth/initiate` - Authentication initiation
+- `GET /api/talaash/events` - Fetch events
+- `GET /api/staff/affiliates/stats` - Referral statistics
+- `POST /api/staff/qr/generate` - Generate QR codes
+- `POST /api/staff/qr/assign-range` - Assign QR range
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Development
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The project uses:
+- TypeScript for type safety
+- Tailwind CSS for styling
+- Next.js App Router for routing
+- Custom theme configuration
+- Responsive design
+- Modern UI components
