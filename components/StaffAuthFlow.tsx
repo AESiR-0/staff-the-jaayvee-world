@@ -97,6 +97,24 @@ export default function StaffAuthFlow() {
     }
   };
 
+  const handleDemoLogin = () => {
+    // Demo authentication - bypasses face verification
+    localStorage.setItem("authToken", "demo-auth-token");
+    localStorage.setItem("userSession", JSON.stringify({
+      displayName: "Demo Staff",
+      loginTime: new Date().toISOString(),
+      staffId: "demo-staff-001",
+      affiliateCode: "TJ2024-DEMO-001"
+    }));
+
+    setStep('success');
+    
+    // Redirect to dashboard after a brief success message
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 2000);
+  };
+
   const handleSuccess = (response: AuthVerifyResponse | AuthInitiateResponse) => {
     // Store authentication data
     localStorage.setItem("authToken", (response as AuthVerifyResponse).token || "authenticated");
@@ -179,6 +197,37 @@ export default function StaffAuthFlow() {
         <div className="card">
           {step === 'initiate' && (
             <div className="space-y-6">
+              {/* Demo Mode Toggle */}
+              <div className="p-4 bg-primary-accent-light rounded-xl">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 bg-primary-accent rounded-lg flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">DEMO</span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-primary-fg">Demo Mode</p>
+                    <p className="text-sm text-primary-muted">Skip face verification for testing</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setDisplayName("Demo Staff");
+                    handleDemoLogin();
+                  }}
+                  className="w-full border border-primary-accent text-primary-accent px-4 py-2 rounded-xl hover:bg-primary-accent hover:text-white transition-colors"
+                >
+                  Login as Demo Staff
+                </button>
+              </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-primary-border" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-primary-bg text-primary-muted">Or use real authentication</span>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-primary-fg mb-2">
                   Display Name

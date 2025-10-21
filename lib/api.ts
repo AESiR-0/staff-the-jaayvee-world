@@ -1,5 +1,7 @@
-// API configuration - Always use production API
-const API_BASE_URL = 'https://talaash.thejaayveeworld.com';
+// API configuration - Use local API for development
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://talaash.thejaayveeworld.com' 
+  : '';
 
 // You can also use environment variables:
 // const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';

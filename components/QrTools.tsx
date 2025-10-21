@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { QrCode, Download, Settings, Plus } from "lucide-react";
+import { API_ENDPOINTS } from "@/lib/api";
 
 export function QrTools() {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -12,7 +13,7 @@ export function QrTools() {
   async function handleGenerate() {
     setIsGenerating(true);
     try {
-      const res = await fetch("/api/staff/qr/generate", {
+      const res = await fetch(API_ENDPOINTS.QR_GENERATE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -27,7 +28,7 @@ export function QrTools() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `qr_codes_${prefix}_${startFrom}-${startFrom + count - 1}.zip`;
+        a.download = `qr_codes_${prefix}_${startFrom}-${startFrom + count - 1}.txt`;
         a.click();
         URL.revokeObjectURL(url);
       } else {
@@ -44,7 +45,7 @@ export function QrTools() {
   async function handleAssignRange() {
     setIsAssigning(true);
     try {
-      const res = await fetch("/api/staff/qr/assign-range", {
+      const res = await fetch(API_ENDPOINTS.QR_ASSIGN_RANGE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 

@@ -1,0 +1,53 @@
+{
+  "name": "Jaayvee Staff - Internal Operations Portal",
+  "short_name": "Jaayvee Staff",
+  "description": "Internal staff portal for Jaayvee operations. Handle KYC, payouts, campaign checks, and internal validation tasks with our comprehensive staff dashboard.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/static/logos/staff/staff_icon_192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/logos/staff/staff_icon_512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "View staff dashboard",
+      "url": "/dashboard",
+      "icons": [
+        {
+          "src": "/static/logos/staff/staff_icon_192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "KYC",
+      "short_name": "KYC",
+      "description": "Process KYC requests",
+      "url": "/kyc",
+      "icons": [
+        {
+          "src": "/static/logos/staff/staff_icon_192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}
