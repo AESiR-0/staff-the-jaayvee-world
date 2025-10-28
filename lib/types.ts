@@ -26,8 +26,14 @@ export interface AuthInitiateRequest {
 export interface AuthInitiateResponse {
   success: boolean;
   message: string;
+  token?: string;
   staffId?: string;
+  userId?: string;
+  displayName?: string;
+  email?: string;
+  affiliateCode?: string;
   requiresVerification?: boolean;
+  registeredFaceImage?: string;
 }
 
 export interface AuthVerifyRequest {

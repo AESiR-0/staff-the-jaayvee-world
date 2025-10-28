@@ -7,7 +7,8 @@ import {
   LogOut, 
   Menu,
   X,
-  Calendar
+  Calendar,
+  Ticket
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -17,6 +18,7 @@ const navigation = [
   { name: "QR Tools", href: "/qr", icon: QrCode },
   { name: "Referrals", href: "/referrals", icon: Users },
   { name: "Events", href: "/events", icon: Calendar },
+  { name: "Coupons", href: "/coupons", icon: Ticket },
 ];
 
 export default function Sidebar() {

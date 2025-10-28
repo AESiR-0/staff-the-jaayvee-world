@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import ConditionalLayout from '@/components/ConditionalLayout'
+import FaceModelLoader from '@/components/FaceModelLoader'
 
 
 export default function RootLayout({
@@ -55,6 +56,7 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <FaceModelLoader />
         <ConditionalLayout>
           {children}
         </ConditionalLayout>

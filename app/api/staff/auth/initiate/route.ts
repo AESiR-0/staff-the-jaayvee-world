@@ -1,27 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchAPI, API_ENDPOINTS } from '@/lib/api';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { displayName } = body;
-
-    if (!displayName) {
-      return NextResponse.json(
-        { success: false, message: 'Display name is required' },
-        { status: 400 }
-      );
-    }
-
-    // Mock response - always successful
-    return NextResponse.json({
-      success: true,
-      message: 'Authentication initiated successfully',
-      staffId: `staff_${Date.now()}`,
-      requiresVerification: true
+    
+    // Proxy the request to the central API
+    const response = await fetchAPI(API_ENDPOINTS.STAFF_AUTH_INITIATE, {
+      method: 'POST',
+      body: JSON.stringify(body),
     });
+    
+    return NextResponse.json(response);
+    
   } catch (error) {
+    console.error('Staff auth initiate error:', error);
     return NextResponse.json(
-      { success: false, message: 'Internal server error' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

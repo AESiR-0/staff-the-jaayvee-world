@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 
 interface ConditionalLayoutProps {
@@ -11,6 +11,7 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     // Check if user is authenticated
@@ -24,6 +25,10 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
             setIsAuthenticated(true);
           } else {
             setIsAuthenticated(false);
+            // Redirect to login if not authenticated and not already on login page
+            if (pathname !== "/login" && pathname !== "/auth") {
+              router.push("/auth");
+            }
           }
         } else {
           setIsAuthenticated(false);
@@ -36,7 +41,7 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
     };
 
     checkAuth();
-  }, [pathname]);
+  }, [pathname, router]);
 
   // Show loading state briefly
   if (isLoading) {
@@ -50,8 +55,8 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
     );
   }
 
-  // Don't show sidebar on login page
-  if (pathname === "/login") {
+  // Don't show sidebar on login/auth pages
+  if (pathname === "/login" || pathname === "/auth") {
     return <>{children}</>;
   }
 

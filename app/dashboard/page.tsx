@@ -2,13 +2,19 @@ import { Suspense } from "react";
 import { ReferralCard } from "@/components/ReferralCard";
 import { QrTools } from "@/components/QrTools";
 import { EventTable } from "@/components/EventTable";
+import { MerchantQRManager } from "@/components/MerchantQRManager";
 import { Calendar, QrCode, Users, TrendingUp } from "lucide-react";
 import { API_ENDPOINTS } from "@/lib/api";
 import { Event, AffiliateStats } from "@/lib/types";
+import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 
 // Real data will be fetched from API
 
 async function DashboardContent() {
+  // Get staff session
+  const session = typeof window !== 'undefined' ? getStaffSession() : null;
+  const staffId = session?.staffId;
+  
   // Fetch real data from API with error handling
   let events: Event[] = [];
   let affiliateStats: AffiliateStats = { 
@@ -21,59 +27,42 @@ async function DashboardContent() {
   };
   
   try {
-    const [eventsRes, affiliateRes] = await Promise.all([
-      fetch(API_ENDPOINTS.TALAASH_EVENTS_SUMMARY),
-      fetch(API_ENDPOINTS.STAFF_AFFILIATE_GET),
-    ]);
+    // Get base URL from API configuration  
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com';
     
+    // Fetch events summary - convert to dashboard format
+    const eventsRes = await fetch(`${API_BASE_URL}${API_ENDPOINTS.TALAASH_EVENTS_SUMMARY}`);
     if (eventsRes.ok) {
-      events = await eventsRes.json() as Event[];
+      const summaryData = await eventsRes.json();
+      // Convert talaash summary format to dashboard format
+      events = summaryData.data?.upcomingEvents?.map((event: any) => ({
+        id: event.id,
+        name: event.title,
+        date: event.startDate,
+        location: event.venue || 'TBD',
+        attendees: 0, // Will need actual attendee count from tickets
+        maxAttendees: 100, // Default
+        status: event.status || 'upcoming' as const,
+      })) || [];
     }
     
-    if (affiliateRes.ok) {
-      affiliateStats = await affiliateRes.json() as AffiliateStats;
+    // Fetch affiliate stats - pass staffId in request body if available
+    if (staffId) {
+      const affiliateRes = await authenticatedFetch(`${API_BASE_URL}${API_ENDPOINTS.STAFF_AFFILIATE}`);
+      if (affiliateRes.ok) {
+        const affiliateData = await affiliateRes.json();
+        affiliateStats = {
+          affiliateCode: affiliateData.data?.referralCode || "",
+          totalClicks: 0,
+          totalSignups: 0,
+          totalCommission: 0,
+          recentClicks: 0,
+          recentSignups: 0
+        };
+      }
     }
   } catch (error) {
     console.error('Failed to fetch data:', error);
-    // Use demo data as fallback for testing
-    events = [
-      {
-        id: "1",
-        name: "Talaash Workshop 2024",
-        date: "2024-02-15T10:00:00Z",
-        location: "Main Conference Hall",
-        attendees: 45,
-        maxAttendees: 50,
-        status: "upcoming" as const,
-      },
-      {
-        id: "2", 
-        name: "Digital Marketing Masterclass",
-        date: "2024-02-10T14:00:00Z",
-        location: "Room 101",
-        attendees: 30,
-        maxAttendees: 30,
-        status: "completed" as const,
-      },
-      {
-        id: "3",
-        name: "Networking Event",
-        date: "2024-02-08T18:00:00Z", 
-        location: "Lobby Area",
-        attendees: 25,
-        maxAttendees: 40,
-        status: "ongoing" as const,
-      },
-    ];
-    
-    affiliateStats = {
-      affiliateCode: "TJ2024-DEMO-001",
-      totalClicks: 156,
-      totalSignups: 23,
-      totalCommission: 1250.50,
-      recentClicks: 12,
-      recentSignups: 3
-    };
   }
 
   return (
@@ -119,7 +108,7 @@ async function DashboardContent() {
             </div>
             <div>
               <p className="text-sm text-primary-muted">QR Codes Generated</p>
-              <p className="text-2xl font-bold text-primary-fg">1,247</p>
+              <p className="text-2xl font-bold text-primary-fg">-</p>
             </div>
           </div>
         </div>
@@ -138,36 +127,15 @@ async function DashboardContent() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Referral Card */}
-        <div className="lg:col-span-1">
+        <div>
           <ReferralCard data={affiliateStats} />
         </div>
 
-        {/* QR Tools */}
+        {/* Merchant QR Manager - Unified */}
         <div className="lg:col-span-1">
-          <QrTools />
-        </div>
-
-        {/* Quick Actions */}
-        <div className="lg:col-span-1">
-          <div className="card">
-            <h3 className="text-lg font-semibold text-primary-fg mb-4">Quick Actions</h3>
-            <div className="space-y-3">
-              <button className="w-full btn-primary flex items-center gap-2">
-                <QrCode size={16} />
-                Generate New QR Batch
-              </button>
-              <button className="w-full border border-primary-border text-primary-fg px-4 py-2 rounded-xl hover:bg-primary-accent-light transition-colors flex items-center gap-2">
-                <Users size={16} />
-                View Referral Stats
-              </button>
-              <button className="w-full border border-primary-border text-primary-fg px-4 py-2 rounded-xl hover:bg-primary-accent-light transition-colors flex items-center gap-2">
-                <Calendar size={16} />
-                Create New Event
-              </button>
-            </div>
-          </div>
+          <MerchantQRManager />
         </div>
       </div>
 
