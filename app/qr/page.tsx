@@ -1,19 +1,49 @@
 "use client";
-import { useState } from "react";
-import { QrCode, Download, Settings, History, Plus } from "lucide-react";
-import { API_ENDPOINTS } from "@/lib/api";
+import { useState, useEffect } from "react";
+import { QrCode, Download, History, UserPlus, Search } from "lucide-react";
+import { API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
+import { authenticatedFetch } from "@/lib/auth-utils";
 
 interface QRAssignment {
   id: string;
-  prefix: string;
-  startRange: number;
-  endRange: number;
+  rangeStart: string;
+  rangeEnd: string;
   assignedDate: string;
+  agentId: string;
+  agentName: string;
+  agentEmail: string;
+  agentReferralCode: string;
+  totalCodes: number;
   status: "active" | "used" | "expired";
 }
 
+interface QRHistory {
+  id: string;
+  prefix: string;
+  startFrom: number;
+  count: number;
+  rangeStart: string;
+  rangeEnd: string;
+  createdAt: string;
+  createdBy: string;
+  creatorName: string;
+  creatorEmail: string;
+  totalCodes: number;
+  assignedCodes: number;
+  unassignedCodes: number;
+  status: "fully_assigned" | "partially_assigned" | "unassigned";
+}
+
+interface Agent {
+  id: string;
+  name: string;
+  email: string;
+  referralCode: string;
+  totalMerchants: number;
+}
+
 export default function QRPage() {
-  const [activeTab, setActiveTab] = useState<"generate" | "assign" | "history">("generate");
+  const [activeTab, setActiveTab] = useState<"generate" | "history">("generate");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   
@@ -21,31 +51,112 @@ export default function QRPage() {
   const [prefix, setPrefix] = useState("TJW");
   const [count, setCount] = useState(20);
   const [startFrom, setStartFrom] = useState(1);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+  
+  // Agents
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(true);
 
-  // Mock data for assignments
-  const mockAssignments: QRAssignment[] = [
-    {
-      id: "1",
-      prefix: "TJW",
-      startRange: 1,
-      endRange: 50,
-      assignedDate: "2024-02-01",
-      status: "active",
-    },
-    {
-      id: "2", 
-      prefix: "TJW",
-      startRange: 51,
-      endRange: 100,
-      assignedDate: "2024-01-15",
-      status: "used",
-    },
-  ];
+  // Assignments
+  const [assignments, setAssignments] = useState<QRAssignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [rangeError, setRangeError] = useState("");
+  const [generationError, setGenerationError] = useState("");
+
+  // History
+  const [history, setHistory] = useState<QRHistory[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    fetchAgents();
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "history") {
+      fetchHistory();
+    }
+  }, [activeTab, searchQuery]);
+
+  const fetchAgents = async () => {
+    try {
+      setLoadingAgents(true);
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/agents`);
+      if (response.ok) {
+        const data = await response.json();
+        setAgents(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch agents:', error);
+    } finally {
+      setLoadingAgents(false);
+    }
+  };
+
+  const fetchAssignments = async () => {
+    try {
+      setLoadingAssignments(true);
+      const url = `${API_BASE_URL}${API_ENDPOINTS.QR_ASSIGNMENTS}${searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : ''}`;
+      const response = await authenticatedFetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        setAssignments(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch assignments:', error);
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  const fetchHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const url = `${API_BASE_URL}${API_ENDPOINTS.QR_HISTORY}${searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : ''}`;
+      const response = await authenticatedFetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        setHistory(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch QR history:', error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const checkRangeOverlap = (newRangeStart: string, newRangeEnd: string): boolean => {
+    return assignments.some(assignment => {
+      // Check if new range overlaps with existing range
+      return (
+        // New range starts within existing range
+        (newRangeStart >= assignment.rangeStart && newRangeStart <= assignment.rangeEnd) ||
+        // New range ends within existing range
+        (newRangeEnd >= assignment.rangeStart && newRangeEnd <= assignment.rangeEnd) ||
+        // New range completely contains existing range
+        (newRangeStart <= assignment.rangeStart && newRangeEnd >= assignment.rangeEnd)
+      );
+    });
+  };
 
   async function handleGenerate() {
     setIsGenerating(true);
+    setRangeError("");
+    setGenerationError("");
+    
     try {
-      const res = await fetch(API_ENDPOINTS.QR_GENERATE, {
+      const rangeStart = `${prefix}${startFrom.toString().padStart(4, '0')}`;
+      const rangeEnd = `${prefix}${(startFrom + count - 1).toString().padStart(4, '0')}`;
+
+      // Check for range overlap
+      if (checkRangeOverlap(rangeStart, rangeEnd)) {
+        setRangeError(`Range ${rangeStart} to ${rangeEnd} overlaps with existing assignments. Please choose a different range.`);
+        setIsGenerating(false);
+        return;
+      }
+
+      // Generate QR codes
+      const res = await authenticatedFetch(`${API_BASE_URL}${API_ENDPOINTS.QR_GENERATE}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prefix, startFrom, count }),
@@ -59,37 +170,55 @@ export default function QRPage() {
         a.download = `qr_codes_${prefix}_${startFrom}-${startFrom + count - 1}.zip`;
         a.click();
         URL.revokeObjectURL(url);
+
+        // Assign the codes to the selected agent
+        setIsAssigning(true);
+        try {
+          const assignRes = await authenticatedFetch(`${API_BASE_URL}${API_ENDPOINTS.QR_ASSIGN_RANGE}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              agentId: selectedAgentId, 
+              rangeStart, 
+              rangeEnd 
+            }),
+          });
+          
+          if (assignRes.ok) {
+            const result = await assignRes.json();
+            const agent = agents.find(a => a.id === selectedAgentId);
+            alert(`QR codes generated and assigned to ${agent?.name || 'agent'} successfully!`);
+            
+            // Refresh assignments to update the list
+            await fetchAssignments();
+          } else {
+            const error = await assignRes.json();
+            alert(`QR codes generated but assignment failed: ${error.error || 'Unknown error'}`);
+          }
+        } catch (assignError) {
+          console.error("Assignment error:", assignError);
+          alert("QR codes generated but assignment failed. Please try assigning manually.");
+        } finally {
+          setIsAssigning(false);
+        }
       } else {
-        throw new Error("Failed to generate QR codes");
+        // Handle specific error responses
+        const errorData = await res.json().catch(() => ({}));
+        
+        if (errorData.detail && errorData.detail.includes('already exists')) {
+          const duplicateCode = errorData.detail.match(/Key \(code\)=\(([^)]+)\)/)?.[1];
+          setGenerationError(`QR code ${duplicateCode} already exists. Please choose a different starting number or prefix.`);
+        } else if (errorData.error) {
+          setGenerationError(errorData.error);
+        } else {
+          setGenerationError(`Failed to generate QR codes (${res.status}). Please try again.`);
+        }
       }
     } catch (error) {
       console.error("QR generation error:", error);
-      alert("Failed to generate QR codes. Please try again.");
+      setGenerationError("Network error occurred. Please check your connection and try again.");
     } finally {
       setIsGenerating(false);
-    }
-  }
-
-  async function handleAssignRange() {
-    setIsAssigning(true);
-    try {
-      const res = await fetch(API_ENDPOINTS.QR_ASSIGN_RANGE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prefix, startFrom, count }),
-      });
-      
-      if (res.ok) {
-        alert("QR codes assigned successfully!");
-        // Refresh assignments list
-      } else {
-        throw new Error("Failed to assign QR codes");
-      }
-    } catch (error) {
-      console.error("QR assignment error:", error);
-      alert("Failed to assign QR codes. Please try again.");
-    } finally {
-      setIsAssigning(false);
     }
   }
 
@@ -98,7 +227,7 @@ export default function QRPage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-primary-fg mb-2">QR Code Management</h1>
-        <p className="text-primary-muted">Generate, assign, and manage QR codes for events</p>
+        <p className="text-primary-muted">Generate and assign QR codes for events</p>
       </div>
 
       {/* Tabs */}
@@ -112,16 +241,6 @@ export default function QRPage() {
           }`}
         >
           Generate QRs
-        </button>
-        <button
-          onClick={() => setActiveTab("assign")}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === "assign"
-              ? "bg-white text-primary-accent shadow-soft"
-              : "text-primary-muted hover:text-primary-fg"
-          }`}
-        >
-          Assign Range
         </button>
         <button
           onClick={() => setActiveTab("history")}
@@ -155,7 +274,7 @@ export default function QRPage() {
                 <input
                   type="text"
                   value={prefix}
-                  onChange={(e) => setPrefix(e.target.value)}
+                  onChange={(e) => setPrefix(e.target.value.toUpperCase())}
                   className="w-full px-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent"
                   placeholder="TJW"
                 />
@@ -178,23 +297,63 @@ export default function QRPage() {
                   onChange={(e) => setCount(Number(e.target.value))}
                   className="w-full px-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent"
                   min="1"
-                  max="100"
+                  max="5000"
                 />
+              </div>
+            </div>
+
+            {/* Agent Assignment Section */}
+            <div className="border-t border-primary-border pt-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 bg-primary-accent-light rounded-lg flex items-center justify-center">
+                  <UserPlus className="text-primary-accent" size={16} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-primary-fg">Assign to Agent</h3>
+                  <p className="text-sm text-primary-muted">Select an agent to assign these codes</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-primary-fg mb-2">Select Agent *</label>
+                  {loadingAgents ? (
+                    <div className="flex items-center gap-2 text-primary-muted">
+                      <div className="w-4 h-4 border-2 border-primary-accent border-t-transparent rounded-full animate-spin" />
+                      Loading agents...
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedAgentId}
+                      onChange={(e) => setSelectedAgentId(e.target.value)}
+                      className="w-full px-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent"
+                      disabled={isGenerating || isAssigning}
+                      required
+                    >
+                      <option value="">Choose an agent...</option>
+                      {agents.map(agent => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name} ({agent.email}) - {agent.referralCode}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="flex gap-4">
               <button
                 onClick={handleGenerate}
-                disabled={isGenerating}
-                className="btn-primary flex items-center gap-2 disabled:opacity-50"
+                disabled={isGenerating || isAssigning || !selectedAgentId}
+                className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isGenerating ? (
+                {(isGenerating || isAssigning) ? (
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                 ) : (
                   <Download size={20} />
                 )}
-                {isGenerating ? "Generating..." : "Generate & Download"}
+                {isGenerating ? "Generating..." : isAssigning ? "Assigning..." : "Generate & Assign"}
               </button>
             </div>
 
@@ -204,75 +363,28 @@ export default function QRPage() {
                 Will generate {count} QR codes with prefix &quot;{prefix}&quot; starting from {startFrom}
               </p>
               <p className="text-sm text-primary-muted mt-1">
-                Range: {prefix}-{startFrom.toString().padStart(3, '0')} to {prefix}-{(startFrom + count - 1).toString().padStart(3, '0')}
+                Range: {prefix}{startFrom.toString().padStart(4, '0')} to {prefix}{(startFrom + count - 1).toString().padStart(4, '0')}
               </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === "assign" && (
-        <div className="card">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-primary-accent-light rounded-xl flex items-center justify-center">
-              <Settings className="text-primary-accent" size={20} />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-primary-fg">Assign QR Range</h2>
-              <p className="text-sm text-primary-muted">Assign a range of QR codes to your account</p>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-primary-fg mb-2">Prefix</label>
-                <input
-                  type="text"
-                  value={prefix}
-                  onChange={(e) => setPrefix(e.target.value)}
-                  className="w-full px-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent"
-                  placeholder="TJW"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-primary-fg mb-2">Start From</label>
-                <input
-                  type="number"
-                  value={startFrom}
-                  onChange={(e) => setStartFrom(Number(e.target.value))}
-                  className="w-full px-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent"
-                  min="1"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-primary-fg mb-2">Count</label>
-                <input
-                  type="number"
-                  value={count}
-                  onChange={(e) => setCount(Number(e.target.value))}
-                  className="w-full px-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-accent"
-                  min="1"
-                  max="100"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={handleAssignRange}
-              disabled={isAssigning}
-              className="btn-primary flex items-center gap-2 disabled:opacity-50"
-            >
-              {isAssigning ? (
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Settings size={20} />
+              {selectedAgentId && (
+                <p className="text-sm text-primary-muted mt-1">
+                  Will be assigned to: {agents.find(a => a.id === selectedAgentId)?.name || 'Selected agent'}
+                </p>
               )}
-              {isAssigning ? "Assigning..." : "Assign Range"}
-            </button>
+              {rangeError && (
+                <p className="text-sm text-red-600 mt-2 font-medium">
+                  ⚠️ {rangeError}
+                </p>
+              )}
+              {generationError && (
+                <p className="text-sm text-red-600 mt-2 font-medium">
+                  ❌ {generationError}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}
+
 
       {activeTab === "history" && (
         <div className="card">
@@ -281,35 +393,75 @@ export default function QRPage() {
               <History className="text-primary-accent" size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-primary-fg">Assignment History</h2>
-              <p className="text-sm text-primary-muted">View your QR code assignments</p>
+              <h2 className="text-lg font-semibold text-primary-fg">QR Generation History</h2>
+              <p className="text-sm text-primary-muted">View QR code generation batches</p>
             </div>
           </div>
 
+          {/* Search Bar */}
+          <div className="mb-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-primary-muted" size={16} />
+              <input
+                type="text"
+                placeholder="Search by prefix, creator name, or email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+              />
+            </div>
+          </div>
+
+          {/* History List */}
           <div className="space-y-4">
-            {mockAssignments.map((assignment) => (
-              <div key={assignment.id} className="border border-primary-border rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-primary-fg">
-                      {assignment.prefix}-{assignment.startRange.toString().padStart(3, '0')} to {assignment.prefix}-{assignment.endRange.toString().padStart(3, '0')}
-                    </p>
-                    <p className="text-sm text-primary-muted">
-                      Assigned on {new Date(assignment.assignedDate).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    assignment.status === "active" 
-                      ? "bg-green-100 text-green-800"
-                      : assignment.status === "used"
-                      ? "bg-blue-100 text-blue-800"
-                      : "bg-gray-100 text-gray-800"
-                  }`}>
-                    {assignment.status.charAt(0).toUpperCase() + assignment.status.slice(1)}
-                  </span>
-                </div>
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-6 h-6 border-2 border-primary-accent border-t-transparent rounded-full animate-spin" />
+                <span className="ml-3 text-primary-muted">Loading history...</span>
               </div>
-            ))}
+            ) : history.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-primary-muted">
+                  {searchQuery ? 'No QR batches found matching your search.' : 'No QR batches found.'}
+                </p>
+              </div>
+            ) : (
+              history.map((batch) => (
+                <div key={batch.id} className="border border-primary-border rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <p className="font-medium text-primary-fg">
+                          {batch.rangeStart} to {batch.rangeEnd}
+                        </p>
+                        <span className="text-sm text-primary-muted">
+                          ({batch.totalCodes} codes)
+                        </span>
+                      </div>
+                      <div className="text-sm text-primary-muted">
+                        <p><strong>Prefix:</strong> {batch.prefix}</p>
+                        <p><strong>Created by:</strong> {batch.creatorName}</p>
+                        <p><strong>Email:</strong> {batch.creatorEmail}</p>
+                        <p><strong>Created:</strong> {new Date(batch.createdAt).toLocaleDateString()}</p>
+                        <div className="flex gap-4 mt-1">
+                          <span className="text-green-600">✓ {batch.assignedCodes} assigned</span>
+                          <span className="text-orange-600">○ {batch.unassignedCodes} unassigned</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      batch.status === "fully_assigned" 
+                        ? "bg-green-100 text-green-800"
+                        : batch.status === "partially_assigned"
+                        ? "bg-orange-100 text-orange-800"
+                        : "bg-gray-100 text-gray-800"
+                    }`}>
+                      {batch.status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

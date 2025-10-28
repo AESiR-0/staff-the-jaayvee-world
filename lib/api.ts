@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
 
 export const API_ENDPOINTS = {
   // Staff Auth
@@ -10,6 +10,8 @@ export const API_ENDPOINTS = {
   // QR Tools
   QR_GENERATE: '/api/staff/qr/generate',
   QR_ASSIGN_RANGE: '/api/staff/qr/assign-range',
+  QR_ASSIGNMENTS: '/api/staff/qr/assignments',
+  QR_HISTORY: '/api/staff/qr/history',
   
   // Agents
   AGENTS: '/api/agents',
