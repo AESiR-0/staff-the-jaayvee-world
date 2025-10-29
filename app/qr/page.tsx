@@ -72,13 +72,7 @@ export default function QRPage() {
     fetchAgents();
   }, []);
 
-  useEffect(() => {
-    if (activeTab === "history") {
-      fetchHistory();
-    }
-  }, [activeTab, searchQuery]);
-
-  const fetchAgents = async () => {
+  const fetchAgents = async () => { 
     try {
       setLoadingAgents(true);
       const response = await authenticatedFetch(`${API_BASE_URL}/api/agents`);
@@ -124,6 +118,12 @@ export default function QRPage() {
       setLoadingHistory(false);
     }
   };
+
+  useEffect(() => {
+    if (activeTab === "history") {
+      fetchHistory();
+    }
+  }, [activeTab, searchQuery]);
 
   const checkRangeOverlap = (newRangeStart: string, newRangeEnd: string): boolean => {
     return assignments.some(assignment => {

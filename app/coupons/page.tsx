@@ -251,7 +251,7 @@ export default function CouponGeneratorPage() {
             <div className="text-center py-12 text-primary-muted">
               <Tag size={48} className="mx-auto mb-4 opacity-20" />
               <p>No coupons generated yet</p>
-              <p className="text-sm">Fill in the form and click "Generate Coupons"</p>
+              <p className="text-sm">Fill in the form and click &quot;Generate Coupons&quot;</p>
             </div>
           ) : (
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
