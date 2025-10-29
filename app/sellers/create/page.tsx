@@ -121,7 +121,7 @@ export default function CreateSellerPage() {
                     <span className="font-medium">Business:</span> {createdSeller.user.businessName || 'N/A'}
                   </div>
                   <div className="col-span-2">
-                    <span className="font-medium">Referral Code:</span> 
+                    <span className="font-medium">Partner Code:</span> 
                     <span className="ml-2 font-mono bg-gray-100 px-2 py-1 rounded">{createdSeller.referralCode}</span>
                   </div>
                 </div>

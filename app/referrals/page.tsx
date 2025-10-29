@@ -157,7 +157,7 @@ export default function ReferralsPage() {
                 <QrCode className="text-primary-accent" size={20} />
               </div>
               <div>
-                <p className="text-sm text-primary-muted">Referral Code</p>
+                <p className="text-sm text-primary-muted">Partner Code</p>
                 <p className="text-lg font-bold text-primary-fg">{stats.referralCode || "No code"}</p>
               </div>
             </div>
@@ -179,7 +179,7 @@ export default function ReferralsPage() {
 
         {/* Referral Code Card */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-primary-fg mb-4">Your Referral Code</h2>
+          <h2 className="text-lg font-semibold text-primary-fg mb-4">Your Partner Code</h2>
           <div className="space-y-4">
             <div className="flex items-center gap-4">
               <div className="flex-1">
