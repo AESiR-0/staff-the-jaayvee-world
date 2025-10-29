@@ -27,6 +27,7 @@ export const ACCESS_CONTROL: Record<TabKey, string[] | ['*']> = {
 const ACCESS_DENY: Partial<Record<TabKey, string[]>> = {
   events: ['v1sales.thejaayveeworld@gmail.com'],
   coupons: ['v1sales.thejaayveeworld@gmail.com'],
+  qr: ['v1sales.thejaayveeworld@gmail.com'],
 };
 
 export function canAccess(tab: TabKey, email?: string | null): boolean {
