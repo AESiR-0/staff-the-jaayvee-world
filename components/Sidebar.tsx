@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { getStaffSession } from "@/lib/auth-utils";
+import { canAccess, routeToTabKey } from "@/lib/rbac";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -19,12 +21,14 @@ const navigation = [
   { name: "Referrals", href: "/referrals", icon: Users },
   { name: "Events", href: "/events", icon: Calendar },
   { name: "Coupons", href: "/coupons", icon: Ticket },
+  { name: "Create Seller", href: "/sellers/create", icon: Users },
 ];
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const email = typeof window !== 'undefined' ? getStaffSession()?.email : undefined;
 
   const handleLogout = () => {
     // Clear authentication data
@@ -76,7 +80,9 @@ export default function Sidebar() {
 
           {/* Navigation */}
           <nav className="space-y-2">
-            {navigation.map((item) => {
+            {navigation
+              .filter((item) => canAccess(routeToTabKey[item.href as keyof typeof routeToTabKey], email))
+              .map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
               

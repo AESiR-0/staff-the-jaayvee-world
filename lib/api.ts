@@ -27,6 +27,9 @@ export const API_ENDPOINTS = {
   // Coupons
   COUPONS: '/api/coupons',
   COUPONS_VALIDATE: '/api/coupons/validate',
+  
+  // Sellers
+  CREATE_SELLER: '/api/staff/sellers/create',
 };
 
 export const fetchAPI = async <T = any>(endpoint: string, options?: RequestInit): Promise<T> => {
