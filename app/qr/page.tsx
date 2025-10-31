@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { QrCode, Download, History, UserPlus, Search } from "lucide-react";
 import { API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
 import { authenticatedFetch } from "@/lib/auth-utils";
@@ -103,7 +103,7 @@ export default function QRPage() {
     }
   };
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     try {
       setLoadingHistory(true);
       const url = `${API_BASE_URL}${API_ENDPOINTS.QR_HISTORY}${searchQuery ? `?search=${encodeURIComponent(searchQuery)}` : ''}`;
@@ -117,13 +117,13 @@ export default function QRPage() {
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, [searchQuery]);
 
   useEffect(() => {
     if (activeTab === "history") {
       fetchHistory();
     }
-  }, [activeTab, searchQuery]);
+  }, [activeTab, searchQuery, fetchHistory]);
 
   const checkRangeOverlap = (newRangeStart: string, newRangeEnd: string): boolean => {
     return assignments.some(assignment => {
