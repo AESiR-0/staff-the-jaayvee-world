@@ -27,7 +27,7 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
             setIsAuthenticated(false);
             // Redirect to login if not authenticated and not already on login page
             if (pathname !== "/login" && pathname !== "/auth") {
-              router.push("/auth");
+              router.push("/login");
             }
           }
         } else {

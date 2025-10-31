@@ -1,69 +1,99 @@
-import { Suspense } from "react";
+"use client";
+
+import { useState, useEffect } from "react";
 import { ReferralCard } from "@/components/ReferralCard";
 import { QrTools } from "@/components/QrTools";
 import { EventTable } from "@/components/EventTable";
 import { MerchantQRManager } from "@/components/MerchantQRManager";
-import { Calendar, QrCode, Users, TrendingUp } from "lucide-react";
+import { UpdatesPanel } from "@/components/UpdatesPanel";
+import { Calendar, QrCode, Users, TrendingUp, Plus } from "lucide-react";
 import { API_ENDPOINTS } from "@/lib/api";
 import { Event, AffiliateStats } from "@/lib/types";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 
 // Real data will be fetched from API
 
-async function DashboardContent() {
+function DashboardContent() {
+  const [refreshUpdates, setRefreshUpdates] = useState(0);
+  const [canCreateUpdates, setCanCreateUpdates] = useState(false);
+  
   // Get staff session
   const session = typeof window !== 'undefined' ? getStaffSession() : null;
   const staffId = session?.staffId;
   
   // Fetch real data from API with error handling
-  let events: Event[] = [];
-  let affiliateStats: AffiliateStats = { 
+  const [events, setEvents] = useState<Event[]>([]);
+  const [affiliateStats, setAffiliateStats] = useState<AffiliateStats>({ 
     affiliateCode: "", 
     totalClicks: 0, 
     totalSignups: 0, 
     totalCommission: 0,
     recentClicks: 0,
     recentSignups: 0
-  };
+  });
+  const [loading, setLoading] = useState(true);
   
-  try {
-    // Get base URL from API configuration  
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com';
-    
-    // Fetch events summary - convert to dashboard format
-    const eventsRes = await fetch(`${API_BASE_URL}${API_ENDPOINTS.TALAASH_EVENTS_SUMMARY}`);
-    if (eventsRes.ok) {
-      const summaryData = await eventsRes.json();
-      // Convert talaash summary format to dashboard format
-      events = summaryData.data?.upcomingEvents?.map((event: any) => ({
-        id: event.id,
-        name: event.title,
-        date: event.startDate,
-        location: event.venue || 'TBD',
-        attendees: 0, // Will need actual attendee count from tickets
-        maxAttendees: 100, // Default
-        status: event.status || 'upcoming' as const,
-      })) || [];
-    }
-    
-    // Fetch affiliate stats - pass staffId in request body if available
-    if (staffId) {
-      const affiliateRes = await authenticatedFetch(`${API_BASE_URL}${API_ENDPOINTS.STAFF_AFFILIATE}`);
-      if (affiliateRes.ok) {
-        const affiliateData = await affiliateRes.json();
-        affiliateStats = {
-          affiliateCode: affiliateData.data?.referralCode || "",
-          totalClicks: 0,
-          totalSignups: 0,
-          totalCommission: 0,
-          recentClicks: 0,
-          recentSignups: 0
-        };
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Get base URL from API configuration  
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com';
+        
+        // Check if user can create updates
+        try {
+          const meRes = await authenticatedFetch(`${API_BASE_URL}/api/auth/me`);
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            const userEmail = meData.data?.user?.email || meData.data?.email || meData.email;
+            if (userEmail?.toLowerCase() === "sm2.thejaayveeworld@gmail.com") {
+              setCanCreateUpdates(true);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to check update permissions:', err);
+        }
+        
+        // Fetch events summary - convert to dashboard format
+        const eventsRes = await fetch(`${API_BASE_URL}${API_ENDPOINTS.TALAASH_EVENTS_SUMMARY}`);
+        if (eventsRes.ok) {
+          const summaryData = await eventsRes.json();
+          // Convert talaash summary format to dashboard format
+          const fetchedEvents = summaryData.data?.upcomingEvents?.map((event: any) => ({
+            id: event.id,
+            name: event.title,
+            date: event.startDate,
+            location: event.venue || 'TBD',
+            attendees: 0, // Will need actual attendee count from tickets
+            maxAttendees: 100, // Default
+            status: event.status || 'upcoming' as const,
+          })) || [];
+          setEvents(fetchedEvents);
+        }
+        
+        // Fetch affiliate stats - pass staffId in request body if available
+        if (staffId) {
+          const affiliateRes = await authenticatedFetch(`${API_BASE_URL}${API_ENDPOINTS.STAFF_AFFILIATE}`);
+          if (affiliateRes.ok) {
+            const affiliateData = await affiliateRes.json();
+            setAffiliateStats({
+              affiliateCode: affiliateData.data?.referralCode || "",
+              totalClicks: 0,
+              totalSignups: 0,
+              totalCommission: 0,
+              recentClicks: 0,
+              recentSignups: 0
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
+      } finally {
+        setLoading(false);
       }
-    }
-  } catch (error) {
-    console.error('Failed to fetch data:', error);
-  }
+    };
+    
+    fetchData();
+  }, [staffId]);
 
   return (
     <div className="space-y-6">
@@ -139,22 +169,35 @@ async function DashboardContent() {
         </div>
       </div>
 
-      {/* Events Table */}
+      {/* Updates Panel */}
       <div>
-        <EventTable events={events} />
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-primary-fg">Promotional Updates</h2>
+          {canCreateUpdates && (
+            <a
+              href="/updates/create"
+              className="flex items-center gap-2 px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Create Update
+            </a>
+          )}
+        </div>
+        <UpdatesPanel 
+          audience="staff" 
+          apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com'}
+          key={refreshUpdates}
+        />
       </div>
+
+      {/* Events Table */}
+      {/* <div>
+        <EventTable events={events} />
+      </div> */}
     </div>
   );
 }
 
 export default function DashboardPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-primary-accent border-t-transparent rounded-full animate-spin" />
-      </div>
-    }>
-      <DashboardContent />
-    </Suspense>
-  );
+  return <DashboardContent />;
 }

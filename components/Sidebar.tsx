@@ -8,7 +8,8 @@ import {
   Menu,
   X,
   Calendar,
-  Ticket
+  Ticket,
+  Bell
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -22,6 +23,7 @@ const navigation = [
   { name: "Events", href: "/events", icon: Calendar },
   { name: "Coupons", href: "/coupons", icon: Ticket },
   { name: "Create Seller", href: "/sellers/create", icon: Users },
+  { name: "Updates", href: "/updates/create", icon: Bell },
 ];
 
 export default function Sidebar() {
@@ -81,10 +83,16 @@ export default function Sidebar() {
           {/* Navigation */}
           <nav className="space-y-2">
             {navigation
-              .filter((item) => canAccess(routeToTabKey[item.href as keyof typeof routeToTabKey], email))
+              .filter((item) => {
+                // Special handling for Updates - only show to sm2.thejaayveeworld@gmail.com
+                if (item.href === "/updates/create") {
+                  return email?.toLowerCase() === "sm2.thejaayveeworld@gmail.com" || email?.toLowerCase() === "v1sales.thejaayveeworld@gmail.com";
+                }
+                return canAccess(routeToTabKey[item.href as keyof typeof routeToTabKey], email);
+              })
               .map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || (item.href === "/updates/create" && pathname.startsWith("/updates"));
               
               return (
                 <Link
