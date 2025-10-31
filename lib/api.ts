@@ -4,6 +4,7 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://loca
 export const API_ENDPOINTS = {
   // Staff Auth
   STAFF_AUTH_LOGIN: '/api/staff/auth/login',
+  STAFF_AUTH_REGISTER: '/api/staff/auth/register',
   STAFF_AUTH_INITIATE: '/api/staff/auth/initiate',
   STAFF_AUTH_VERIFY: '/api/staff/auth/verify',
   
@@ -69,5 +70,13 @@ export const staffLogin = async (email: string, password: string) => {
   return fetchAPI(API_ENDPOINTS.STAFF_AUTH_LOGIN, {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  });
+};
+
+// Helper function for staff register
+export const staffRegister = async (fullName: string, email: string, password: string, phone?: string) => {
+  return fetchAPI(API_ENDPOINTS.STAFF_AUTH_REGISTER, {
+    method: 'POST',
+    body: JSON.stringify({ fullName, email, password, phone }),
   });
 };

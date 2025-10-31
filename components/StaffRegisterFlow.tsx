@@ -1,23 +1,25 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle, ArrowRight, Mail, Lock, Eye, EyeOff } from "lucide-react";
-import { staffLogin } from "@/lib/api";
+import { CheckCircle, ArrowRight, Mail, Lock, Eye, EyeOff, User, Phone } from "lucide-react";
+import { staffRegister } from "@/lib/api";
 
-type AuthStep = 'login' | 'success';
+type AuthStep = 'register' | 'success';
 
-export default function StaffAuthFlow() {
-  const [step, setStep] = useState<AuthStep>('login');
+export default function StaffRegisterFlow() {
+  const [step, setStep] = useState<AuthStep>('register');
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const handleEmailLogin = async () => {
-    if (!email || !password) {
-      setError("Please enter your email and password");
+  const handleRegister = async () => {
+    if (!fullName || !email || !password) {
+      setError("Please fill in all required fields");
       return;
     }
 
@@ -25,30 +27,20 @@ export default function StaffAuthFlow() {
     setError(null);
 
     try {
-      const response = await staffLogin(email, password);
+      const response = await staffRegister(fullName, email, password, phone);
       
-      if (response.success && response.data.token) {
-        // Store token
-        localStorage.setItem("authToken", response.data.token);
-        localStorage.setItem("userSession", JSON.stringify({
-          displayName: response.data.user.name,
-          email: response.data.user.email,
-          staffId: response.data.staffId,
-          loginTime: new Date().toISOString(),
-          affiliateCode: response.data.affiliateCode
-        }));
-        
-        console.log('✅ Login successful');
+      if (response.success) {
+        console.log('✅ Registration successful');
         setStep('success');
         setTimeout(() => {
-          router.push("/dashboard");
+          router.push("/login");
         }, 2000);
       } else {
-        setError(response.error || "Login failed");
+        setError(response.error || "Registration failed");
       }
     } catch (err: any) {
       setError(err.message || "Network error. Please try again.");
-      console.error("Login error:", err);
+      console.error("Registration error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -62,13 +54,30 @@ export default function StaffAuthFlow() {
           <div className="w-16 h-16 bg-primary-accent rounded-2xl flex items-center justify-center mx-auto mb-4">
             <span className="text-white font-bold text-2xl">TJ</span>
           </div>
-          <h1 className="text-3xl font-bold text-primary-fg mb-2">Staff Authentication</h1>
-          <p className="text-primary-muted">The Jaayvee World Portal</p>
+          <h1 className="text-3xl font-bold text-primary-fg mb-2">Staff Registration</h1>
+          <p className="text-primary-muted">Join The Jaayvee World Portal</p>
         </div>
 
-        {/* Login Form */}
+        {/* Register Form */}
         <div className="card">
           <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-primary-fg mb-2">
+                Full Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-primary-muted" size={20} />
+                <input
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                  required
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-primary-fg mb-2">
                 Email
@@ -81,6 +90,7 @@ export default function StaffAuthFlow() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                  required
                 />
               </div>
             </div>
@@ -97,6 +107,7 @@ export default function StaffAuthFlow() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-12 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                  required
                 />
                 <button
                   type="button"
@@ -108,6 +119,22 @@ export default function StaffAuthFlow() {
               </div>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-primary-fg mb-2">
+                Phone Number <span className="text-primary-muted text-xs">(Optional)</span>
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-primary-muted" size={20} />
+                <input
+                  type="tel"
+                  placeholder="Enter your phone number"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                />
+              </div>
+            </div>
+
             {error && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
                 {error}
@@ -115,18 +142,18 @@ export default function StaffAuthFlow() {
             )}
 
             <button
-              onClick={handleEmailLogin}
+              onClick={handleRegister}
               disabled={isLoading}
               className="w-full btn-primary disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Signing in...
+                  Creating account...
                 </>
               ) : (
                 <>
-                  Sign In
+                  Create Account
                   <ArrowRight size={16} />
                 </>
               )}
@@ -134,9 +161,9 @@ export default function StaffAuthFlow() {
 
             <div className="text-center text-sm text-primary-muted">
               <p>
-                Don't have an account?{" "}
-                <a href="/register" className="text-primary-accent hover:underline">
-                  Register here
+                Already have an account?{" "}
+                <a href="/login" className="text-primary-accent hover:underline">
+                  Sign in here
                 </a>
               </p>
             </div>
@@ -149,13 +176,12 @@ export default function StaffAuthFlow() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
               <CheckCircle className="text-green-600" size={32} />
             </div>
-            <h2 className="text-xl font-semibold text-primary-fg">Authentication Successful!</h2>
-            <p className="text-primary-muted">Redirecting to dashboard...</p>
+            <h2 className="text-xl font-semibold text-primary-fg">Registration Successful!</h2>
+            <p className="text-primary-muted">Redirecting to login page...</p>
           </div>
         )}
-
-       
       </div>
     </div>
   );
 }
+
