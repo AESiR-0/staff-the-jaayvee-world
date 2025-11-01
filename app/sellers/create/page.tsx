@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { CheckCircle, UserPlus, Phone, User, Key, Users, Sparkles, Store, UserCheck, Shield } from "lucide-react";
+import { CheckCircle, UserPlus, Phone, User, Key, Users, Sparkles, Store, UserCheck, Shield, Eye, EyeOff, RefreshCw, Building2, Globe, Instagram, Youtube } from "lucide-react";
 import { fetchAPI, API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 
@@ -22,6 +22,58 @@ interface SellerFormData extends BaseFormData {
   pincode: string;
 }
 
+interface InfluencerFormData extends BaseFormData {
+  instagramHandle: string;
+  youtubeHandle: string;
+  instagramFollowers: string;
+  youtubeSubscribers: string;
+  tier: string;
+}
+
+
+
+// Password strength calculator
+function calculatePasswordStrength(password: string): { strength: number; label: string; color: string } {
+  if (!password) return { strength: 0, label: '', color: '' };
+  
+  let strength = 0;
+  if (password.length >= 8) strength += 1;
+  if (password.length >= 12) strength += 1;
+  if (/[a-z]/.test(password)) strength += 1;
+  if (/[A-Z]/.test(password)) strength += 1;
+  if (/[0-9]/.test(password)) strength += 1;
+  if (/[^a-zA-Z0-9]/.test(password)) strength += 1;
+  
+  if (strength <= 2) return { strength, label: 'Weak', color: 'bg-red-500' };
+  if (strength <= 4) return { strength, label: 'Medium', color: 'bg-yellow-500' };
+  if (strength <= 5) return { strength, label: 'Strong', color: 'bg-blue-500' };
+  return { strength, label: 'Very Strong', color: 'bg-green-500' };
+}
+
+// Generate secure random password
+function generatePassword(length: number = 16): string {
+  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+  const numbers = '0123456789';
+  const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+  const all = uppercase + lowercase + numbers + symbols;
+  
+  let password = '';
+  // Ensure at least one of each type
+  password += uppercase[Math.floor(Math.random() * uppercase.length)];
+  password += lowercase[Math.floor(Math.random() * lowercase.length)];
+  password += numbers[Math.floor(Math.random() * numbers.length)];
+  password += symbols[Math.floor(Math.random() * symbols.length)];
+  
+  // Fill the rest randomly
+  for (let i = password.length; i < length; i++) {
+    password += all[Math.floor(Math.random() * all.length)];
+  }
+  
+  // Shuffle the password
+  return password.split('').sort(() => Math.random() - 0.5).join('');
+}
+
 export default function CreateUserPage() {
   const [activeTab, setActiveTab] = useState<RoleType>('seller');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,8 +83,10 @@ export default function CreateUserPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [currentUserReferralCode, setCurrentUserReferralCode] = useState<string | null>(null);
   const [canCreateStaff, setCanCreateStaff] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Form data for each role type - only required fields
+  // Form data for each role type
   const [sellerFormData, setSellerFormData] = useState<SellerFormData>({
     email: '',
     fullName: '',
@@ -59,15 +113,20 @@ export default function CreateUserPage() {
     fullName: '',
     phone: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
   });
 
-  const [influencerFormData, setInfluencerFormData] = useState<BaseFormData>({
+  const [influencerFormData, setInfluencerFormData] = useState<InfluencerFormData>({
     email: '',
     fullName: '',
     phone: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    instagramHandle: '',
+    youtubeHandle: '',
+    instagramFollowers: '',
+    youtubeSubscribers: '',
+    tier: 'Bronze'
   });
 
   const [staffFormData, setStaffFormData] = useState<BaseFormData>({
@@ -110,11 +169,11 @@ export default function CreateUserPage() {
     { id: 'agent' as RoleType, name: 'Agent', icon: Users },
     { id: 'seller' as RoleType, name: 'Seller', icon: Store },
     { id: 'influencer' as RoleType, name: 'Influencer', icon: Sparkles },
-    ...(canCreateStaff ? [{ id: 'staff' as RoleType, name: 'Staff', icon: Shield }] : []),
+    ...(canCreateStaff ? [{ id: 'staff' as RoleType, name: 'Team', icon: Shield }] : []),
   ];
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
     formType: RoleType
   ) => {
     const { name, value } = e.target;
@@ -127,13 +186,35 @@ export default function CreateUserPage() {
         setAgentFormData(prev => ({ ...prev, [name]: value }));
         break;
       case 'affiliate':
-        setAffiliateFormData(prev => ({ ...prev, [name]: value }));
+        setAffiliateFormData(prev => ({ ...prev, [name]: value }) as BaseFormData);
         break;
       case 'influencer':
         setInfluencerFormData(prev => ({ ...prev, [name]: value }));
         break;
       case 'staff':
         setStaffFormData(prev => ({ ...prev, [name]: value }));
+        break;
+    }
+  };
+
+  const generatePasswordForForm = (formType: RoleType) => {
+    const newPassword = generatePassword(16);
+    
+    switch (formType) {
+      case 'seller':
+        setSellerFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }));
+        break;
+      case 'agent':
+        setAgentFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }));
+        break;
+      case 'affiliate':
+        setAffiliateFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }) as BaseFormData);
+        break;
+      case 'influencer':
+        setInfluencerFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }));
+        break;
+      case 'staff':
+        setStaffFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }));
         break;
     }
   };
@@ -155,8 +236,6 @@ export default function CreateUserPage() {
         });
         break;
       case 'agent':
-      case 'affiliate':
-      case 'influencer':
       case 'staff':
         const resetData = {
           email: '',
@@ -166,9 +245,30 @@ export default function CreateUserPage() {
           confirmPassword: ''
         };
         if (roleType === 'agent') setAgentFormData(resetData);
-        if (roleType === 'affiliate') setAffiliateFormData(resetData);
-        if (roleType === 'influencer') setInfluencerFormData(resetData);
         if (roleType === 'staff') setStaffFormData(resetData);
+        break;
+      case 'affiliate':
+        setAffiliateFormData({
+          email: '',
+          fullName: '',
+          phone: '',
+          password: '',
+          confirmPassword: '',
+        });
+        break;
+      case 'influencer':
+        setInfluencerFormData({
+          email: '',
+          fullName: '',
+          phone: '',
+          password: '',
+          confirmPassword: '',
+          instagramHandle: '',
+          youtubeHandle: '',
+          instagramFollowers: '',
+          youtubeSubscribers: '',
+          tier: 'Bronze'
+        });
         break;
     }
   };
@@ -187,7 +287,6 @@ export default function CreateUserPage() {
         formData = sellerFormData;
         endpoint = API_ENDPOINTS.CREATE_SELLER;
         
-        // Validation
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
           setIsLoading(false);
@@ -254,7 +353,7 @@ export default function CreateUserPage() {
           email: formData.email,
           fullName: formData.fullName,
           phone: formData.phone || undefined,
-          password: formData.password,
+          password: formData.password,  
         };
         break;
 
@@ -278,6 +377,11 @@ export default function CreateUserPage() {
           fullName: formData.fullName,
           phone: formData.phone || undefined,
           password: formData.password,
+          instagramHandle: formData.instagramHandle || undefined,
+          youtubeHandle: formData.youtubeHandle || undefined,
+          instagramFollowers: formData.instagramFollowers ? parseInt(formData.instagramFollowers) : 0,
+          youtubeSubscribers: formData.youtubeSubscribers ? parseInt(formData.youtubeSubscribers) : 0,
+          tier: formData.tier || 'Bronze',
         };
         break;
 
@@ -354,10 +458,11 @@ export default function CreateUserPage() {
   const renderForm = (roleType: RoleType) => {
     const formData = getFormData(roleType);
     const Icon = tabs.find(t => t.id === roleType)?.icon || User;
+    const passwordStrength = calculatePasswordStrength(formData.password);
 
     return (
       <form onSubmit={(e) => handleSubmit(e, roleType)} className="space-y-6">
-        {/* Personal Information - Only Required Fields */}
+        {/* Personal Information - Required Fields */}
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <User className="h-5 w-5" />
@@ -413,6 +518,106 @@ export default function CreateUserPage() {
           </div>
         </div>
 
+        {/* Influencer-specific fields */}
+        {roleType === 'influencer' && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Social Media Details
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="influencer-instagramHandle" className="block text-sm font-medium mb-1">
+                  Instagram Handle *
+                </label>
+                <div className="relative">
+                  <Instagram className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    id="influencer-instagramHandle"
+                    name="instagramHandle"
+                    value={influencerFormData.instagramHandle}
+                    onChange={(e) => handleInputChange(e, 'influencer')}
+                    required
+                    placeholder="@username"
+                    className="w-full pl-10 pr-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="influencer-instagramFollowers" className="block text-sm font-medium mb-1">
+                  Instagram Followers *
+                </label>
+                <input
+                  id="influencer-instagramFollowers"
+                  name="instagramFollowers"
+                  type="number"
+                  value={influencerFormData.instagramFollowers}
+                  onChange={(e) => handleInputChange(e, 'influencer')}
+                  required
+                  placeholder="Number of followers"
+                  min="0"
+                  className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="influencer-youtubeHandle" className="block text-sm font-medium mb-1">
+                  YouTube Handle
+                </label>
+                <div className="relative">
+                  <Youtube className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    id="influencer-youtubeHandle"
+                    name="youtubeHandle"
+                    value={influencerFormData.youtubeHandle}
+                    onChange={(e) => handleInputChange(e, 'influencer')}
+                    placeholder="@channel or channel name"
+                    className="w-full pl-10 pr-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label htmlFor="influencer-youtubeSubscribers" className="block text-sm font-medium mb-1">
+                  YouTube Subscribers
+                </label>
+                <input
+                  id="influencer-youtubeSubscribers"
+                  name="youtubeSubscribers"
+                  type="number"
+                  value={influencerFormData.youtubeSubscribers}
+                  onChange={(e) => handleInputChange(e, 'influencer')}
+                  placeholder="Number of subscribers"
+                  min="0"
+                  className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="influencer-tier" className="block text-sm font-medium mb-1">
+                  Tier *
+                </label>
+                <select
+                  id="influencer-tier"
+                  name="tier"
+                  value={influencerFormData.tier}
+                  onChange={(e) => handleInputChange(e, 'influencer')}
+                  required
+                  className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                >
+                  <option value="Bronze">Bronze</option>
+                  <option value="Silver">Silver</option>
+                  <option value="Gold">Gold</option>
+                  <option value="Platinum">Platinum</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+      
         {/* Seller-specific optional fields */}
         {roleType === 'seller' && (
           <div className="space-y-4">
@@ -498,42 +703,89 @@ export default function CreateUserPage() {
 
         {/* Security */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Key className="h-5 w-5" />
-            Security
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Key className="h-5 w-5" />
+              Security
+            </h3>
+            <button
+              type="button"
+              onClick={() => generatePasswordForForm(roleType)}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm border border-primary-border rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Generate Password
+            </button>
+          </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor={`${roleType}-password`} className="block text-sm font-medium mb-1">
                 Password *
               </label>
-              <input
-                id={`${roleType}-password`}
-                name="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => handleInputChange(e, roleType)}
-                required
-                placeholder="Enter password"
-                className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
-              />
+              <div className="relative">
+                <input
+                  id={`${roleType}-password`}
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={(e) => handleInputChange(e, roleType)}
+                  required
+                  placeholder="Enter password"
+                  className="w-full px-3 py-2 pr-10 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {formData.password && (
+                <div className="mt-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-gray-600">Password Strength:</span>
+                    <span className={`text-xs font-medium ${passwordStrength.color.replace('bg-', 'text-')}`}>
+                      {passwordStrength.label}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all ${passwordStrength.color}`}
+                      style={{ width: `${(passwordStrength.strength / 6) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             
             <div>
               <label htmlFor={`${roleType}-confirmPassword`} className="block text-sm font-medium mb-1">
                 Confirm Password *
               </label>
-              <input
-                id={`${roleType}-confirmPassword`}
-                name="confirmPassword"
-                type="password"
-                value={formData.confirmPassword}
-                onChange={(e) => handleInputChange(e, roleType)}
-                required
-                placeholder="Confirm password"
-                className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
-              />
+              <div className="relative">
+                <input
+                  id={`${roleType}-confirmPassword`}
+                  name="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={formData.confirmPassword}
+                  onChange={(e) => handleInputChange(e, roleType)}
+                  required
+                  placeholder="Confirm password"
+                  className="w-full px-3 py-2 pr-10 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+                <p className="mt-1 text-xs text-red-600">Passwords do not match</p>
+              )}
             </div>
           </div>
         </div>
@@ -580,7 +832,7 @@ export default function CreateUserPage() {
       agent: 'Agent',
       seller: 'Seller',
       influencer: 'Influencer',
-      staff: 'Staff'
+      staff: 'Team'
     };
 
     return (
