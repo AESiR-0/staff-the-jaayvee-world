@@ -45,7 +45,12 @@ function DashboardContent() {
           if (meRes.ok) {
             const meData = await meRes.json();
             const userEmail = meData.data?.user?.email || meData.data?.email || meData.email;
-            if (userEmail?.toLowerCase() === "sm2.thejaayveeworld@gmail.com") {
+            const allowedEmails = [
+              "sm2.thejaayveeworld@gmail.com",
+              "sm13.thejaayveeworld@gmail.com",
+              "md.thejaayveeworld@gmail.com"
+            ];
+            if (allowedEmails.includes(userEmail?.toLowerCase() || '')) {
               setCanCreateUpdates(true);
             }
           }
@@ -99,7 +104,7 @@ function DashboardContent() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-primary-fg mb-2">Staff Dashboard</h1>
+        <h1 className="text-3xl font-bold text-primary-fg mb-2">Team Dashboard</h1>
         <p className="text-primary-muted">Welcome back! Here&apos;s your overview.</p>
       </div>
 

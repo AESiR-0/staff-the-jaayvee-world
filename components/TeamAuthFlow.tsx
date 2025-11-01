@@ -132,14 +132,7 @@ export default function TeamAuthFlow() {
               )}
             </button>
 
-            <div className="text-center text-sm text-primary-muted">
-              <p>
-                Don&apos;t have an account?{" "}
-                <a href="/register" className="text-primary-accent hover:underline">
-                  Register here
-                </a>
-              </p>
-            </div>
+          
           </div>
         </div>
 

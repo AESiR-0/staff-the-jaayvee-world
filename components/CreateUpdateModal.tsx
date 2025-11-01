@@ -157,7 +157,7 @@ export function CreateUpdateModal({
               className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
             >
               <option value="all">All</option>
-              <option value="staff">Staff Only</option>
+              <option value="staff">Team Only</option>
               <option value="affiliates">Affiliates Only</option>
               <option value="influencer">Influencer Only</option>
               <option value="agent">Agent Only</option>

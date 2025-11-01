@@ -5,8 +5,13 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Send, AlertCircle } from "lucide-react";
 import { authenticatedFetch, getStaffSession, getAuthToken } from "@/lib/auth-utils";
 
-// Only allow sm2.thejaayveeworld@gmail.com
-const ALLOWED_EMAIL = ["sm2.thejaayveeworld@gmail.com", "thejaayveeworldofficial@gmail.com"];
+// Allowed emails for creating updates
+const ALLOWED_EMAIL = [
+  "sm2.thejaayveeworld@gmail.com",
+  "sm13.thejaayveeworld@gmail.com",
+  "md.thejaayveeworld@gmail.com",
+  "thejaayveeworldofficial@gmail.com"
+];
 
 export default function CreateUpdatePage() {
   const router = useRouter();

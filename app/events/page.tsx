@@ -1,6 +1,6 @@
 import { EventTable } from "@/components/EventTable";
 import { Calendar, Plus, Filter } from "lucide-react";
-import { API_ENDPOINTS } from "@/lib/api";
+import { API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
 import { Event } from "@/lib/types";
 
 export default async function EventsPage() {
@@ -8,9 +8,14 @@ export default async function EventsPage() {
   let events: Event[] = [];
   
   try {
-    const response = await fetch(API_ENDPOINTS.TALAASH_EVENTS_SUMMARY);
+    const url = `${API_BASE_URL}${API_ENDPOINTS.TALAASH_EVENTS_SUMMARY}`;
+    const response = await fetch(url, {
+      cache: 'no-store', // Ensure fresh data
+    });
     if (response.ok) {
-      events = await response.json() as Event[];
+      const data = await response.json();
+      // Handle different response formats
+      events = Array.isArray(data) ? data : (data.data || data.events || []);
     }
   } catch (error) {
     console.error('Failed to fetch events:', error);

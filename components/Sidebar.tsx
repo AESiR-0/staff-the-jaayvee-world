@@ -20,9 +20,10 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "QR Tools", href: "/qr", icon: QrCode },
   { name: "Referrals", href: "/referrals", icon: Users },
-  { name: "Events", href: "/events", icon: Calendar },
+  // { name: "Events", href: "/events", icon: Calendar },
+  { name: "Manage Events", href: "/events/manage", icon: Calendar },
   { name: "Coupons", href: "/coupons", icon: Ticket },
-  { name: "Create Seller", href: "/sellers/create", icon: Users },
+  { name: "Create User", href: "/sellers/create", icon: Users },
   { name: "Updates", href: "/updates/create", icon: Bell },
 ];
 
@@ -76,7 +77,7 @@ export default function Sidebar() {
             </div>
             <div>
               <h1 className="font-bold text-lg text-primary-fg">The Jaayvee World</h1>
-              <p className="text-sm text-primary-muted">Staff Portal</p>
+              <p className="text-sm text-primary-muted">Team Portal</p>
             </div>
           </div>
 
@@ -84,15 +85,31 @@ export default function Sidebar() {
           <nav className="space-y-2">
             {navigation
               .filter((item) => {
-                // Special handling for Updates - only show to sm2.thejaayveeworld@gmail.com
+                // Special handling for Updates - show to authorized users
                 if (item.href === "/updates/create") {
-                  return email?.toLowerCase() === "sm2.thejaayveeworld@gmail.com" || email?.toLowerCase() === "v1sales.thejaayveeworld@gmail.com";
+                  const allowedEmails = [
+                    "sm2.thejaayveeworld@gmail.com",
+                    "sm13.thejaayveeworld@gmail.com",
+                    "md.thejaayveeworld@gmail.com",
+                    "v1sales.thejaayveeworld@gmail.com"
+                  ];
+                  return allowedEmails.includes(email?.toLowerCase() || '');
+                }
+                // Special handling for Events CRUD - only for md and thejaayveeworldofficial
+                if (item.href === "/events/manage") {
+                  const allowedEmails = [
+                    "md.thejaayveeworld@gmail.com",
+                    "thejaayveeworldofficial@gmail.com"
+                  ];
+                  return allowedEmails.includes(email?.toLowerCase() || '');
                 }
                 return canAccess(routeToTabKey[item.href as keyof typeof routeToTabKey], email);
               })
               .map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href || (item.href === "/updates/create" && pathname.startsWith("/updates"));
+              const isActive = pathname === item.href || 
+                (item.href === "/updates/create" && pathname.startsWith("/updates")) ||
+                (item.href === "/events/manage" && pathname.startsWith("/events/manage"));
               
               return (
                 <Link

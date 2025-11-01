@@ -18,10 +18,10 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "Organization",
-              "name": "Jaayvee Staff Portal",
-              "url": "https://staff.jaayvee.com",
-              "logo": "https://staff.jaayvee.com/static/logos/staff/staff_logo.png",
-              "description": "Internal staff portal for Jaayvee operations. Handle KYC, payouts, campaign checks, and internal validation tasks with our comprehensive staff dashboard.",
+              "name": "Jaayvee team Portal",
+              "url": "https://team.thejaayveeworld.com",
+              "logo": "https://team.thejaayveeworld.com/static/logos/team/team_logo.png",
+              "description": "Internal team portal for Jaayvee operations. Handle KYC, payouts, campaign checks, and internal validation tasks with our comprehensive team dashboard.",
               "foundingDate": "2024",
               "founders": [
                 {
@@ -46,7 +46,7 @@ export default function RootLayout({
                 "addressRegion": "Maharashtra",
                 "addressLocality": "Mumbai"
               },
-              "serviceType": "Internal Staff Portal",
+              "serviceType": "Internal Team Portal",
               "areaServed": {
                 "@type": "Country",
                 "name": "India"
