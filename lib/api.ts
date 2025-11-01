@@ -2,7 +2,7 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
 
 export const API_ENDPOINTS = {
-  // Staff Auth
+  // Staff Auth (backend routes remain as staff)
   STAFF_AUTH_LOGIN: '/api/staff/auth/login',
   STAFF_AUTH_REGISTER: '/api/staff/auth/register',
   STAFF_AUTH_INITIATE: '/api/staff/auth/initiate',
@@ -65,7 +65,7 @@ export const fetchAPI = async <T = any>(endpoint: string, options?: RequestInit)
 // Alias for backward compatibility
 export const apiCall = fetchAPI;
 
-// Helper function for staff login
+// Helper function for staff login (backend uses staff, frontend shows team)
 export const staffLogin = async (email: string, password: string) => {
   return fetchAPI(API_ENDPOINTS.STAFF_AUTH_LOGIN, {
     method: 'POST',
@@ -73,10 +73,14 @@ export const staffLogin = async (email: string, password: string) => {
   });
 };
 
-// Helper function for staff register
+// Helper function for staff register (backend uses staff, frontend shows team)
 export const staffRegister = async (fullName: string, email: string, password: string, phone?: string) => {
   return fetchAPI(API_ENDPOINTS.STAFF_AUTH_REGISTER, {
     method: 'POST',
     body: JSON.stringify({ fullName, email, password, phone }),
   });
 };
+
+// Frontend aliases for team terminology (UI only)
+export const teamLogin = staffLogin;
+export const teamRegister = staffRegister;

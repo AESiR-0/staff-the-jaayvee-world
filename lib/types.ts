@@ -27,7 +27,7 @@ export interface AuthInitiateResponse {
   success: boolean;
   message: string;
   token?: string;
-  staffId?: string;
+  staffId?: string; // Backend uses staffId
   userId?: string;
   displayName?: string;
   email?: string;
@@ -37,7 +37,7 @@ export interface AuthInitiateResponse {
 }
 
 export interface AuthVerifyRequest {
-  staffId: string;
+  staffId: string; // Backend uses staffId
   faceImageUrl: string;
 }
 

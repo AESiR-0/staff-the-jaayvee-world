@@ -8,6 +8,7 @@ export function getAuthToken(): string | null {
 
 /**
  * Get staff session data from localStorage
+ * (Backend uses staff, but frontend UI shows team)
  */
 export function getStaffSession() {
   if (typeof window === 'undefined') return null;
@@ -19,6 +20,9 @@ export function getStaffSession() {
     return null;
   }
 }
+
+// Frontend alias for team terminology (UI only)
+export const getTeamSession = getStaffSession;
 
 /**
  * Check if user is authenticated

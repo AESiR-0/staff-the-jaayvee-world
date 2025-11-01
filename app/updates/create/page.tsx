@@ -16,7 +16,7 @@ export default function CreateUpdatePage() {
     title: "",
     message: "",
     priority: "normal" as "low" | "normal" | "high" | "urgent",
-    targetAudience: "all" as "all" | "staff" | "affiliates" | "influencer" | "agent",
+    targetAudience: "all" as "all" | "team" | "affiliates" | "influencer" | "agent",
     isActive: true,
   });
   const [submitting, setSubmitting] = useState(false);
@@ -119,7 +119,7 @@ export default function CreateUpdatePage() {
       <div className="min-h-screen bg-primary-bg flex items-center justify-center">
         <div className="text-center">
           <p className="text-primary-fg mb-4">Unauthorized Access</p>
-          <p className="text-primary-muted mb-6">Only authorized staff can access this page.</p>
+          <p className="text-primary-muted mb-6">Only authorized team members can access this page.</p>
           <button
             onClick={() => router.push("/dashboard")}
             className="px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors"
@@ -144,7 +144,7 @@ export default function CreateUpdatePage() {
             Back to Dashboard
           </button>
           <h1 className="text-3xl font-bold text-primary-fg mb-2">Create Promotional Update</h1>
-          <p className="text-primary-muted">Post promotional messages for staff, affiliates, influencers, and agents</p>
+          <p className="text-primary-muted">Post promotional messages for team, affiliates, influencers, and agents</p>
         </div>
 
         {/* Form */}
@@ -243,7 +243,7 @@ export default function CreateUpdatePage() {
                   className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
                 >
                   <option value="all">All Portals</option>
-                  <option value="staff">Staff Only</option>
+                  <option value="team">Team Only</option>
                   <option value="affiliates">Affiliates Only</option>
                   <option value="influencer">Influencer Only</option>
                   <option value="agent">Agent Only</option>

@@ -1,5 +1,5 @@
-import StaffAuthFlow from "@/components/StaffAuthFlow";
+import TeamAuthFlow from "@/components/TeamAuthFlow";
 
 export default function LoginPage() {
-  return <StaffAuthFlow />;
+  return <TeamAuthFlow />;
 }

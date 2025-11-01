@@ -16,7 +16,7 @@ interface Update {
 }
 
 interface UpdatesPanelProps {
-  audience: "staff" | "affiliates" | "influencer" | "agent";
+  audience: "team" | "affiliates" | "influencer" | "agent";
   apiBaseUrl?: string;
 }
 
@@ -30,7 +30,9 @@ export function UpdatesPanel({ audience, apiBaseUrl = "https://thejaayveeworld.c
     const fetchUpdates = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${apiBaseUrl}/api/updates?audience=${audience}`);
+        // Convert "team" to "staff" for backend API (UI shows team, backend uses staff)
+        const backendAudience = audience === "team" ? "staff" : audience;
+        const response = await fetch(`${apiBaseUrl}/api/updates?audience=${backendAudience}`);
         
         if (!response.ok) {
           throw new Error("Failed to fetch updates");

@@ -17,7 +17,7 @@ function DashboardContent() {
   const [refreshUpdates, setRefreshUpdates] = useState(0);
   const [canCreateUpdates, setCanCreateUpdates] = useState(false);
   
-  // Get staff session
+  // Get staff session (backend uses staffId)
   const session = typeof window !== 'undefined' ? getStaffSession() : null;
   const staffId = session?.staffId;
   
@@ -184,7 +184,7 @@ function DashboardContent() {
           )}
         </div>
         <UpdatesPanel 
-          audience="staff" 
+          audience="team" 
           apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com'}
           key={refreshUpdates}
         />
