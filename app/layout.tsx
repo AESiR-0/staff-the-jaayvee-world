@@ -2,7 +2,35 @@ import type { Metadata } from 'next'
 import './globals.css'
 import ConditionalLayout from '@/components/ConditionalLayout'
 import FaceModelLoader from '@/components/FaceModelLoader'
+import { PWAInstallPrompt } from '@/components/PWAInstallPrompt'
 
+export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || 'https://team.thejaayveeworld.com'),
+  title: {
+    default: "Jaayvee Team Portal",
+    template: "%s | Jaayvee Team"
+  },
+  description: "Internal team portal for Jaayvee operations. Handle KYC, payouts, campaign checks, and internal validation tasks with our comprehensive team dashboard.",
+  icons: {
+    icon: "/static/logos/staff/staff_icon_192.png",
+    shortcut: "/static/logos/staff/staff_icon_192.png",
+    apple: "/static/logos/staff/staff_icon_192.png",
+  },
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Jaayvee Staff",
+  },
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  themeColor: '#1e3a8a',
+};
 
 export default function RootLayout({
   children,
@@ -66,6 +94,7 @@ export default function RootLayout({
         <ConditionalLayout>
           {children}
         </ConditionalLayout>
+        <PWAInstallPrompt />
       </body>
     </html>
   )
