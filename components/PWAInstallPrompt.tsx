@@ -16,8 +16,10 @@ export function PWAInstallPrompt() {
 
   useEffect(() => {
     // Check if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
+    const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches;
+    if (isStandaloneMode) {
       setIsStandalone(true);
+      console.log('[PWA] Already in standalone mode');
       return;
     }
 
@@ -25,9 +27,32 @@ export function PWAInstallPrompt() {
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(isIOSDevice);
+    console.log('[PWA] iOS device:', isIOSDevice);
 
-    // Listen for the beforeinstallprompt event
+    // Check if prompt was previously dismissed
+    const dismissed = localStorage.getItem('pwa-install-dismissed');
+    if (dismissed) {
+      const dismissedTime = parseInt(dismissed, 10);
+      const daysSinceDismissed = (Date.now() - dismissedTime) / (1000 * 60 * 60 * 24);
+      console.log('[PWA] Dismissed', daysSinceDismissed, 'days ago');
+      // Show again after 7 days
+      if (daysSinceDismissed < 7) {
+        console.log('[PWA] Not showing - dismissed recently');
+        // Don't show if dismissed recently
+        return;
+      }
+    }
+
+    // For iOS, show immediately (they don't have beforeinstallprompt)
+    if (isIOSDevice) {
+      console.log('[PWA] Showing iOS prompt');
+      setShowPrompt(true);
+      return;
+    }
+
+    // Listen for the beforeinstallprompt event (Android/Chrome)
     const handleBeforeInstallPrompt = (e: Event) => {
+      console.log('[PWA] beforeinstallprompt event received');
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       setShowPrompt(true);
@@ -35,42 +60,48 @@ export function PWAInstallPrompt() {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
-    // Check if prompt was previously dismissed
-    const dismissed = localStorage.getItem('pwa-install-dismissed');
-    if (dismissed) {
-      const dismissedTime = parseInt(dismissed, 10);
-      const daysSinceDismissed = (Date.now() - dismissedTime) / (1000 * 60 * 60 * 24);
-      // Show again after 7 days
-      if (daysSinceDismissed < 7) {
-        setShowPrompt(false);
-      }
-    }
+    // Also show prompt after a delay if beforeinstallprompt hasn't fired
+    // This helps if the event doesn't fire immediately or the app is installable
+    const timeoutId = setTimeout(() => {
+      console.log('[PWA] Timeout reached, showing prompt');
+      // Show prompt even if beforeinstallprompt hasn't fired
+      // Users can still install via browser menu
+      setShowPrompt(true);
+    }, 2000);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      clearTimeout(timeoutId);
     };
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) {
-      return;
+    if (deferredPrompt) {
+      // Show the native install prompt
+      try {
+        await deferredPrompt.prompt();
+        // Wait for the user to respond
+        const { outcome } = await deferredPrompt.userChoice;
+
+        if (outcome === 'accepted') {
+          console.log('User accepted the install prompt');
+          setShowPrompt(false);
+        } else {
+          console.log('User dismissed the install prompt');
+        }
+
+        // Clear the deferred prompt
+        setDeferredPrompt(null);
+      } catch (error) {
+        console.error('Error showing install prompt:', error);
+        // Fall through to manual install instructions
+      }
     }
-
-    // Show the install prompt
-    deferredPrompt.prompt();
-
-    // Wait for the user to respond
-    const { outcome } = await deferredPrompt.userChoice;
-
-    if (outcome === 'accepted') {
-      console.log('User accepted the install prompt');
-    } else {
-      console.log('User dismissed the install prompt');
-    }
-
-    // Clear the deferred prompt
-    setDeferredPrompt(null);
+    
+    // If no deferred prompt or it failed, show manual instructions
+    // This is a fallback for browsers that support install but don't fire beforeinstallprompt
     setShowPrompt(false);
+    alert('To install this app:\n\n1. Look for the install icon in your browser\'s address bar\n2. Or use the browser menu (three dots) and select "Install app" or "Add to Home Screen"');
   };
 
   const handleDismiss = () => {
@@ -78,8 +109,13 @@ export function PWAInstallPrompt() {
     localStorage.setItem('pwa-install-dismissed', Date.now().toString());
   };
 
-  // Don't show if already installed or on iOS (they have their own install flow)
-  if (isStandalone || !showPrompt) {
+  // Don't show if already installed
+  if (isStandalone) {
+    return null;
+  }
+
+  // Don't show if prompt should not be shown
+  if (!showPrompt) {
     return null;
   }
 
