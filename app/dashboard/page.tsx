@@ -191,6 +191,7 @@ function DashboardContent() {
         <UpdatesPanel 
           audience="team" 
           apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com'}
+          showHistory={true}
           key={refreshUpdates}
         />
       </div>
@@ -206,3 +207,4 @@ function DashboardContent() {
 export default function DashboardPage() {
   return <DashboardContent />;
 }
+

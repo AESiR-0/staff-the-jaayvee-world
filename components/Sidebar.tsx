@@ -9,7 +9,8 @@ import {
   X,
   Calendar,
   Ticket,
-  Bell
+  Bell,
+  MessageSquare
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -22,6 +23,7 @@ const navigation = [
   { name: "Referrals", href: "/referrals", icon: Users },
   // { name: "Events", href: "/events", icon: Calendar },
   { name: "Manage Events", href: "/events/manage", icon: Calendar },
+  { name: "Event Share Messages", href: "/events/share-messages", icon: MessageSquare },
   { name: "Coupons", href: "/coupons", icon: Ticket },
   { name: "Create User", href: "/sellers/create", icon: Users },
   { name: "Updates", href: "/updates/create", icon: Bell },
@@ -103,13 +105,22 @@ export default function Sidebar() {
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
                 }
+                // Special handling for Event Share Messages - same as Events CRUD
+                if (item.href === "/events/share-messages") {
+                  const allowedEmails = [
+                    "md.thejaayveeworld@gmail.com",
+                    "thejaayveeworldofficial@gmail.com"
+                  ];
+                  return allowedEmails.includes(email?.toLowerCase() || '');
+                }
                 return canAccess(routeToTabKey[item.href as keyof typeof routeToTabKey], email);
               })
               .map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href || 
                 (item.href === "/updates/create" && pathname.startsWith("/updates")) ||
-                (item.href === "/events/manage" && pathname.startsWith("/events/manage"));
+                (item.href === "/events/manage" && pathname.startsWith("/events/manage")) ||
+                (item.href === "/events/share-messages" && pathname.startsWith("/events/share-messages"));
               
               return (
                 <Link
@@ -130,6 +141,17 @@ export default function Sidebar() {
             <button 
               onClick={handleLogout}
               className="sidebar-item w-full text-left hover:bg-red-50 hover:text-red-600"
+            >
+              <LogOut size={20} />
+              <span className="font-medium">Logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
             >
               <LogOut size={20} />
               <span className="font-medium">Logout</span>

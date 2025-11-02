@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Send, AlertCircle } from "lucide-react";
+import { ArrowLeft, Send, AlertCircle, UserPlus, X } from "lucide-react";
 import { authenticatedFetch, getStaffSession, getAuthToken } from "@/lib/auth-utils";
 
 // Allowed emails for creating updates
@@ -23,7 +23,9 @@ export default function CreateUpdatePage() {
     priority: "normal" as "low" | "normal" | "high" | "urgent",
     targetAudience: "all" as "all" | "team" | "affiliates" | "influencer" | "agent",
     isActive: true,
+    individualRecipients: [] as string[], // Array of email addresses
   });
+  const [newRecipient, setNewRecipient] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -68,6 +70,24 @@ export default function CreateUpdatePage() {
     checkAuthorization();
   }, [router]);
 
+  const addRecipient = () => {
+    const email = newRecipient.trim().toLowerCase();
+    if (email && email.includes('@') && !formData.individualRecipients.includes(email)) {
+      setFormData({
+        ...formData,
+        individualRecipients: [...formData.individualRecipients, email]
+      });
+      setNewRecipient("");
+    }
+  };
+
+  const removeRecipient = (email: string) => {
+    setFormData({
+      ...formData,
+      individualRecipients: formData.individualRecipients.filter(e => e !== email)
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -76,9 +96,19 @@ export default function CreateUpdatePage() {
 
     try {
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://thejaayveeworld.com";
+      
+      // Convert targetAudience for backend
+      const backendAudience = formData.targetAudience === "team" ? "staff" : formData.targetAudience;
+      
+      const payload = {
+        ...formData,
+        targetAudience: backendAudience,
+        individualRecipients: formData.individualRecipients.length > 0 ? formData.individualRecipients : undefined,
+      };
+
       const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/updates`, {
         method: "POST",
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -94,7 +124,9 @@ export default function CreateUpdatePage() {
         priority: "normal",
         targetAudience: "all",
         isActive: true,
+        individualRecipients: [],
       });
+      setNewRecipient("");
 
       setSuccess(true);
       setTimeout(() => {
@@ -149,7 +181,7 @@ export default function CreateUpdatePage() {
             Back to Dashboard
           </button>
           <h1 className="text-3xl font-bold text-primary-fg mb-2">Create Promotional Update</h1>
-          <p className="text-primary-muted">Post promotional messages for team, affiliates, influencers, and agents</p>
+          <p className="text-primary-muted">Post promotional messages for team, affiliates, influencers, agents, or individual people</p>
         </div>
 
         {/* Form */}
@@ -209,7 +241,7 @@ export default function CreateUpdatePage() {
                 className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg"
                 placeholder="Enter promotional message..."
               />
-              <p className="text-xs text-primary-muted mt-1">This message will be displayed to the selected audience.</p>
+              <p className="text-xs text-primary-muted mt-1">This message will be displayed to the selected audience or individual recipients.</p>
             </div>
 
             {/* Priority and Target Audience Row */}
@@ -254,6 +286,59 @@ export default function CreateUpdatePage() {
                   <option value="agent">Agent Only</option>
                 </select>
               </div>
+            </div>
+
+            {/* Individual Recipients */}
+            <div>
+              <label className="block text-sm font-medium text-primary-fg mb-2">
+                Individual Recipients (Optional)
+              </label>
+              <p className="text-xs text-primary-muted mb-2">
+                Add specific email addresses to send this update to individual people. If recipients are added, they will receive this update regardless of the target audience setting.
+              </p>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="email"
+                  value={newRecipient}
+                  onChange={(e) => setNewRecipient(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addRecipient();
+                    }
+                  }}
+                  placeholder="Enter email address"
+                  className="flex-1 px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                />
+                <button
+                  type="button"
+                  onClick={addRecipient}
+                  className="px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors flex items-center gap-2"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Add
+                </button>
+              </div>
+              
+              {formData.individualRecipients.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.individualRecipients.map((email) => (
+                    <span
+                      key={email}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-primary-accent-light rounded-full text-sm text-primary-fg"
+                    >
+                      {email}
+                      <button
+                        type="button"
+                        onClick={() => removeRecipient(email)}
+                        className="hover:text-red-600 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Active Toggle */}
@@ -309,7 +394,8 @@ export default function CreateUpdatePage() {
             <div className="text-sm text-primary-fg">
               <p className="font-medium mb-1">Note</p>
               <p className="text-primary-muted">
-                Updates will be visible to all users in the selected target audience. Make sure to review your message before publishing.
+                If individual recipients are specified, they will receive the update even if they don't match the target audience. 
+                If no individual recipients are specified, the update will be visible to all users in the selected target audience.
               </p>
             </div>
           </div>
@@ -319,3 +405,87 @@ export default function CreateUpdatePage() {
   );
 }
 
+              {formData.individualRecipients.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {formData.individualRecipients.map((email) => (
+                    <span
+                      key={email}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-primary-accent-light rounded-full text-sm text-primary-fg"
+                    >
+                      {email}
+                      <button
+                        type="button"
+                        onClick={() => removeRecipient(email)}
+                        className="hover:text-red-600 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Active Toggle */}
+            <div className="flex items-center gap-3 p-4 bg-primary-accent-light rounded-lg border border-primary-border">
+              <input
+                type="checkbox"
+                id="isActive"
+                checked={formData.isActive}
+                onChange={(e) =>
+                  setFormData({ ...formData, isActive: e.target.checked })
+                }
+                className="w-5 h-5 text-primary-accent border-primary-border rounded focus:ring-primary-accent"
+              />
+              <label htmlFor="isActive" className="text-sm text-primary-fg cursor-pointer">
+                Active (visible to users immediately after creation)
+              </label>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-4 pt-4 border-t border-primary-border">
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="px-6 py-2 text-sm font-medium text-primary-fg bg-primary-border rounded-lg hover:bg-primary-accent-light transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="px-6 py-2 text-sm font-medium text-white bg-primary-accent rounded-lg hover:bg-primary-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Create Update
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Info Box */}
+        <div className="mt-6 card bg-primary-accent-light/50 border-primary-accent/20">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-primary-accent flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-primary-fg">
+              <p className="font-medium mb-1">Note</p>
+              <p className="text-primary-muted">
+                If individual recipients are specified, they will receive the update even if they don't match the target audience. 
+                If no individual recipients are specified, the update will be visible to all users in the selected target audience.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
