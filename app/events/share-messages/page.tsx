@@ -339,14 +339,6 @@ export default function EventShareMessagesPage() {
 }
 
 
-
-
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, MessageSquare, Plus, X, Save, Calendar } from "lucide-react";
-import { authenticatedFetch, getAuthToken } from "@/lib/auth-utils";
-import { API_BASE_URL } from "@/lib/api";
-
 interface Event {
   id: string;
   title: string;

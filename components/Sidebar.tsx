@@ -21,6 +21,7 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "QR Tools", href: "/qr", icon: QrCode },
   { name: "Referrals", href: "/referrals", icon: Users },
+  { name: "Downline", href: "/downline", icon: Users },
   // { name: "Events", href: "/events", icon: Calendar },
   { name: "Manage Events", href: "/events/manage", icon: Calendar },
   { name: "Event Share Messages", href: "/events/share-messages", icon: MessageSquare },
@@ -120,7 +121,8 @@ export default function Sidebar() {
               const isActive = pathname === item.href || 
                 (item.href === "/updates/create" && pathname.startsWith("/updates")) ||
                 (item.href === "/events/manage" && pathname.startsWith("/events/manage")) ||
-                (item.href === "/events/share-messages" && pathname.startsWith("/events/share-messages"));
+                (item.href === "/events/share-messages" && pathname.startsWith("/events/share-messages")) ||
+                (item.href === "/downline" && pathname.startsWith("/downline"));
               
               return (
                 <Link
@@ -141,17 +143,6 @@ export default function Sidebar() {
             <button 
               onClick={handleLogout}
               className="sidebar-item w-full text-left hover:bg-red-50 hover:text-red-600"
-            >
-              <LogOut size={20} />
-              <span className="font-medium">Logout</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
             >
               <LogOut size={20} />
               <span className="font-medium">Logout</span>
