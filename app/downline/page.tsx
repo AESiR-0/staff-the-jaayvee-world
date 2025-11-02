@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Users, UserCheck, Mail, Phone, Calendar, TrendingUp, Building2, Instagram, Youtube, Tag } from "lucide-react";
+import { Users, UserCheck, Mail, Phone, Calendar, TrendingUp, Building2, Instagram, Youtube, Tag, Wallet } from "lucide-react";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 import { format } from "date-fns";
 
@@ -22,6 +22,8 @@ interface DownlineUser {
   youtubeHandle?: string;
   tier?: string;
   totalSignups?: number;
+  walletBalance?: number;
+  walletCurrency?: string;
 }
 
 interface StaffDownline {
@@ -43,40 +45,55 @@ export default function DownlinePage() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const session = getStaffSession();
-    const userEmail = session?.email?.toLowerCase();
-    const admin = userEmail === 'md.thejaayveeworld@gmail.com' || 
-                  userEmail === 'thejaayveeworldofficial@gmail.com';
-    setIsAdmin(admin);
+    const loadData = async () => {
+      const session = getStaffSession();
+      const userEmail = session?.email?.toLowerCase();
+      const admin = userEmail === 'md.thejaayveeworld@gmail.com' || 
+                    userEmail === 'thejaayveeworldofficial@gmail.com';
+      setIsAdmin(admin);
 
-    // If admin, fetch all staff list
-    if (admin) {
-      fetchAllStaff();
-    } else {
-      // Regular staff fetch their own downline
-      fetchDownline();
-    }
+      // If admin, fetch all staff list first, then downline
+      if (admin) {
+        await fetchAllStaff();
+        // After fetching staff list, fetch own downline
+        await fetchDownline();
+      } else {
+        // Regular staff fetch their own downline
+        await fetchDownline();
+      }
+    };
+
+    loadData();
   }, []);
 
   useEffect(() => {
-    if (selectedStaffId) {
+    if (selectedStaffId && isAdmin) {
       fetchDownline(selectedStaffId);
     }
-  }, [selectedStaffId]);
+  }, [selectedStaffId, isAdmin]);
 
   const fetchAllStaff = async () => {
     try {
-      // Fetch all staff members - you'll need to create this API endpoint
-      // For now, we'll just show a message
-      const response = await authenticatedFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com'}/api/staff/list`);
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const url = `${API_BASE_URL}/api/staff/list`;
+      console.log('🔍 Fetching staff list from:', url);
+      
+      const response = await authenticatedFetch(url);
+      console.log('📡 Staff list response status:', response.status);
+      
       if (response.ok) {
         const result = await response.json();
         if (result.success) {
           setAllStaff(result.data || []);
+        } else {
+          console.error('❌ Staff list error:', result.error);
         }
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Failed to fetch staff list:', response.status, errorText);
       }
     } catch (err) {
-      console.error('Error fetching staff list:', err);
+      console.error('❌ Error fetching staff list:', err);
     }
   };
 
@@ -91,20 +108,59 @@ export default function DownlinePage() {
         url += `?staffUserId=${staffUserId}`;
       }
 
-      const response = await authenticatedFetch(url);
+      console.log('🔍 Fetching downline from:', url);
       
-      if (!response.ok) {
-        throw new Error('Failed to fetch downline');
-      }
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      try {
+        const response = await authenticatedFetch(url, {
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        console.log('📡 Response status:', response.status, response.statusText);
+        
+        if (!response.ok) {
+          let errorText = '';
+          try {
+            errorText = await response.text();
+            const errorData = errorText ? JSON.parse(errorText) : {};
+            console.error('❌ API error:', errorData);
+            throw new Error(errorData.error || `Failed to fetch downline: ${response.status} ${response.statusText}`);
+          } catch (parseError) {
+            console.error('❌ Failed to parse error:', parseError, errorText);
+            throw new Error(`Failed to fetch downline: ${response.status} ${response.statusText}`);
+          }
+        }
 
-      const result = await response.json();
-      if (result.success) {
-        setData(result.data);
-      } else {
-        throw new Error(result.error || 'Failed to load downline');
+        const result = await response.json();
+        console.log('✅ Downline data received:', result);
+        console.log('📊 Downline count:', result.data?.downline?.length || 0);
+        console.log('📋 Debug info:', result.data?.debug);
+        
+        if (result.success) {
+          setData(result.data);
+          if ((result.data?.downline?.length || 0) === 0) {
+            console.log('⚠️ No downline users found. This could mean:');
+            console.log('   1. No users have been created yet through this staff member');
+            console.log('   2. userReferrals entries may not have been created');
+            console.log('   3. The staff member may not have a referral code');
+          }
+        } else {
+          throw new Error(result.error || 'Failed to load downline');
+        }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timeout - the server took too long to respond');
+        }
+        throw fetchError;
       }
     } catch (err: any) {
-      console.error('Error fetching downline:', err);
+      console.error('❌ Error fetching downline:', err);
       setError(err.message || 'Failed to load downline');
     } finally {
       setLoading(false);
@@ -329,6 +385,18 @@ export default function DownlinePage() {
                     <div>
                       <p className="text-xs text-primary-muted mb-1">Total Signups</p>
                       <p className="text-primary-fg font-semibold">{user.totalSignups}</p>
+                    </div>
+                  )}
+                  {user.walletBalance !== undefined && (
+                    <div>
+                      <p className="text-xs text-primary-muted mb-1 flex items-center gap-1">
+                        <Wallet className="h-3 w-3" />
+                        Wallet Balance
+                      </p>
+                      <p className="text-primary-fg font-semibold">
+                        {user.walletCurrency === 'INR' ? '₹' : user.walletCurrency + ' '}
+                        {parseFloat(String(user.walletBalance)).toFixed(2)}
+                      </p>
                     </div>
                   )}
                 </div>

@@ -36,6 +36,7 @@ export function UpdatesPanel({ audience, apiBaseUrl = "https://talaash.thejaayve
     const fetchUpdates = async () => {
       try {
         setLoading(true);
+        setError(null);
         const backendAudience = audience === "team" ? "staff" : audience;
         
         // Get user email for individual recipient filtering
@@ -48,15 +49,33 @@ export function UpdatesPanel({ audience, apiBaseUrl = "https://talaash.thejaayve
           url += `&userEmail=${encodeURIComponent(userEmail)}`;
         }
         
-        const response = await fetch(url);
+        // Use authenticatedFetch for staff portal (includes auth headers)
+        // Note: /api/updates is public but authenticatedFetch ensures proper headers/CORS
+        const response = await authenticatedFetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
         
         if (!response.ok) {
-          throw new Error("Failed to fetch updates");
+          let errorText = '';
+          try {
+            errorText = await response.text();
+            const errorData = errorText ? JSON.parse(errorText) : {};
+            console.error("Failed to fetch updates:", response.status, errorData);
+            throw new Error(errorData.error || `Failed to fetch updates: ${response.status} ${response.statusText}`);
+          } catch (parseError) {
+            console.error("Failed to parse error response:", parseError, errorText);
+            throw new Error(`Failed to fetch updates: ${response.status} ${response.statusText}`);
+          }
         }
 
         const data = await response.json();
         if (data.success) {
           setUpdates(data.data || []);
+        } else {
+          throw new Error(data.error || "Failed to load updates");
         }
       } catch (err: any) {
         console.error("Error fetching updates:", err);

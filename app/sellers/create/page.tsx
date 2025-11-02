@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { CheckCircle, UserPlus, Phone, User, Key, Users, Sparkles, Store, UserCheck, Shield, Eye, EyeOff, RefreshCw, Building2, Globe, Instagram, Youtube } from "lucide-react";
+import { CheckCircle, UserPlus, Phone, User, Key, Users, Sparkles, Store, UserCheck, Shield, Eye, EyeOff, RefreshCw, Building2, Globe, Instagram, Youtube, Copy, Check } from "lucide-react";
 import { fetchAPI, API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 
@@ -72,6 +72,63 @@ function generatePassword(length: number = 16): string {
   
   // Shuffle the password
   return password.split('').sort(() => Math.random() - 0.5).join('');
+}
+
+// Referral Code Display Component
+function ReferralCodeDisplay({ code, role }: { code: string; role: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const roleLabel = role === 'affiliate' ? 'Affiliate Code' : 
+                   role === 'agent' ? 'Agent Referral Code' :
+                   role === 'influencer' ? 'Influencer Referral Code' :
+                   role === 'seller' ? 'Seller Referral Code' :
+                   role === 'staff' ? 'Staff Referral Code' :
+                   'Referral Code';
+
+  return (
+    <div className="col-span-2">
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-sm font-medium text-gray-700 block mb-1">{roleLabel}:</span>
+            <span className="text-lg font-mono font-bold text-blue-700 bg-white px-3 py-2 rounded border border-blue-200 inline-block">
+              {code}
+            </span>
+          </div>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+            title="Copy referral code"
+          >
+            {copied ? (
+              <>
+                <Check className="h-4 w-4 text-green-600" />
+                <span className="text-sm text-green-600">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4 text-blue-600" />
+                <span className="text-sm text-blue-600">Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          Share this code with users to track referrals and build your downline
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export default function CreateUserPage() {
@@ -427,7 +484,23 @@ export default function CreateUserPage() {
 
       if (result.success) {
         setSuccess(true);
-        setCreatedUser({ ...result.data, role: roleType });
+        // Extract referral code based on role
+        let referralCode = null;
+        if (result.data.referralCode) {
+          referralCode = result.data.referralCode; // Seller or Staff
+        } else if (result.data.agent?.referralCode) {
+          referralCode = result.data.agent.referralCode; // Agent
+        } else if (result.data.affiliate?.code) {
+          referralCode = result.data.affiliate.code; // Affiliate
+        } else if (result.data.influencer?.referralCode) {
+          referralCode = result.data.influencer.referralCode; // Influencer
+        }
+        
+        setCreatedUser({ 
+          ...result.data, 
+          role: roleType,
+          referralCode: referralCode // Store referral code at top level for easier access
+        });
         resetForm(roleType);
       } else {
         setError(result.error || `Failed to create ${roleType}`);
@@ -864,12 +937,10 @@ export default function CreateUserPage() {
                     <span className="font-medium">Role:</span> {roleNames[createdUser.role as RoleType] || createdUser.role}
                   </div>
                   {(createdUser.referralCode || createdUser.agent?.referralCode || createdUser.user?.referralCode || createdUser.affiliate?.code || createdUser.influencer?.referralCode) && (
-                    <div className="col-span-2">
-                      <span className="font-medium">Referral Code:</span>
-                      <span className="ml-2 font-mono bg-gray-100 px-2 py-1 rounded">
-                        {createdUser.referralCode || createdUser.agent?.referralCode || createdUser.user?.referralCode || createdUser.affiliate?.code || createdUser.influencer?.referralCode}
-                      </span>
-                    </div>
+                    <ReferralCodeDisplay 
+                      code={createdUser.referralCode || createdUser.agent?.referralCode || createdUser.user?.referralCode || createdUser.affiliate?.code || createdUser.influencer?.referralCode || ''}
+                      role={createdUser.role}
+                    />
                   )}
                   {createdUser.user?.businessName && (
                     <div className="col-span-2">

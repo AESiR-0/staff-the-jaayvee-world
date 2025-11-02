@@ -1,26 +1,30 @@
 // Simple mail-based RBAC for staff dashboard tabs
 
-export type TabKey = 'dashboard' | 'qr' | 'referrals' | 'events' | 'coupons' | 'sellers';
+export type TabKey = 'dashboard' | 'wallet' | 'qr' | 'referrals' | 'events' | 'coupons' | 'sellers' | 'downline';
 
 // Map route to tab key
 export const routeToTabKey: Record<string, TabKey> = {
   '/dashboard': 'dashboard',
+  '/wallet': 'wallet',
   '/qr': 'qr',
   '/referrals': 'referrals',
   '/events': 'events',
   '/coupons': 'coupons',
   '/sellers/create': 'sellers',
+  '/downline': 'downline',
 };
 
 // Access control list: list of emails allowed per tab.
 // Use '*' to allow everyone.
 export const ACCESS_CONTROL: Record<TabKey, string[] | ['*']> = {
   dashboard: ['*'],
+  wallet: ['*'],
   qr: ['*'],
   referrals: ['*'],
   events: ['*'],
   coupons: ['*'],
   sellers: ['*'],
+  downline: ['*'],
 };
 
 // Optional deny list per tab (takes precedence over allow list)

@@ -1,16 +1,18 @@
 "use client";
 import { useState } from "react";
-import { 
-  LayoutDashboard, 
-  QrCode, 
-  Users, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  QrCode,
+  Users,
+  LogOut,
   Menu,
   X,
   Calendar,
   Ticket,
   Bell,
-  MessageSquare
+  MessageSquare,
+  GitBranch,
+  Wallet
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -19,9 +21,10 @@ import { canAccess, routeToTabKey } from "@/lib/rbac";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Wallet", href: "/wallet", icon: Wallet },
   { name: "QR Tools", href: "/qr", icon: QrCode },
   { name: "Referrals", href: "/referrals", icon: Users },
-  { name: "Downline", href: "/downline", icon: Users },
+  { name: "Downline", href: "/downline", icon: GitBranch },
   // { name: "Events", href: "/events", icon: Calendar },
   { name: "Manage Events", href: "/events/manage", icon: Calendar },
   { name: "Event Share Messages", href: "/events/share-messages", icon: MessageSquare },
