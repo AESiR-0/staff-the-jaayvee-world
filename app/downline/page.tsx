@@ -31,7 +31,7 @@ interface StaffDownline {
     id: string;
     email: string;
     fullName: string;
-    referralCode: string;
+    referralCode: string | null;
   } | null;
   downline: DownlineUser[];
 }
@@ -232,6 +232,38 @@ export default function DownlinePage() {
     );
   }
 
+  const fixReferralCode = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/fix-staff-referral-codes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}), // Empty body = fix own referral code
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fix referral code');
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        // Reload downline
+        await fetchDownline(selectedStaffId || undefined);
+        alert(`✅ Referral code created: ${result.data?.referralCode || 'N/A'}`);
+      }
+    } catch (err: any) {
+      console.error('Error fixing referral code:', err);
+      setError(err.message || 'Failed to fix referral code');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -239,20 +271,30 @@ export default function DownlinePage() {
           <Users className="h-6 w-6 text-primary-fg" />
           <h1 className="text-2xl font-bold text-primary-fg">Downline</h1>
         </div>
-        {isAdmin && allStaff.length > 0 && (
-          <select
-            value={selectedStaffId || ''}
-            onChange={(e) => setSelectedStaffId(e.target.value || null)}
-            className="px-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg"
-          >
-            <option value="">Select Staff Member</option>
-            {allStaff.map((staff) => (
-              <option key={staff.id} value={staff.id}>
-                {staff.fullName} ({staff.email})
-              </option>
-            ))}
-          </select>
-        )}
+        <div className="flex items-center gap-4">
+          {data?.staff && !data.staff.referralCode && (
+            <button
+              onClick={fixReferralCode}
+              className="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
+            >
+              Create Referral Code
+            </button>
+          )}
+          {isAdmin && allStaff.length > 0 && (
+            <select
+              value={selectedStaffId || ''}
+              onChange={(e) => setSelectedStaffId(e.target.value || null)}
+              className="px-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg"
+            >
+              <option value="">Select Staff Member</option>
+              {allStaff.map((staff) => (
+                <option key={staff.id} value={staff.id}>
+                  {staff.fullName} ({staff.email})
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {data?.staff && (
@@ -264,7 +306,9 @@ export default function DownlinePage() {
             </div>
             <div className="text-right">
               <p className="text-xs text-primary-muted mb-1">Referral Code</p>
-              <p className="font-mono text-sm font-semibold text-primary-accent">{data.staff.referralCode}</p>
+              <p className="font-mono text-sm font-semibold text-primary-accent">
+                {data.staff.referralCode || 'Not assigned'}
+              </p>
             </div>
           </div>
         </div>
