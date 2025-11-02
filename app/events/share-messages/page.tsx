@@ -337,4 +337,3 @@ export default function EventShareMessagesPage() {
     </div>
   );
 }
-  const [events, setEvents] = useState<Event[]>([]);
