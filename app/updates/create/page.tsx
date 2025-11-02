@@ -394,7 +394,7 @@ export default function CreateUpdatePage() {
             <div className="text-sm text-primary-fg">
               <p className="font-medium mb-1">Note</p>
               <p className="text-primary-muted">
-                If individual recipients are specified, they will receive the update even if they don't match the target audience. 
+                If individual recipients are specified, they will receive the update even if they don&apos;t match the target audience. 
                 If no individual recipients are specified, the update will be visible to all users in the selected target audience.
               </p>
             </div>
