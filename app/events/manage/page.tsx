@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter } from "lucide-react";
 import { authenticatedFetch, getStaffSession, getAuthToken } from "@/lib/auth-utils";
 
 // Only allow md and thejaayveeworldofficial
@@ -54,10 +54,14 @@ export default function ManageEventsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for create form
   const [selectedEditFile, setSelectedEditFile] = useState<File | null>(null); // Store selected file for edit form
   const [previewUrl, setPreviewUrl] = useState<string | null>(null); // Preview URL for create form
   const [previewEditUrl, setPreviewEditUrl] = useState<string | null>(null); // Preview URL for edit form
+  const [searchQuery, setSearchQuery] = useState<string>(""); // Search query
+  const [filterStatus, setFilterStatus] = useState<string>("all"); // Filter by status
+  const [filterPublished, setFilterPublished] = useState<string>("all"); // Filter by published status
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -130,10 +134,43 @@ export default function ManageEventsPage() {
     }
   };
 
+  // Filter and search events
+  const filteredEvents = useMemo(() => {
+    return events.filter(event => {
+      // Search filter - search in title, description, venue, and city
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch = 
+          event.title.toLowerCase().includes(query) ||
+          event.description?.toLowerCase().includes(query) ||
+          event.venue?.toLowerCase().includes(query) ||
+          event.city?.toLowerCase().includes(query) ||
+          event.slug?.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+
+      // Status filter
+      if (filterStatus !== "all" && event.status !== filterStatus) {
+        return false;
+      }
+
+      // Published filter
+      if (filterPublished !== "all") {
+        const isPublished = filterPublished === "published";
+        if (event.published !== isPublished) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [events, searchQuery, filterStatus, filterPublished]);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setSubmitting(true);
     setUploadingImage(true);
     setUploadProgress('Uploading image...');
 
@@ -150,6 +187,7 @@ export default function ManageEventsPage() {
           setError(err.message || 'Failed to upload image');
           setUploadingImage(false);
           setUploadProgress(null);
+          setSubmitting(false);
           return;
         }
       }
@@ -212,6 +250,7 @@ export default function ManageEventsPage() {
       setUploadProgress(null);
     } finally {
       setUploadingImage(false);
+      setSubmitting(false);
     }
   };
 
@@ -521,18 +560,20 @@ export default function ManageEventsPage() {
                   <input
                     type="text"
                     required
+                    disabled={submitting}
                     value={createForm.title}
                     onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
-                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-primary-fg mb-2">Slug</label>
                   <input
                     type="text"
+                    disabled={submitting}
                     value={createForm.slug}
                     onChange={(e) => setCreateForm({ ...createForm, slug: e.target.value })}
-                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="event-slug"
                   />
                 </div>
@@ -541,27 +582,30 @@ export default function ManageEventsPage() {
                   <input
                     type="datetime-local"
                     required
+                    disabled={submitting}
                     value={createForm.startDate}
                     onChange={(e) => setCreateForm({ ...createForm, startDate: e.target.value })}
-                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-primary-fg mb-2">End Date</label>
                   <input
                     type="datetime-local"
+                    disabled={submitting}
                     value={createForm.endDate}
                     onChange={(e) => setCreateForm({ ...createForm, endDate: e.target.value })}
-                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-primary-fg mb-2">Venue</label>
                   <input
                     type="text"
+                    disabled={submitting}
                     value={createForm.venue}
                     onChange={(e) => setCreateForm({ ...createForm, venue: e.target.value })}
-                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="Enter venue address"
                   />
                 </div>
@@ -569,9 +613,10 @@ export default function ManageEventsPage() {
                   <label className="block text-sm font-medium text-primary-fg mb-2">City</label>
                   <input
                     type="text"
+                    disabled={submitting}
                     value={createForm.city}
                     onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
-                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="City (auto-detected from venue or enter manually)"
                   />
                   <p className="text-xs text-primary-muted mt-1">City will be auto-detected from venue address if not provided</p>
@@ -593,7 +638,7 @@ export default function ManageEventsPage() {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        disabled={uploadingImage}
+                        disabled={uploadingImage || submitting}
                         className="px-4 py-2 border border-primary-border rounded-lg hover:bg-primary-accent-light transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Upload size={16} />
@@ -612,6 +657,7 @@ export default function ManageEventsPage() {
                         />
                         <button
                           type="button"
+                          disabled={submitting}
                           onClick={() => {
                             if (previewUrl) {
                               URL.revokeObjectURL(previewUrl);
@@ -620,7 +666,7 @@ export default function ManageEventsPage() {
                             setPreviewUrl(null);
                             setCreateForm({ ...createForm, banner: "" });
                           }}
-                          className="mt-2 text-sm text-red-600 hover:text-red-700"
+                          className="mt-2 text-sm text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Remove image
                         </button>
@@ -628,19 +674,21 @@ export default function ManageEventsPage() {
                     )}
                     <input
                       type="url"
+                      disabled={submitting}
                       value={createForm.banner}
                       onChange={(e) => setCreateForm({ ...createForm, banner: e.target.value })}
                       placeholder="Or enter image URL manually"
-                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-primary-fg mb-2">Status</label>
                   <select
+                    disabled={submitting}
                     value={createForm.status}
                     onChange={(e) => setCreateForm({ ...createForm, status: e.target.value })}
-                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <option value="upcoming">Upcoming</option>
                     <option value="ongoing">Ongoing</option>
@@ -653,18 +701,20 @@ export default function ManageEventsPage() {
                 <label className="block text-sm font-medium text-primary-fg mb-2">Description</label>
                 <textarea
                   rows={4}
+                  disabled={submitting}
                   value={createForm.description}
                   onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg"
+                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
               <div className="flex items-center gap-3 p-4 bg-primary-accent-light rounded-lg border border-primary-border">
                 <input
                   type="checkbox"
                   id="published"
+                  disabled={submitting}
                   checked={createForm.published}
                   onChange={(e) => setCreateForm({ ...createForm, published: e.target.checked })}
-                  className="w-5 h-5 text-primary-accent border-primary-border rounded focus:ring-primary-accent"
+                  className="w-5 h-5 text-primary-accent border-primary-border rounded focus:ring-primary-accent disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <label htmlFor="published" className="text-sm text-primary-fg cursor-pointer">
                   Published (visible to public)
@@ -673,6 +723,7 @@ export default function ManageEventsPage() {
               <div className="flex justify-end gap-4">
                 <button
                   type="button"
+                  disabled={submitting}
                   onClick={() => {
                     // Clean up preview URL
                     if (previewUrl) {
@@ -694,16 +745,26 @@ export default function ManageEventsPage() {
       setSelectedFile(null);
       setPreviewUrl(null);
                   }}
-                  className="px-6 py-2 text-sm font-medium text-primary-fg bg-primary-border rounded-lg hover:bg-primary-accent-light transition-colors"
+                  className="px-6 py-2 text-sm font-medium text-primary-fg bg-primary-border rounded-lg hover:bg-primary-accent-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 text-sm font-medium text-white bg-primary-accent rounded-lg hover:bg-primary-accent-dark transition-colors flex items-center gap-2"
+                  disabled={submitting}
+                  className="px-6 py-2 text-sm font-medium text-white bg-primary-accent rounded-lg hover:bg-primary-accent-dark transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Save className="h-4 w-4" />
-                  Create Event
+                  {submitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      Create Event
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -712,10 +773,87 @@ export default function ManageEventsPage() {
 
         {/* Events List */}
         <div className="card">
-          <h2 className="text-xl font-semibold text-primary-fg mb-4">All Events</h2>
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <h2 className="text-xl font-semibold text-primary-fg">All Events</h2>
+            
+            {/* Search and Filters */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Search */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-primary-muted" />
+                <input
+                  type="text"
+                  placeholder="Search events..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg text-sm"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div className="relative">
+                <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-primary-muted pointer-events-none z-10" />
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="pl-10 pr-8 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg text-sm appearance-none cursor-pointer min-w-[140px]"
+                >
+                  <option value="all">All Status</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="ongoing">Ongoing</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                  <svg className="w-4 h-4 text-primary-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Published Filter */}
+              <div className="relative">
+                <select
+                  value={filterPublished}
+                  onChange={(e) => setFilterPublished(e.target.value)}
+                  className="px-4 pr-8 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg text-sm cursor-pointer appearance-none min-w-[120px]"
+                >
+                  <option value="all">All</option>
+                  <option value="published">Published</option>
+                  <option value="draft">Draft</option>
+                </select>
+                <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                  <svg className="w-4 h-4 text-primary-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Results Count */}
+          <div className="mb-4 text-sm text-primary-muted">
+            Showing {filteredEvents.length} of {events.length} event{events.length !== 1 ? 's' : ''}
+            {(searchQuery || filterStatus !== "all" || filterPublished !== "all") && " (filtered)"}
+          </div>
+
           {events.length === 0 ? (
             <div className="text-center py-8 text-primary-muted">
               <p>No events found. Create your first event!</p>
+            </div>
+          ) : filteredEvents.length === 0 ? (
+            <div className="text-center py-8 text-primary-muted">
+              <p>No events match your search or filter criteria.</p>
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setFilterStatus("all");
+                  setFilterPublished("all");
+                }}
+                className="mt-2 text-sm text-primary-accent hover:underline"
+              >
+                Clear filters
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -730,7 +868,7 @@ export default function ManageEventsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {events.map((event) => (
+                  {filteredEvents.map((event) => (
                     <tr key={event.id} className="border-b border-primary-border hover:bg-primary-accent-light/50">
                       {editingId === event.id ? (
                         <>
