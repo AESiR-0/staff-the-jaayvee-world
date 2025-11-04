@@ -215,7 +215,7 @@ export default function DownlinePage() {
 
   const uniqueTiers = useMemo(() => {
     if (!data?.downline) return [];
-    const tiers = new Set(data.downline.map(user => user.tier?.toLowerCase()).filter(Boolean));
+    const tiers = new Set(data.downline.map(user => user.tier?.toLowerCase()).filter((tier): tier is string => Boolean(tier)));
     return Array.from(tiers);
   }, [data]);
 
