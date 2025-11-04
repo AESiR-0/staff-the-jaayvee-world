@@ -606,7 +606,7 @@ export default function ManageEventsPage() {
                     {(previewUrl || createForm.banner) && (
                       <div className="mt-2">
                         <img 
-                          src={previewUrl || createForm.banner} 
+                          src={previewUrl ?? createForm.banner ?? ''} 
                           alt="Banner preview" 
                           className="max-w-full h-48 object-cover rounded-lg border border-primary-border"
                         />
@@ -840,7 +840,7 @@ export default function ManageEventsPage() {
                                   {(previewEditUrl || editForm.banner) && (
                                     <div className="mt-2">
                                       <img 
-                                        src={previewEditUrl || editForm.banner} 
+                                        src={previewEditUrl ?? editForm.banner ?? ''} 
                                         alt="Banner preview" 
                                         className="max-w-full h-48 object-cover rounded-lg border border-primary-border"
                                       />
