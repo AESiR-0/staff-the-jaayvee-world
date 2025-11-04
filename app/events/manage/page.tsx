@@ -20,6 +20,7 @@ interface Event {
   banner: string | null;
   venue: string | null;
   city: string | null;
+  state: string | null;
   slug: string | null;
   published: boolean;
   status: string;
@@ -45,6 +46,7 @@ export default function ManageEventsPage() {
     banner: "",
     venue: "",
     city: "",
+    state: "",
     slug: "",
     published: false,
     status: "upcoming"
@@ -62,6 +64,8 @@ export default function ManageEventsPage() {
   const [searchQuery, setSearchQuery] = useState<string>(""); // Search query
   const [filterStatus, setFilterStatus] = useState<string>("all"); // Filter by status
   const [filterPublished, setFilterPublished] = useState<string>("all"); // Filter by published status
+  const [states, setStates] = useState<string[]>([]); // Indian states list
+  const [loadingStates, setLoadingStates] = useState(false); // Loading states for API
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,6 +121,28 @@ export default function ManageEventsPage() {
 
     checkAuthorization();
   }, [router]);
+
+  // Fetch states from API
+  useEffect(() => {
+    const fetchStates = async () => {
+      setLoadingStates(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/states`);
+        const data = await response.json();
+        if (data.success && data.data) {
+          setStates(data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch states:', err);
+      } finally {
+        setLoadingStates(false);
+      }
+    };
+
+    if (authorized) {
+      fetchStates();
+    }
+  }, [authorized, API_BASE_URL]);
 
   const fetchEvents = async () => {
     try {
@@ -204,6 +230,7 @@ export default function ManageEventsPage() {
           banner: bannerUrl,
           venue: createForm.venue || null,
           city: createForm.city || null,
+          state: createForm.state || null,
           slug: createForm.slug || null,
           published: createForm.published,
           status: createForm.status,
@@ -232,6 +259,7 @@ export default function ManageEventsPage() {
         banner: "",
         venue: "",
         city: "",
+        state: "",
         slug: "",
         published: false,
         status: "upcoming"
@@ -409,6 +437,7 @@ export default function ManageEventsPage() {
       banner: event.banner || "",
       venue: event.venue || "",
       city: event.city || "",
+      state: event.state || "",
       slug: event.slug || "",
       published: event.published,
       status: event.status
@@ -621,6 +650,30 @@ export default function ManageEventsPage() {
                   />
                   <p className="text-xs text-primary-muted mt-1">City will be auto-detected from venue address if not provided</p>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-primary-fg mb-2">State</label>
+                  <div className="relative">
+                    <select
+                      disabled={submitting || loadingStates}
+                      value={createForm.state}
+                      onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
+                      className="w-full px-4 pr-8 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
+                    >
+                      <option value="">Select State</option>
+                      {states.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                      <svg className="w-4 h-4 text-primary-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-xs text-primary-muted mt-1">State will be auto-detected from venue address if not provided</p>
+                </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-primary-fg mb-2">Banner Image</label>
                   <div className="space-y-2">
@@ -730,14 +783,15 @@ export default function ManageEventsPage() {
                       URL.revokeObjectURL(previewUrl);
                     }
                     setCreating(false);
-                    setCreateForm({
-                      title: "",
-                      description: "",
-                      startDate: "",
+      setCreateForm({
+        title: "",
+        description: "",
+        startDate: "",
         endDate: "",
         banner: "",
         venue: "",
         city: "",
+        state: "",
         slug: "",
         published: false,
         status: "upcoming"
@@ -933,6 +987,30 @@ export default function ManageEventsPage() {
                                     placeholder="City (auto-detected from venue or enter manually)"
                                   />
                                   <p className="text-xs text-primary-muted mt-1">City will be auto-detected from venue address if not provided</p>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-primary-fg mb-2">State</label>
+                                  <div className="relative">
+                                    <select
+                                      disabled={loadingStates}
+                                      value={editForm.state || ""}
+                                      onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
+                                      className="w-full px-4 pr-8 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
+                                    >
+                                      <option value="">Select State</option>
+                                      {states.map((state) => (
+                                        <option key={state} value={state}>
+                                          {state}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none">
+                                      <svg className="w-4 h-4 text-primary-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                      </svg>
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-primary-muted mt-1">State will be auto-detected from venue address if not provided</p>
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-primary-fg mb-2">Status</label>
