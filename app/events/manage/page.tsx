@@ -11,6 +11,46 @@ const ALLOWED_EMAIL = [
   "thejaayveeworldofficial@gmail.com"
 ];
 
+// Indian states and union territories
+const INDIAN_STATES = [
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chhattisgarh',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal',
+  'Andaman and Nicobar Islands',
+  'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi',
+  'Jammu and Kashmir',
+  'Ladakh',
+  'Lakshadweep',
+  'Puducherry'
+].sort();
+
 interface Event {
   id: string;
   title: string;
@@ -64,8 +104,6 @@ export default function ManageEventsPage() {
   const [searchQuery, setSearchQuery] = useState<string>(""); // Search query
   const [filterStatus, setFilterStatus] = useState<string>("all"); // Filter by status
   const [filterPublished, setFilterPublished] = useState<string>("all"); // Filter by published status
-  const [states, setStates] = useState<string[]>([]); // Indian states list
-  const [loadingStates, setLoadingStates] = useState(false); // Loading states for API
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -121,28 +159,6 @@ export default function ManageEventsPage() {
 
     checkAuthorization();
   }, [router]);
-
-  // Fetch states from API
-  useEffect(() => {
-    const fetchStates = async () => {
-      setLoadingStates(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/states`);
-        const data = await response.json();
-        if (data.success && data.data) {
-          setStates(data.data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch states:', err);
-      } finally {
-        setLoadingStates(false);
-      }
-    };
-
-    if (authorized) {
-      fetchStates();
-    }
-  }, [authorized, API_BASE_URL]);
 
   const fetchEvents = async () => {
     try {
@@ -654,13 +670,13 @@ export default function ManageEventsPage() {
                   <label className="block text-sm font-medium text-primary-fg mb-2">State</label>
                   <div className="relative">
                     <select
-                      disabled={submitting || loadingStates}
+                      disabled={submitting}
                       value={createForm.state}
                       onChange={(e) => setCreateForm({ ...createForm, state: e.target.value })}
                       className="w-full px-4 pr-8 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
                     >
                       <option value="">Select State</option>
-                      {states.map((state) => (
+                      {INDIAN_STATES.map((state) => (
                         <option key={state} value={state}>
                           {state}
                         </option>
@@ -992,13 +1008,12 @@ export default function ManageEventsPage() {
                                   <label className="block text-sm font-medium text-primary-fg mb-2">State</label>
                                   <div className="relative">
                                     <select
-                                      disabled={loadingStates}
                                       value={editForm.state || ""}
                                       onChange={(e) => setEditForm({ ...editForm, state: e.target.value })}
-                                      className="w-full px-4 pr-8 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed appearance-none cursor-pointer"
+                                      className="w-full px-4 pr-8 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg appearance-none cursor-pointer"
                                     >
                                       <option value="">Select State</option>
-                                      {states.map((state) => (
+                                      {INDIAN_STATES.map((state) => (
                                         <option key={state} value={state}>
                                           {state}
                                         </option>
