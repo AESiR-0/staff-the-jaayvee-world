@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Users, UserCheck, Mail, Phone, Calendar, TrendingUp, Building2, Instagram, Youtube, Tag, Wallet } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { Users, UserCheck, Mail, Phone, Calendar, TrendingUp, Building2, Instagram, Youtube, Tag, Wallet, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 import { format } from "date-fns";
 
@@ -43,6 +43,15 @@ export default function DownlinePage() {
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [allStaff, setAllStaff] = useState<Array<{ id: string; email: string; fullName: string }>>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  
+  // Search, Filter, Sort, Pagination states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedRole, setSelectedRole] = useState<string>("all");
+  const [selectedTier, setSelectedTier] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("createdAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   useEffect(() => {
     const loadData = async () => {
@@ -197,6 +206,118 @@ export default function DownlinePage() {
     }
   };
 
+  // Get unique roles and tiers from data
+  const uniqueRoles = useMemo(() => {
+    if (!data?.downline) return [];
+    const roles = new Set(data.downline.map(user => user.role.toLowerCase()));
+    return Array.from(roles);
+  }, [data]);
+
+  const uniqueTiers = useMemo(() => {
+    if (!data?.downline) return [];
+    const tiers = new Set(data.downline.map(user => user.tier?.toLowerCase()).filter(Boolean));
+    return Array.from(tiers);
+  }, [data]);
+
+  // Filter and sort data
+  const filteredAndSortedData = useMemo(() => {
+    if (!data?.downline) return [];
+
+    let filtered = [...data.downline];
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(user => 
+        user.fullName?.toLowerCase().includes(query) ||
+        user.email?.toLowerCase().includes(query) ||
+        user.phone?.toLowerCase().includes(query) ||
+        user.code?.toLowerCase().includes(query) ||
+        user.referralCode?.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply role filter
+    if (selectedRole !== "all") {
+      filtered = filtered.filter(user => user.role.toLowerCase() === selectedRole);
+    }
+
+    // Apply tier filter
+    if (selectedTier !== "all") {
+      filtered = filtered.filter(user => user.tier?.toLowerCase() === selectedTier);
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortBy) {
+        case "name":
+          aValue = a.fullName?.toLowerCase() || "";
+          bValue = b.fullName?.toLowerCase() || "";
+          break;
+        case "email":
+          aValue = a.email?.toLowerCase() || "";
+          bValue = b.email?.toLowerCase() || "";
+          break;
+        case "role":
+          aValue = a.role?.toLowerCase() || "";
+          bValue = b.role?.toLowerCase() || "";
+          break;
+        case "createdAt":
+          aValue = new Date(a.createdAt).getTime();
+          bValue = new Date(b.createdAt).getTime();
+          break;
+        case "totalReferrals":
+          aValue = a.totalReferrals ?? 0;
+          bValue = b.totalReferrals ?? 0;
+          break;
+        case "totalEarnings":
+          aValue = parseFloat(a.totalEarnings || "0");
+          bValue = parseFloat(b.totalEarnings || "0");
+          break;
+        case "walletBalance":
+          aValue = a.walletBalance ?? 0;
+          bValue = b.walletBalance ?? 0;
+          break;
+        default:
+          aValue = new Date(a.createdAt).getTime();
+          bValue = new Date(b.createdAt).getTime();
+      }
+
+      if (aValue < bValue) return sortOrder === "asc" ? -1 : 1;
+      if (aValue > bValue) return sortOrder === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  }, [data, searchQuery, selectedRole, selectedTier, sortBy, sortOrder]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredAndSortedData.length / itemsPerPage);
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    const end = start + itemsPerPage;
+    return filteredAndSortedData.slice(start, end);
+  }, [filteredAndSortedData, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedRole, selectedTier, sortBy, sortOrder]);
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSelectedRole("all");
+    setSelectedTier("all");
+    setSortBy("createdAt");
+    setSortOrder("desc");
+    setCurrentPage(1);
+  };
+
+  const hasActiveFilters = searchQuery || selectedRole !== "all" || selectedTier !== "all";
+
   if (loading && !data) {
     return (
       <div className="p-6">
@@ -314,11 +435,183 @@ export default function DownlinePage() {
         </div>
       )}
 
-      <div className="mb-4">
-        <p className="text-sm text-primary-muted">
-          Total Downline: <span className="font-semibold text-primary-fg">{data?.downline.length || 0}</span>
-        </p>
+      {/* Search, Filter, Sort Controls */}
+      <div className="card mb-6 space-y-4">
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-primary-muted" />
+          <input
+            type="text"
+            placeholder="Search by name, email, phone, or code..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent text-primary-fg"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-primary-muted hover:text-primary-fg"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Filters and Sort Row */}
+        <div className="flex flex-wrap gap-4 items-center">
+          {/* Role Filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-primary-muted" />
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+              className="px-3 py-2 border border-primary-border rounded-lg bg-white text-primary-fg text-sm focus:outline-none focus:ring-2 focus:ring-primary-accent"
+            >
+              <option value="all">All Roles</option>
+              {uniqueRoles.map(role => (
+                <option key={role} value={role}>{role.charAt(0).toUpperCase() + role.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tier Filter */}
+          {uniqueTiers.length > 0 && (
+            <select
+              value={selectedTier}
+              onChange={(e) => setSelectedTier(e.target.value)}
+              className="px-3 py-2 border border-primary-border rounded-lg bg-white text-primary-fg text-sm focus:outline-none focus:ring-2 focus:ring-primary-accent"
+            >
+              <option value="all">All Tiers</option>
+              {uniqueTiers.map(tier => (
+                <option key={tier} value={tier}>{tier.charAt(0).toUpperCase() + tier.slice(1)}</option>
+              ))}
+            </select>
+          )}
+
+          {/* Sort */}
+          <div className="flex items-center gap-2 ml-auto">
+            <ArrowUpDown className="h-4 w-4 text-primary-muted" />
+            <select
+              value={`${sortBy}-${sortOrder}`}
+              onChange={(e) => {
+                const [field, order] = e.target.value.split("-");
+                setSortBy(field);
+                setSortOrder(order as "asc" | "desc");
+              }}
+              className="px-3 py-2 border border-primary-border rounded-lg bg-white text-primary-fg text-sm focus:outline-none focus:ring-2 focus:ring-primary-accent"
+            >
+              <option value="createdAt-desc">Newest First</option>
+              <option value="createdAt-asc">Oldest First</option>
+              <option value="name-asc">Name (A-Z)</option>
+              <option value="name-desc">Name (Z-A)</option>
+              <option value="email-asc">Email (A-Z)</option>
+              <option value="email-desc">Email (Z-A)</option>
+              <option value="role-asc">Role (A-Z)</option>
+              <option value="role-desc">Role (Z-A)</option>
+              <option value="totalReferrals-desc">Most Referrals</option>
+              <option value="totalReferrals-asc">Least Referrals</option>
+              <option value="totalEarnings-desc">Highest Earnings</option>
+              <option value="totalEarnings-asc">Lowest Earnings</option>
+              <option value="walletBalance-desc">Highest Wallet</option>
+              <option value="walletBalance-asc">Lowest Wallet</option>
+            </select>
+          </div>
+
+          {/* Clear Filters */}
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="px-3 py-2 text-sm text-primary-accent hover:bg-primary-accent-light rounded-lg transition-colors"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+
+        {/* Results Count */}
+        <div className="flex items-center justify-between text-sm">
+          <p className="text-primary-muted">
+            Showing <span className="font-semibold text-primary-fg">
+              {filteredAndSortedData.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
+            </span> - <span className="font-semibold text-primary-fg">
+              {Math.min(currentPage * itemsPerPage, filteredAndSortedData.length)}
+            </span> of <span className="font-semibold text-primary-fg">{filteredAndSortedData.length}</span> results
+            {data?.downline.length !== filteredAndSortedData.length && (
+              <span className="text-primary-muted"> (filtered from {data?.downline.length || 0} total)</span>
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            <label className="text-primary-muted text-sm">Per page:</label>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1 border border-primary-border rounded bg-white text-primary-fg text-sm focus:outline-none focus:ring-2 focus:ring-primary-accent"
+            >
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
+        </div>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="px-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg hover:bg-primary-accent-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Previous
+          </button>
+          
+          <div className="flex items-center gap-2">
+            {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 7) {
+                pageNum = i + 1;
+              } else if (currentPage <= 4) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 3) {
+                pageNum = totalPages - 6 + i;
+              } else {
+                pageNum = currentPage - 3 + i;
+              }
+
+              if (pageNum < 1 || pageNum > totalPages) return null;
+
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-3 py-1 rounded-lg transition-colors ${
+                    currentPage === pageNum
+                      ? "bg-primary-accent text-white"
+                      : "border border-primary-border bg-white text-primary-fg hover:bg-primary-accent-light"
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="px-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg hover:bg-primary-accent-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            Next
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {data?.downline.length === 0 ? (
         <div className="card text-center py-12">
@@ -328,9 +621,22 @@ export default function DownlinePage() {
             Users you create through the Create User page will appear here
           </p>
         </div>
+      ) : filteredAndSortedData.length === 0 ? (
+        <div className="card text-center py-12">
+          <Users className="h-12 w-12 text-primary-muted mx-auto mb-4" />
+          <p className="text-primary-muted">No downline members match your filters</p>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="mt-4 px-4 py-2 text-primary-accent hover:bg-primary-accent-light rounded-lg transition-colors"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
       ) : (
         <div className="grid gap-4">
-          {data?.downline.map((user) => (
+          {paginatedData.map((user) => (
             <div key={user.userId} className="card">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-start gap-3">

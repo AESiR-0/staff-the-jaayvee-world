@@ -19,6 +19,7 @@ interface Event {
   endDate: string | null;
   banner: string | null;
   venue: string | null;
+  city: string | null;
   slug: string | null;
   published: boolean;
   status: string;
@@ -34,6 +35,7 @@ export default function ManageEventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Event>>({});
+  const [originalBanner, setOriginalBanner] = useState<string | null>(null); // Track original banner URL for deletion
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
     title: "",
@@ -42,6 +44,7 @@ export default function ManageEventsPage() {
     endDate: "",
     banner: "",
     venue: "",
+    city: "",
     slug: "",
     published: false,
     status: "upcoming"
@@ -51,10 +54,26 @@ export default function ManageEventsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for create form
+  const [selectedEditFile, setSelectedEditFile] = useState<File | null>(null); // Store selected file for edit form
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null); // Preview URL for create form
+  const [previewEditUrl, setPreviewEditUrl] = useState<string | null>(null); // Preview URL for edit form
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://thejaayveeworld.com";
+
+  // Cleanup preview URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      if (previewEditUrl) {
+        URL.revokeObjectURL(previewEditUrl);
+      }
+    };
+  }, [previewUrl, previewEditUrl]);
 
   useEffect(() => {
     // Check if user is authorized
@@ -115,8 +134,28 @@ export default function ManageEventsPage() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setUploadingImage(true);
+    setUploadProgress('Uploading image...');
 
     try {
+      let bannerUrl = createForm.banner || null;
+
+      // Upload image if a file was selected
+      if (selectedFile) {
+        try {
+          bannerUrl = await uploadImageFile(selectedFile);
+          setUploadProgress('Image uploaded successfully!');
+        } catch (err: any) {
+          console.error('Image upload error:', err);
+          setError(err.message || 'Failed to upload image');
+          setUploadingImage(false);
+          setUploadProgress(null);
+          return;
+        }
+      }
+
+      setUploadProgress('Creating event...');
+
       const response = await authenticatedFetch(`${API_BASE_URL}/api/events`, {
         method: "POST",
         body: JSON.stringify({
@@ -124,8 +163,9 @@ export default function ManageEventsPage() {
           description: createForm.description || null,
           startDate: createForm.startDate,
           endDate: createForm.endDate || null,
-          banner: createForm.banner || null,
+          banner: bannerUrl,
           venue: createForm.venue || null,
+          city: createForm.city || null,
           slug: createForm.slug || null,
           published: createForm.published,
           status: createForm.status,
@@ -140,6 +180,12 @@ export default function ManageEventsPage() {
       }
 
       setSuccess("Event created successfully!");
+      
+      // Clean up preview URLs
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      
       setCreateForm({
         title: "",
         description: "",
@@ -147,27 +193,99 @@ export default function ManageEventsPage() {
         endDate: "",
         banner: "",
         venue: "",
+        city: "",
         slug: "",
         published: false,
         status: "upcoming"
       });
+      setSelectedFile(null);
+      setPreviewUrl(null);
       setCreating(false);
       fetchEvents();
-      setTimeout(() => setSuccess(null), 3000);
+      setTimeout(() => {
+        setSuccess(null);
+        setUploadProgress(null);
+      }, 3000);
     } catch (err: any) {
       console.error("Error creating event:", err);
       setError(err.message || "Failed to create event");
+      setUploadProgress(null);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const deleteImage = async (imageUrl: string) => {
+    try {
+      const token = getAuthToken();
+      const response = await fetch(`${API_BASE_URL}/api/upload?url=${encodeURIComponent(imageUrl)}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        console.warn('Failed to delete image:', data.error);
+        // Don't throw error - image deletion failure shouldn't block event update
+      }
+    } catch (err: any) {
+      console.warn('Error deleting image:', err);
+      // Don't throw error - image deletion failure shouldn't block event update
     }
   };
 
   const handleUpdate = async (id: string) => {
     setError(null);
     setSuccess(null);
+    setUploadingImage(true);
+    setUploadProgress('Processing...');
 
     try {
+      let bannerUrl = editForm.banner || null;
+
+      // Upload new image if a file was selected
+      if (selectedEditFile) {
+        try {
+          setUploadProgress('Uploading new image...');
+          bannerUrl = await uploadImageFile(selectedEditFile);
+          
+          // Delete old image if it exists and is a Supabase URL
+          if (originalBanner && originalBanner.trim() !== '' && originalBanner.includes('supabase.co/storage')) {
+            await deleteImage(originalBanner);
+          }
+          
+          setUploadProgress('Image uploaded successfully!');
+        } catch (err: any) {
+          console.error('Image upload error:', err);
+          setError(err.message || 'Failed to upload image');
+          setUploadingImage(false);
+          setUploadProgress(null);
+          return;
+        }
+      } else {
+        // Check if banner was removed (had a value, now empty)
+        const bannerWasRemoved = originalBanner && originalBanner.trim() !== '' && (!editForm.banner || editForm.banner.trim() === '');
+        
+        // Delete the old image if it was removed
+        if (bannerWasRemoved) {
+          // Only delete if it's a Supabase storage URL (to avoid deleting external URLs)
+          if (originalBanner && originalBanner.includes('supabase.co/storage')) {
+            setUploadProgress('Removing old image...');
+            await deleteImage(originalBanner);
+          }
+        }
+      }
+
+      setUploadProgress('Updating event...');
+
       const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${id}`, {
         method: "PUT",
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          ...editForm,
+          banner: bannerUrl,
+        }),
       });
 
       const data = await response.json();
@@ -177,13 +295,28 @@ export default function ManageEventsPage() {
       }
 
       setSuccess("Event updated successfully!");
+      
+      // Clean up preview URLs
+      if (previewEditUrl) {
+        URL.revokeObjectURL(previewEditUrl);
+      }
+      
       setEditingId(null);
       setEditForm({});
+      setOriginalBanner(null);
+      setSelectedEditFile(null);
+      setPreviewEditUrl(null);
       fetchEvents();
-      setTimeout(() => setSuccess(null), 3000);
+      setTimeout(() => {
+        setSuccess(null);
+        setUploadProgress(null);
+      }, 3000);
     } catch (err: any) {
       console.error("Error updating event:", err);
       setError(err.message || "Failed to update event");
+      setUploadProgress(null);
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -220,6 +353,15 @@ export default function ManageEventsPage() {
 
   const startEdit = (event: Event) => {
     setEditingId(event.id);
+    setOriginalBanner(event.banner || null); // Store original banner URL
+    setSelectedEditFile(null); // Clear any selected file
+    setPreviewEditUrl(null); // Clear preview
+    
+    // Clean up any existing preview URL
+    if (previewEditUrl) {
+      URL.revokeObjectURL(previewEditUrl);
+    }
+    
     setEditForm({
       title: event.title,
       description: event.description || "",
@@ -227,13 +369,14 @@ export default function ManageEventsPage() {
       endDate: event.endDate ? new Date(event.endDate).toISOString().slice(0, 16) : "",
       banner: event.banner || "",
       venue: event.venue || "",
+      city: event.city || "",
       slug: event.slug || "",
       published: event.published,
       status: event.status
     });
   };
 
-  const handleImageUpload = async (file: File, isEdit: boolean = false) => {
+  const handleImageSelect = (file: File, isEdit: boolean = false) => {
     if (!file) return;
 
     // Validate file type
@@ -250,48 +393,45 @@ export default function ManageEventsPage() {
       return;
     }
 
-    setUploadingImage(true);
-    setUploadProgress('Uploading image...');
     setError(null);
 
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('folder', 'events');
+    // Create preview URL
+    const preview = URL.createObjectURL(file);
 
-      const token = getAuthToken();
-      const response = await fetch(`${API_BASE_URL}/api/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to upload image');
-      }
-
-      setUploadProgress('Image uploaded successfully!');
-      
-      // Update form with uploaded image URL
-      if (isEdit) {
-        setEditForm({ ...editForm, banner: data.data.url });
-      } else {
-        setCreateForm({ ...createForm, banner: data.data.url });
-      }
-
-      setTimeout(() => {
-        setUploadProgress(null);
-      }, 2000);
-    } catch (err: any) {
-      console.error('Image upload error:', err);
-      setError(err.message || 'Failed to upload image');
-    } finally {
-      setUploadingImage(false);
+    if (isEdit) {
+      setSelectedEditFile(file);
+      setPreviewEditUrl(preview);
+      // Clear the banner URL field since we have a new file
+      setEditForm({ ...editForm, banner: '' });
+    } else {
+      setSelectedFile(file);
+      setPreviewUrl(preview);
+      // Clear the banner URL field since we have a new file
+      setCreateForm({ ...createForm, banner: '' });
     }
+  };
+
+  const uploadImageFile = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', 'events');
+
+    const token = getAuthToken();
+    const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Failed to upload image');
+    }
+
+    return data.data.url;
   };
 
   if (loading) {
@@ -422,7 +562,19 @@ export default function ManageEventsPage() {
                     value={createForm.venue}
                     onChange={(e) => setCreateForm({ ...createForm, venue: e.target.value })}
                     className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    placeholder="Enter venue address"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-primary-fg mb-2">City</label>
+                  <input
+                    type="text"
+                    value={createForm.city}
+                    onChange={(e) => setCreateForm({ ...createForm, city: e.target.value })}
+                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    placeholder="City (auto-detected from venue or enter manually)"
+                  />
+                  <p className="text-xs text-primary-muted mt-1">City will be auto-detected from venue address if not provided</p>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-primary-fg mb-2">Banner Image</label>
@@ -433,7 +585,7 @@ export default function ManageEventsPage() {
                       accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) handleImageUpload(file, false);
+                        if (file) handleImageSelect(file, false);
                       }}
                       className="hidden"
                     />
@@ -445,22 +597,29 @@ export default function ManageEventsPage() {
                         className="px-4 py-2 border border-primary-border rounded-lg hover:bg-primary-accent-light transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Upload size={16} />
-                        {uploadingImage ? "Uploading..." : "Upload Image"}
+                        Select Image
                       </button>
                       {uploadProgress && (
                         <span className="text-sm text-primary-muted">{uploadProgress}</span>
                       )}
                     </div>
-                    {createForm.banner && (
+                    {(previewUrl || createForm.banner) && (
                       <div className="mt-2">
                         <img 
-                          src={createForm.banner} 
+                          src={previewUrl || createForm.banner} 
                           alt="Banner preview" 
                           className="max-w-full h-48 object-cover rounded-lg border border-primary-border"
                         />
                         <button
                           type="button"
-                          onClick={() => setCreateForm({ ...createForm, banner: "" })}
+                          onClick={() => {
+                            if (previewUrl) {
+                              URL.revokeObjectURL(previewUrl);
+                            }
+                            setSelectedFile(null);
+                            setPreviewUrl(null);
+                            setCreateForm({ ...createForm, banner: "" });
+                          }}
                           className="mt-2 text-sm text-red-600 hover:text-red-700"
                         >
                           Remove image
@@ -515,18 +674,25 @@ export default function ManageEventsPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    // Clean up preview URL
+                    if (previewUrl) {
+                      URL.revokeObjectURL(previewUrl);
+                    }
                     setCreating(false);
                     setCreateForm({
                       title: "",
                       description: "",
                       startDate: "",
-                      endDate: "",
-                      banner: "",
-                      venue: "",
-                      slug: "",
-                      published: false,
-                      status: "upcoming"
-                    });
+        endDate: "",
+        banner: "",
+        venue: "",
+        city: "",
+        slug: "",
+        published: false,
+        status: "upcoming"
+      });
+      setSelectedFile(null);
+      setPreviewUrl(null);
                   }}
                   className="px-6 py-2 text-sm font-medium text-primary-fg bg-primary-border rounded-lg hover:bg-primary-accent-light transition-colors"
                 >
@@ -616,7 +782,19 @@ export default function ManageEventsPage() {
                                     value={editForm.venue || ""}
                                     onChange={(e) => setEditForm({ ...editForm, venue: e.target.value })}
                                     className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                    placeholder="Enter venue address"
                                   />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-primary-fg mb-2">City</label>
+                                  <input
+                                    type="text"
+                                    value={editForm.city || ""}
+                                    onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                    placeholder="City (auto-detected from venue or enter manually)"
+                                  />
+                                  <p className="text-xs text-primary-muted mt-1">City will be auto-detected from venue address if not provided</p>
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-primary-fg mb-2">Status</label>
@@ -639,10 +817,10 @@ export default function ManageEventsPage() {
                                     ref={editFileInputRef}
                                     type="file"
                                     accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) handleImageUpload(file, true);
-                                    }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImageSelect(file, true);
+                      }}
                                     className="hidden"
                                   />
                                   <div className="flex items-center gap-3">
@@ -653,22 +831,29 @@ export default function ManageEventsPage() {
                                       className="px-4 py-2 border border-primary-border rounded-lg hover:bg-primary-accent-light transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                       <Upload size={16} />
-                                      {uploadingImage ? "Uploading..." : "Upload Image"}
+                                      Select Image
                                     </button>
                                     {uploadProgress && (
                                       <span className="text-sm text-primary-muted">{uploadProgress}</span>
                                     )}
                                   </div>
-                                  {editForm.banner && (
+                                  {(previewEditUrl || editForm.banner) && (
                                     <div className="mt-2">
                                       <img 
-                                        src={editForm.banner} 
+                                        src={previewEditUrl || editForm.banner} 
                                         alt="Banner preview" 
                                         className="max-w-full h-48 object-cover rounded-lg border border-primary-border"
                                       />
                                       <button
                                         type="button"
-                                        onClick={() => setEditForm({ ...editForm, banner: "" })}
+                                        onClick={() => {
+                                          if (previewEditUrl) {
+                                            URL.revokeObjectURL(previewEditUrl);
+                                          }
+                                          setSelectedEditFile(null);
+                                          setPreviewEditUrl(null);
+                                          setEditForm({ ...editForm, banner: "" });
+                                        }}
                                         className="mt-2 text-sm text-red-600 hover:text-red-700"
                                       >
                                         Remove image
@@ -709,8 +894,15 @@ export default function ManageEventsPage() {
                                 <div className="flex gap-2">
                                   <button
                                     onClick={() => {
+                                      // Clean up preview URL
+                                      if (previewEditUrl) {
+                                        URL.revokeObjectURL(previewEditUrl);
+                                      }
                                       setEditingId(null);
                                       setEditForm({});
+                                      setOriginalBanner(null);
+                                      setSelectedEditFile(null);
+                                      setPreviewEditUrl(null);
                                     }}
                                     className="px-4 py-2 text-sm text-primary-fg bg-primary-border rounded-lg hover:bg-primary-accent-light transition-colors flex items-center gap-2"
                                   >
