@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CheckSquare, Plus, Clock, PlayCircle, X, User, Calendar, Edit2, Trash2 } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { CheckSquare, Plus, Clock, PlayCircle, X, User, Calendar, Edit2, Trash2, GripVertical, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
-import { format } from "date-fns";
+import { format, differenceInHours, differenceInDays, differenceInMinutes } from "date-fns";
 
 interface Task {
   id: string;
@@ -37,6 +37,14 @@ export default function TasksPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [canCreate, setCanCreate] = useState(false);
+  const [draggedTask, setDraggedTask] = useState<Task | null>(null);
+  const [apiQueue, setApiQueue] = useState<Array<{ taskId: string; status: 'not_started' | 'in_progress' | 'completed'; timestamp: number }>>([]);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterAssignee, setFilterAssignee] = useState('');
+  const [sortBy, setSortBy] = useState<'createdAt' | 'updatedAt' | 'deadline' | 'assignedAt'>('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isAdmin, setIsAdmin] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -53,6 +61,12 @@ export default function TasksPage() {
     fetchTasks();
     fetchStaffUsers();
     checkCreatePermission();
+    
+    // Check if user is admin
+    const session = getStaffSession();
+    const userEmail = session?.email?.toLowerCase();
+    setIsAdmin(userEmail === 'md.thejaayveeworld@gmail.com' || 
+               userEmail === 'thejaayveeworldofficial@gmail.com');
   }, []);
 
   const checkCreatePermission = async () => {
@@ -189,28 +203,127 @@ export default function TasksPage() {
     }
   };
 
-  const handleUpdateStatus = async (taskId: string, newStatus: 'not_started' | 'in_progress' | 'completed') => {
-    try {
-      setError(null);
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
+  // Optimistically update task status in local state
+  const updateTaskStatusOptimistically = (taskId: string, newStatus: 'not_started' | 'in_progress' | 'completed') => {
+    setTasks(prevTasks => 
+      prevTasks.map(task => {
+        if (task.id === taskId) {
+          const updatedTask = { ...task, status: newStatus };
+          // Set completedAt if status is completed
+          if (newStatus === 'completed' && !task.completedAt) {
+            updatedTask.completedAt = new Date().toISOString();
+          } else if (newStatus !== 'completed') {
+            updatedTask.completedAt = null;
+          }
+          return updatedTask;
+        }
+        return task;
+      })
+    );
+  };
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update task');
+  // Add API call to queue
+  const queueStatusUpdate = (taskId: string, newStatus: 'not_started' | 'in_progress' | 'completed') => {
+    setApiQueue(prev => [...prev, { taskId, status: newStatus, timestamp: Date.now() }]);
+  };
+
+  // Process API queue with rate limiting
+  useEffect(() => {
+    if (apiQueue.length === 0 || isProcessingQueue) return;
+
+    const processQueue = async () => {
+      setIsProcessingQueue(true);
+      const queueToProcess = [...apiQueue]; // Copy queue to avoid closure issues
+      
+      // Process items one at a time with rate limiting (500ms delay between calls)
+      for (let i = 0; i < queueToProcess.length; i++) {
+        const item = queueToProcess[i];
+        try {
+          const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+          const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/tasks/${item.taskId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ status: item.status }),
+          });
+
+          if (!response.ok) {
+            console.error(`Failed to update task ${item.taskId}:`, await response.json());
+            // Could revert optimistic update here if needed
+          }
+        } catch (err) {
+          console.error(`Error updating task ${item.taskId}:`, err);
+        }
+
+        // Rate limiting: wait 500ms before next API call (except for last item)
+        if (i < queueToProcess.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
 
-      await fetchTasks();
-    } catch (err: any) {
-      console.error('Error updating task:', err);
-      setError(err.message || 'Failed to update task');
+      // Clear queue after processing
+      setApiQueue([]);
+      setIsProcessingQueue(false);
+    };
+
+    processQueue();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiQueue.length]);
+
+  const handleUpdateStatus = async (taskId: string, newStatus: 'not_started' | 'in_progress' | 'completed') => {
+    // Optimistically update UI immediately
+    updateTaskStatusOptimistically(taskId, newStatus);
+    
+    // Queue API call (will be processed with rate limiting)
+    queueStatusUpdate(taskId, newStatus);
+  };
+
+  // Calculate time taken to complete (from createdAt to completedAt)
+  const getTimeTaken = (task: Task): string | null => {
+    if (task.status !== 'completed' || !task.completedAt) return null;
+    
+    const createdAt = new Date(task.createdAt);
+    const completedAt = new Date(task.completedAt);
+    const diffMinutes = differenceInMinutes(completedAt, createdAt);
+    const diffHours = differenceInHours(completedAt, createdAt);
+    const diffDays = differenceInDays(completedAt, createdAt);
+
+    if (diffDays > 0) {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+    } else if (diffHours > 0) {
+      return `${diffHours} hour${diffHours > 1 ? 's' : ''}`;
+    } else {
+      return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''}`;
     }
+  };
+
+  // Check if task was completed after deadline
+  const isOverdue = (task: Task): boolean => {
+    if (task.status !== 'completed' || !task.completedAt || !task.deadline) return false;
+    return new Date(task.completedAt) > new Date(task.deadline);
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, task: Task) => {
+    setDraggedTask(task);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, targetStatus: 'not_started' | 'in_progress' | 'completed') => {
+    e.preventDefault();
+    if (!draggedTask) return;
+
+    // Only update if status changed
+    if (draggedTask.status !== targetStatus) {
+      handleUpdateStatus(draggedTask.id, targetStatus);
+    }
+    setDraggedTask(null);
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -287,11 +400,27 @@ export default function TasksPage() {
     setFormData({ title: '', description: '', assignedTo: '', deadline: '' });
   };
 
+  // Filter tasks by search query
+  const filteredTasks = searchQuery.trim() 
+    ? tasks.filter(task => {
+        const query = searchQuery.toLowerCase();
+        return (
+          task.title.toLowerCase().includes(query) ||
+          (task.description && task.description.toLowerCase().includes(query)) ||
+          (task.assignedToName && task.assignedToName.toLowerCase().includes(query)) ||
+          (task.assignedToEmail && task.assignedToEmail.toLowerCase().includes(query)) ||
+          (task.createdByName && task.createdByName.toLowerCase().includes(query)) ||
+          (task.createdByEmail && task.createdByEmail.toLowerCase().includes(query)) ||
+          task.status.toLowerCase().includes(query)
+        );
+      })
+    : tasks;
+
   // Group tasks by status
   const tasksByStatus = {
-    not_started: tasks.filter(t => t.status === 'not_started'),
-    in_progress: tasks.filter(t => t.status === 'in_progress'),
-    completed: tasks.filter(t => t.status === 'completed'),
+    not_started: filteredTasks.filter(t => t.status === 'not_started'),
+    in_progress: filteredTasks.filter(t => t.status === 'in_progress'),
+    completed: filteredTasks.filter(t => t.status === 'completed'),
   };
 
   const isCreator = (task: Task) => task.createdBy === currentUserId;
@@ -331,10 +460,121 @@ export default function TasksPage() {
         </div>
       )}
 
+      {/* Search and Filters */}
+      <div className="mb-6 space-y-4">
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-primary-muted" />
+          <input
+            type="text"
+            placeholder="Search tasks by title, description, assignee, creator, or status..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg placeholder-primary-muted focus:outline-none focus:ring-2 focus:ring-primary-accent focus:border-transparent"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-primary-accent-light rounded transition-colors"
+              title="Clear search"
+            >
+              <X className="h-4 w-4 text-primary-muted" />
+            </button>
+          )}
+        </div>
+
+        {/* Admin Filters and Sort */}
+        {isAdmin && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Filter by Assignee */}
+            <div>
+              <label className="block text-sm font-medium text-primary-fg mb-2">
+                <Filter className="h-4 w-4 inline mr-1" />
+                Filter by Assignee
+              </label>
+              <select
+                value={filterAssignee}
+                onChange={(e) => setFilterAssignee(e.target.value)}
+                className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+              >
+                <option value="">All Assignees</option>
+                {staffUsers.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.fullName} ({user.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort By */}
+            <div>
+              <label className="block text-sm font-medium text-primary-fg mb-2">
+                <ArrowUpDown className="h-4 w-4 inline mr-1" />
+                Sort By
+              </label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'createdAt' | 'updatedAt' | 'deadline' | 'assignedAt')}
+                className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+              >
+                <option value="createdAt">Created Date</option>
+                <option value="updatedAt">Updated Date</option>
+                <option value="deadline">Deadline</option>
+                <option value="assignedAt">Assigned Date</option>
+              </select>
+            </div>
+
+            {/* Sort Order */}
+            <div>
+              <label className="block text-sm font-medium text-primary-fg mb-2">
+                Order
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSortOrder('desc')}
+                  className={`flex-1 px-3 py-2 border rounded-lg transition-colors flex items-center justify-center gap-1 ${
+                    sortOrder === 'desc'
+                      ? 'bg-primary-accent text-white border-primary-accent'
+                      : 'bg-primary-bg text-primary-fg border-primary-border hover:bg-primary-accent-light'
+                  }`}
+                >
+                  <ArrowDown className="h-4 w-4" />
+                  Descending
+                </button>
+                <button
+                  onClick={() => setSortOrder('asc')}
+                  className={`flex-1 px-3 py-2 border rounded-lg transition-colors flex items-center justify-center gap-1 ${
+                    sortOrder === 'asc'
+                      ? 'bg-primary-accent text-white border-primary-accent'
+                      : 'bg-primary-bg text-primary-fg border-primary-border hover:bg-primary-accent-light'
+                  }`}
+                >
+                  <ArrowUp className="h-4 w-4" />
+                  Ascending
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Results Count */}
+        {(searchQuery || (isAdmin && filterAssignee)) && (
+          <p className="text-sm text-primary-muted">
+            Found {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
+            {searchQuery && ` matching "${searchQuery}"`}
+            {isAdmin && filterAssignee && ` assigned to ${staffUsers.find(u => u.id === filterAssignee)?.fullName || 'selected user'}`}
+          </p>
+        )}
+      </div>
+
       {/* Kanban Board */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Not Started Column */}
-        <div className="card">
+        <div 
+          className="card transition-colors"
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDrop(e, 'not_started')}
+        >
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-primary-border">
             <Clock className="h-5 w-5 text-gray-500" />
             <h2 className="font-semibold text-primary-fg">Not Started</h2>
@@ -342,7 +582,7 @@ export default function TasksPage() {
               {tasksByStatus.not_started.length}
             </span>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 min-h-[200px]">
             {tasksByStatus.not_started.map((task) => (
               <TaskCard
                 key={task.id}
@@ -351,6 +591,10 @@ export default function TasksPage() {
                 onEdit={openEditModal}
                 onDelete={handleDeleteTask}
                 isCreator={isCreator(task)}
+                onDragStart={handleDragStart}
+                getTimeTaken={getTimeTaken}
+                isOverdue={isOverdue}
+                draggedTask={draggedTask}
               />
             ))}
             {tasksByStatus.not_started.length === 0 && (
@@ -360,7 +604,11 @@ export default function TasksPage() {
         </div>
 
         {/* In Progress Column */}
-        <div className="card">
+        <div 
+          className="card"
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDrop(e, 'in_progress')}
+        >
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-primary-border">
             <PlayCircle className="h-5 w-5 text-blue-500" />
             <h2 className="font-semibold text-primary-fg">In Progress</h2>
@@ -368,7 +616,7 @@ export default function TasksPage() {
               {tasksByStatus.in_progress.length}
             </span>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 min-h-[200px]">
             {tasksByStatus.in_progress.map((task) => (
               <TaskCard
                 key={task.id}
@@ -377,6 +625,10 @@ export default function TasksPage() {
                 onEdit={openEditModal}
                 onDelete={handleDeleteTask}
                 isCreator={isCreator(task)}
+                onDragStart={handleDragStart}
+                getTimeTaken={getTimeTaken}
+                isOverdue={isOverdue}
+                draggedTask={draggedTask}
               />
             ))}
             {tasksByStatus.in_progress.length === 0 && (
@@ -386,7 +638,11 @@ export default function TasksPage() {
         </div>
 
         {/* Completed Column */}
-        <div className="card">
+        <div 
+          className="card"
+          onDragOver={handleDragOver}
+          onDrop={(e) => handleDrop(e, 'completed')}
+        >
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-primary-border">
             <CheckSquare className="h-5 w-5 text-green-500" />
             <h2 className="font-semibold text-primary-fg">Completed</h2>
@@ -394,7 +650,7 @@ export default function TasksPage() {
               {tasksByStatus.completed.length}
             </span>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3 min-h-[200px]">
             {tasksByStatus.completed.map((task) => (
               <TaskCard
                 key={task.id}
@@ -403,6 +659,10 @@ export default function TasksPage() {
                 onEdit={openEditModal}
                 onDelete={handleDeleteTask}
                 isCreator={isCreator(task)}
+                onDragStart={handleDragStart}
+                getTimeTaken={getTimeTaken}
+                isOverdue={isOverdue}
+                draggedTask={draggedTask}
               />
             ))}
             {tasksByStatus.completed.length === 0 && (
@@ -515,19 +775,34 @@ function TaskCard({
   onEdit,
   onDelete,
   isCreator,
+  onDragStart,
+  getTimeTaken,
+  isOverdue,
+  draggedTask,
 }: {
   task: Task;
   onStatusChange: (taskId: string, status: 'not_started' | 'in_progress' | 'completed') => void;
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
   isCreator: boolean;
+  onDragStart: (e: React.DragEvent, task: Task) => void;
+  getTimeTaken: (task: Task) => string | null;
+  isOverdue: (task: Task) => boolean;
+  draggedTask?: Task | null;
 }) {
+  const timeTaken = getTimeTaken(task);
+  const overdue = isOverdue(task);
+
   const getStatusButtons = () => {
     if (task.status === 'not_started') {
       return (
         <button
-          onClick={() => onStatusChange(task.id, 'in_progress')}
-          className="text-xs px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            onStatusChange(task.id, 'in_progress');
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="px-3 py-1.5 bg-blue-500 text-white text-sm font-medium rounded-md hover:bg-blue-600 active:bg-blue-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
         >
           Start
         </button>
@@ -535,8 +810,12 @@ function TaskCard({
     } else if (task.status === 'in_progress') {
       return (
         <button
-          onClick={() => onStatusChange(task.id, 'completed')}
-          className="text-xs px-2 py-1 bg-green-100 text-green-600 rounded hover:bg-green-200 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            onStatusChange(task.id, 'completed');
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="px-3 py-1.5 bg-green-500 text-white text-sm font-medium rounded-md hover:bg-green-600 active:bg-green-700 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1"
         >
           Complete
         </button>
@@ -546,21 +825,41 @@ function TaskCard({
   };
 
   return (
-    <div className="border border-primary-border rounded-lg p-3 bg-primary-bg hover:shadow-md transition-shadow">
+    <div 
+      draggable
+      onDragStart={(e) => onDragStart(e, task)}
+      className={`border-2 rounded-lg p-3 bg-white hover:shadow-lg transition-all cursor-move select-none ${
+        overdue 
+          ? 'border-red-500 bg-red-50' 
+          : 'border-primary-border hover:border-primary-accent'
+      }`}
+      style={{ opacity: draggedTask?.id === task.id ? 0.5 : 1 }}
+    >
       <div className="flex items-start justify-between mb-2">
-        <h3 className="font-semibold text-primary-fg text-sm flex-1">{task.title}</h3>
+        <div className="flex items-center gap-2 flex-1">
+          <GripVertical className="h-4 w-4 text-gray-400 cursor-move" />
+          <h3 className="font-semibold text-primary-fg text-sm flex-1">{task.title}</h3>
+        </div>
         <div className="flex gap-1">
           {isCreator && (
             <>
               <button
-                onClick={() => onEdit(task)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(task);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="p-1 hover:bg-primary-accent-light rounded transition-colors"
                 title="Edit task"
               >
                 <Edit2 className="h-3 w-3 text-primary-fg" />
               </button>
               <button
-                onClick={() => onDelete(task.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(task.id);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="p-1 hover:bg-red-500/20 rounded transition-colors"
                 title="Delete task"
               >
@@ -610,9 +909,20 @@ function TaskCard({
 
         {/* Show completion timestamp if completed */}
         {task.status === 'completed' && task.completedAt && (
-          <div className="flex items-center gap-1 text-green-600 font-medium">
+          <div className={`flex items-center gap-1 font-medium ${overdue ? 'text-red-600' : 'text-green-600'}`}>
             <CheckSquare className="h-3 w-3" />
             <span>Completed: {format(new Date(task.completedAt), "MMM dd, yyyy HH:mm")}</span>
+            {overdue && (
+              <span className="ml-1 text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded">Overdue</span>
+            )}
+          </div>
+        )}
+
+        {/* Show time taken to complete */}
+        {timeTaken && (
+          <div className={`flex items-center gap-1 text-xs ${overdue ? 'text-red-600 font-medium' : 'text-primary-muted'}`}>
+            <Clock className="h-3 w-3" />
+            <span>Time taken: {timeTaken}</span>
           </div>
         )}
 

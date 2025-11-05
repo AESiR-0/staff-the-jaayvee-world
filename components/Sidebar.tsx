@@ -13,7 +13,8 @@ import {
   MessageSquare,
   GitBranch,
   Wallet,
-  CheckSquare
+  CheckSquare,
+  Image as ImageIcon
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -31,6 +32,7 @@ const navigation = [
   { name: "Event Share Messages", href: "/events/share-messages", icon: MessageSquare },
   { name: "Coupons", href: "/coupons", icon: Ticket },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
+  { name: "Gallery", href: "/gallery", icon: ImageIcon },
   { name: "Create User", href: "/sellers/create", icon: Users },
   { name: "Updates", href: "/updates/create", icon: Bell },
 ];
@@ -131,7 +133,8 @@ export default function Sidebar() {
                 (item.href === "/events/manage" && pathname.startsWith("/events/manage")) ||
                 (item.href === "/events/share-messages" && pathname.startsWith("/events/share-messages")) ||
                 (item.href === "/downline" && pathname.startsWith("/downline")) ||
-                (item.href === "/tasks" && pathname.startsWith("/tasks"));
+                (item.href === "/tasks" && pathname.startsWith("/tasks")) ||
+                (item.href === "/gallery" && pathname.startsWith("/gallery"));
               
               return (
                 <Link

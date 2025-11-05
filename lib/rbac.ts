@@ -1,6 +1,6 @@
 // Simple mail-based RBAC for staff dashboard tabs
 
-export type TabKey = 'dashboard' | 'wallet' | 'qr' | 'referrals' | 'events' | 'coupons' | 'sellers' | 'downline' | 'tasks';
+export type TabKey = 'dashboard' | 'wallet' | 'qr' | 'referrals' | 'events' | 'coupons' | 'sellers' | 'downline' | 'tasks' | 'gallery';
 
 // Staff Permissions - List of all available permissions for staff
 export const STAFF_PERMISSIONS = {
@@ -64,6 +64,12 @@ export const STAFF_PERMISSIONS = {
     description: 'Permission to create tasks',
     tab: 'tasks' as TabKey,
   },
+  gallery: {
+    action: 'access',
+    resource: 'gallery',
+    description: 'Access to gallery management',
+    tab: 'gallery' as TabKey,
+  },
 } as const;
 
 // Array of all permission keys for easy iteration
@@ -84,6 +90,7 @@ export const routeToTabKey: Record<string, TabKey> = {
   '/sellers/create': 'sellers',
   '/downline': 'downline',
   '/tasks': 'tasks',
+  '/gallery': 'gallery',
 };
 
 // Access control list: list of emails allowed per tab.
@@ -98,6 +105,7 @@ export const ACCESS_CONTROL: Record<TabKey, string[] | ['*']> = {
   sellers: ['*'],
   downline: ['*'],
   tasks: ['*'],
+  gallery: ['*'],
 };
 
 // Optional deny list per tab (takes precedence over allow list)
