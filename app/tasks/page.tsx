@@ -400,21 +400,62 @@ export default function TasksPage() {
     setFormData({ title: '', description: '', assignedTo: '', deadline: '' });
   };
 
-  // Filter tasks by search query
-  const filteredTasks = searchQuery.trim() 
-    ? tasks.filter(task => {
-        const query = searchQuery.toLowerCase();
-        return (
-          task.title.toLowerCase().includes(query) ||
-          (task.description && task.description.toLowerCase().includes(query)) ||
-          (task.assignedToName && task.assignedToName.toLowerCase().includes(query)) ||
-          (task.assignedToEmail && task.assignedToEmail.toLowerCase().includes(query)) ||
-          (task.createdByName && task.createdByName.toLowerCase().includes(query)) ||
-          (task.createdByEmail && task.createdByEmail.toLowerCase().includes(query)) ||
-          task.status.toLowerCase().includes(query)
-        );
-      })
-    : tasks;
+  // Filter tasks by search query and assignee (admin only)
+  let filteredTasks = tasks;
+  
+  // Apply search filter
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase();
+    filteredTasks = filteredTasks.filter(task => {
+      return (
+        task.title.toLowerCase().includes(query) ||
+        (task.description && task.description.toLowerCase().includes(query)) ||
+        (task.assignedToName && task.assignedToName.toLowerCase().includes(query)) ||
+        (task.assignedToEmail && task.assignedToEmail.toLowerCase().includes(query)) ||
+        (task.createdByName && task.createdByName.toLowerCase().includes(query)) ||
+        (task.createdByEmail && task.createdByEmail.toLowerCase().includes(query)) ||
+        task.status.toLowerCase().includes(query)
+      );
+    });
+  }
+  
+  // Apply assignee filter (admin only)
+  if (isAdmin && filterAssignee) {
+    filteredTasks = filteredTasks.filter(task => task.assignedTo === filterAssignee);
+  }
+  
+  // Sort tasks
+  filteredTasks = [...filteredTasks].sort((a, b) => {
+    let aValue: Date | null = null;
+    let bValue: Date | null = null;
+    
+    switch (sortBy) {
+      case 'createdAt':
+        aValue = new Date(a.createdAt);
+        bValue = new Date(b.createdAt);
+        break;
+      case 'updatedAt':
+        aValue = new Date(a.updatedAt);
+        bValue = new Date(b.updatedAt);
+        break;
+      case 'deadline':
+        aValue = a.deadline ? new Date(a.deadline) : null;
+        bValue = b.deadline ? new Date(b.deadline) : null;
+        break;
+      case 'assignedAt':
+        aValue = a.assignedAt ? new Date(a.assignedAt) : null;
+        bValue = b.assignedAt ? new Date(b.assignedAt) : null;
+        break;
+    }
+    
+    // Handle null values (put them at the end)
+    if (!aValue && !bValue) return 0;
+    if (!aValue) return 1;
+    if (!bValue) return -1;
+    
+    const comparison = aValue.getTime() - bValue.getTime();
+    return sortOrder === 'asc' ? comparison : -comparison;
+  });
 
   // Group tasks by status
   const tasksByStatus = {
