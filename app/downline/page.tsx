@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Users, UserCheck, Mail, Phone, Calendar, TrendingUp, Building2, Instagram, Youtube, Tag, Wallet, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Users, UserCheck, Mail, Phone, Calendar, TrendingUp, Building2, Instagram, Youtube, Tag, Wallet, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, X, Edit, Save } from "lucide-react";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 import { format } from "date-fns";
 
@@ -24,6 +24,7 @@ interface DownlineUser {
   totalSignups?: number;
   walletBalance?: number;
   walletCurrency?: string;
+  downlines?: DownlineUser[]; // Nested downlines
 }
 
 interface StaffDownline {
@@ -52,6 +53,11 @@ export default function DownlinePage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  // Edit user state
+  const [editingUser, setEditingUser] = useState<DownlineUser | null>(null);
+  const [editForm, setEditForm] = useState({ fullName: '', email: '', phone: '' });
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -115,6 +121,10 @@ export default function DownlinePage() {
       let url = `${API_BASE_URL}/api/staff/downline`;
       if (staffUserId) {
         url += `?staffUserId=${staffUserId}`;
+      }
+      // For admins, include nested downlines
+      if (isAdmin) {
+        url += staffUserId ? `&nested=true` : `?nested=true`;
       }
 
       console.log('🔍 Fetching downline from:', url);
@@ -385,6 +395,60 @@ export default function DownlinePage() {
     }
   };
 
+  const handleEditUser = (user: DownlineUser) => {
+    setEditingUser(user);
+    setEditForm({
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone || ''
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingUser(null);
+    setEditForm({ fullName: '', email: '', phone: '' });
+  };
+
+  const handleSaveUser = async () => {
+    if (!editingUser) return;
+
+    try {
+      setSaving(true);
+      setError(null);
+      
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/users/${editingUser.userId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fullName: editForm.fullName,
+          email: editForm.email,
+          phone: editForm.phone || null
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update user');
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        // Reload downline to show updated data
+        await fetchDownline(selectedStaffId || undefined);
+        setEditingUser(null);
+        setEditForm({ fullName: '', email: '', phone: '' });
+      }
+    } catch (err: any) {
+      console.error('Error updating user:', err);
+      setError(err.message || 'Failed to update user');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
@@ -639,27 +703,88 @@ export default function DownlinePage() {
           {paginatedData.map((user) => (
             <div key={user.userId} className="card">
               <div className="flex items-start justify-between mb-3">
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 flex-1">
                   <div className={`p-2 rounded-lg ${getRoleBadgeClass(user.role)}`}>
                     {getRoleIcon(user.role)}
                   </div>
-                  <div>
-                    <h4 className="font-semibold text-primary-fg">{user.fullName}</h4>
-                    <p className="text-sm text-primary-muted flex items-center gap-1 mt-1">
-                      <Mail className="h-3 w-3" />
-                      {user.email}
-                    </p>
-                    {user.phone && (
-                      <p className="text-sm text-primary-muted flex items-center gap-1 mt-1">
-                        <Phone className="h-3 w-3" />
-                        {user.phone}
-                      </p>
+                  <div className="flex-1">
+                    {editingUser?.userId === user.userId ? (
+                      // Edit mode
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={editForm.fullName}
+                          onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                          className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg text-sm"
+                          placeholder="Full Name"
+                          disabled={saving}
+                        />
+                        <input
+                          type="email"
+                          value={editForm.email}
+                          onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                          className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg text-sm"
+                          placeholder="Email"
+                          disabled={saving}
+                        />
+                        <input
+                          type="tel"
+                          value={editForm.phone}
+                          onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                          className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg text-sm"
+                          placeholder="Phone (optional)"
+                          disabled={saving}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveUser}
+                            disabled={saving}
+                            className="px-3 py-1 bg-primary-accent text-white rounded-lg text-sm hover:bg-primary-accent-dark transition-colors disabled:opacity-50 flex items-center gap-1"
+                          >
+                            <Save className="h-3 w-3" />
+                            {saving ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            disabled={saving}
+                            className="px-3 py-1 border border-primary-border text-primary-fg rounded-lg text-sm hover:bg-primary-accent-light transition-colors disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      // View mode
+                      <>
+                        <h4 className="font-semibold text-primary-fg">{user.fullName}</h4>
+                        <p className="text-sm text-primary-muted flex items-center gap-1 mt-1">
+                          <Mail className="h-3 w-3" />
+                          {user.email}
+                        </p>
+                        {user.phone && (
+                          <p className="text-sm text-primary-muted flex items-center gap-1 mt-1">
+                            <Phone className="h-3 w-3" />
+                            {user.phone}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full border capitalize ${getRoleBadgeClass(user.role)}`}>
-                  {user.role}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2 py-1 rounded-full border capitalize ${getRoleBadgeClass(user.role)}`}>
+                    {user.role}
+                  </span>
+                  {isAdmin && editingUser?.userId !== user.userId && (
+                    <button
+                      onClick={() => handleEditUser(user)}
+                      className="p-1 hover:bg-primary-accent-light rounded transition-colors"
+                      title="Edit user details"
+                    >
+                      <Edit className="h-4 w-4 text-primary-fg" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="border-t border-primary-border pt-3 mt-3">

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ReferralCard } from "@/components/ReferralCard";
-import { QrTools } from "@/components/QrTools";
+import { TasksWidget } from "@/components/TasksWidget";
 import { EventTable } from "@/components/EventTable";
 import { MerchantQRManager } from "@/components/MerchantQRManager";
 import { UpdatesPanel } from "@/components/UpdatesPanel";
@@ -185,10 +185,15 @@ function DashboardContent() {
           <ReferralCard data={affiliateStats} />
         </div>
 
-        {/* Merchant QR Manager - Unified */}
+        {/* Tasks Widget - Replaces QR Tools */}
         <div className="lg:col-span-1">
-          <MerchantQRManager />
+          <TasksWidget />
         </div>
+      </div>
+
+      {/* Merchant QR Manager - Moved below */}
+      <div>
+        <MerchantQRManager />
       </div>
 
       {/* Updates Panel */}

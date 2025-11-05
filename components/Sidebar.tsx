@@ -12,7 +12,8 @@ import {
   Bell,
   MessageSquare,
   GitBranch,
-  Wallet
+  Wallet,
+  CheckSquare
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,6 +30,7 @@ const navigation = [
   { name: "Manage Events", href: "/events/manage", icon: Calendar },
   { name: "Event Share Messages", href: "/events/share-messages", icon: MessageSquare },
   { name: "Coupons", href: "/coupons", icon: Ticket },
+  { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Create User", href: "/sellers/create", icon: Users },
   { name: "Updates", href: "/updates/create", icon: Bell },
 ];
@@ -73,11 +75,12 @@ export default function Sidebar() {
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           lg:translate-x-0
+          flex flex-col
         `}
       >
-        <div className="p-6">
-          {/* Logo */}
-          <div className="flex items-center gap-3 mb-8">
+        {/* Logo - Fixed at top */}
+        <div className="p-6 pb-4 flex-shrink-0 border-b border-primary-border">
+          <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-primary-accent rounded-xl flex items-center justify-center">
               <span className="text-white font-bold text-sm">TJ</span>
             </div>
@@ -86,9 +89,11 @@ export default function Sidebar() {
               <p className="text-sm text-primary-muted">Team Portal</p>
             </div>
           </div>
+        </div>
 
-          {/* Navigation */}
-          <nav className="space-y-2">
+        {/* Navigation - Scrollable */}
+        <nav className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="space-y-2">
             {navigation
               .filter((item) => {
                 // Special handling for Updates - show to authorized users
@@ -125,7 +130,8 @@ export default function Sidebar() {
                 (item.href === "/updates/create" && pathname.startsWith("/updates")) ||
                 (item.href === "/events/manage" && pathname.startsWith("/events/manage")) ||
                 (item.href === "/events/share-messages" && pathname.startsWith("/events/share-messages")) ||
-                (item.href === "/downline" && pathname.startsWith("/downline"));
+                (item.href === "/downline" && pathname.startsWith("/downline")) ||
+                (item.href === "/tasks" && pathname.startsWith("/tasks"));
               
               return (
                 <Link
@@ -139,18 +145,18 @@ export default function Sidebar() {
                 </Link>
               );
             })}
-          </nav>
-
-          {/* Logout button */}
-          <div className="absolute bottom-6 left-6 right-6">
-            <button 
-              onClick={handleLogout}
-              className="sidebar-item w-full text-left hover:bg-red-50 hover:text-red-600"
-            >
-              <LogOut size={20} />
-              <span className="font-medium">Logout</span>
-            </button>
           </div>
+        </nav>
+
+        {/* Logout button - Fixed at bottom */}
+        <div className="p-6 pt-4 flex-shrink-0 border-t border-primary-border">
+          <button 
+            onClick={handleLogout}
+            className="sidebar-item w-full text-left hover:bg-red-50 hover:text-red-600"
+          >
+            <LogOut size={20} />
+            <span className="font-medium">Logout</span>
+          </button>
         </div>
       </div>
     </>
