@@ -6,7 +6,8 @@ import { QrTools } from "@/components/QrTools";
 import { EventTable } from "@/components/EventTable";
 import { MerchantQRManager } from "@/components/MerchantQRManager";
 import { UpdatesPanel } from "@/components/UpdatesPanel";
-import { Calendar, QrCode, Users, TrendingUp, Plus } from "lucide-react";
+import { Calendar, QrCode, Users, TrendingUp, Plus, Shield } from "lucide-react";
+import Link from "next/link";
 import { API_ENDPOINTS } from "@/lib/api";
 import { Event, AffiliateStats } from "@/lib/types";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
@@ -16,6 +17,7 @@ import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 function DashboardContent() {
   const [refreshUpdates, setRefreshUpdates] = useState(0);
   const [canCreateUpdates, setCanCreateUpdates] = useState(false);
+  const [canAccessRBAC, setCanAccessRBAC] = useState(false);
   
   // Get staff session (backend uses staffId)
   const session = typeof window !== 'undefined' ? getStaffSession() : null;
@@ -39,7 +41,7 @@ function DashboardContent() {
         // Get base URL from API configuration  
         const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com';
         
-        // Check if user can create updates
+        // Check if user can create updates and access RBAC
         try {
           const meRes = await authenticatedFetch(`${API_BASE_URL}/api/auth/me`);
           if (meRes.ok) {
@@ -52,6 +54,10 @@ function DashboardContent() {
             ];
             if (allowedEmails.includes(userEmail?.toLowerCase() || '')) {
               setCanCreateUpdates(true);
+            }
+            // Check RBAC access
+            if (userEmail?.toLowerCase() === "thejaayveeworldofficial@gmail.com") {
+              setCanAccessRBAC(true);
             }
           }
         } catch (err) {
@@ -103,9 +109,20 @@ function DashboardContent() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-primary-fg mb-2">Team Dashboard</h1>
-        <p className="text-primary-muted">Welcome back! Here&apos;s your overview.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-primary-fg mb-2">Team Dashboard</h1>
+          <p className="text-primary-muted">Welcome back! Here&apos;s your overview.</p>
+        </div>
+        {canAccessRBAC && (
+          <Link
+            href="/rbac"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors"
+          >
+            <Shield className="h-4 w-4" />
+            RBAC Management
+          </Link>
+        )}
       </div>
 
       {/* Stats Grid */}
