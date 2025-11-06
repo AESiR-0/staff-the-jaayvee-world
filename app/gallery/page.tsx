@@ -30,6 +30,9 @@ export default function GalleryPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editingImage, setEditingImage] = useState<GalleryImage | null>(null);
   const [canManage, setCanManage] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
   // Upload form state
   const [uploadForm, setUploadForm] = useState({
@@ -63,6 +66,18 @@ export default function GalleryPage() {
 
   const checkPermission = async () => {
     try {
+      // Check if user is admin first (admins can always upload)
+      const session = getStaffSession();
+      const userEmail = session?.email?.toLowerCase();
+      const isAdmin = userEmail === 'md.thejaayveeworld@gmail.com' || 
+                     userEmail === 'thejaayveeworldofficial@gmail.com';
+      
+      if (isAdmin) {
+        setCanManage(true);
+        return;
+      }
+
+      // For non-admins, check RBAC permission
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
       const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`);
       
@@ -98,18 +113,79 @@ export default function GalleryPage() {
     }
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      setSelectedFile(file);
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      // Auto-generate title from filename if title is empty
+      if (!uploadForm.title) {
+        const fileName = file.name.replace(/\.[^/.]+$/, '');
+        setUploadForm({ ...uploadForm, title: fileName });
+      }
+    }
+  };
+
   const handleUpload = async () => {
-    if (!uploadForm.title || !uploadForm.imageUrl || !uploadForm.thumbnailUrl || !uploadForm.category) {
-      alert('Please fill in all required fields');
+    if (!uploadForm.title || !uploadForm.category) {
+      alert('Please fill in title and category');
       return;
     }
 
     try {
+      setUploading(true);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      
+      let imageUrl = uploadForm.imageUrl;
+      let thumbnailUrl = uploadForm.thumbnailUrl;
+
+      // If file is selected, upload it first
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('folder', 'gallery');
+
+        const uploadResponse = await authenticatedFetch(`${API_BASE_URL}/api/upload`, {
+          method: 'POST',
+          // Don't set Content-Type header - browser will set it automatically with boundary for FormData
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json();
+          throw new Error(errorData.error || 'Failed to upload image file');
+        }
+
+        const uploadResult = await uploadResponse.json();
+        if (uploadResult.success && uploadResult.data) {
+          imageUrl = uploadResult.data.url;
+          thumbnailUrl = uploadResult.data.url; // Use same URL for thumbnail, or you can generate a thumbnail
+        } else {
+          throw new Error('Failed to get uploaded image URL');
+        }
+      }
+
+      // If no file selected and no URLs provided
+      if (!selectedFile && !imageUrl && !thumbnailUrl) {
+        alert('Please either select a file to upload or provide image URLs');
+        setUploading(false);
+        return;
+      }
+
+      // Create gallery entry
       const response = await authenticatedFetch(`${API_BASE_URL}/api/gallery`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(uploadForm),
+        body: JSON.stringify({
+          ...uploadForm,
+          imageUrl,
+          thumbnailUrl: thumbnailUrl || imageUrl,
+        }),
       });
 
       if (!response.ok) {
@@ -119,6 +195,11 @@ export default function GalleryPage() {
 
       await fetchImages();
       setShowUploadModal(false);
+      setSelectedFile(null);
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }
       setUploadForm({
         title: '',
         description: '',
@@ -131,6 +212,8 @@ export default function GalleryPage() {
       });
     } catch (error: any) {
       alert(error.message || 'Failed to upload image');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -291,6 +374,29 @@ export default function GalleryPage() {
             </div>
 
             <div className="space-y-4">
+              {/* File Upload */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Upload Image File
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileSelect}
+                  className="w-full px-3 py-2 border border-primary-border rounded-lg file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-accent file:text-white hover:file:bg-primary-accent-dark"
+                />
+                {previewUrl && (
+                  <div className="mt-3">
+                    <img
+                      src={previewUrl}
+                      alt="Preview"
+                      className="max-w-full h-48 object-contain rounded-lg border border-primary-border"
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">Or provide image URLs below</p>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-primary-fg mb-2">
                   Title *
@@ -320,27 +426,35 @@ export default function GalleryPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-primary-fg mb-2">
-                    High-Res Image URL *
+                    High-Res Image URL {!selectedFile && '*'}
                   </label>
                   <input
                     type="url"
                     value={uploadForm.imageUrl}
                     onChange={(e) => setUploadForm({ ...uploadForm, imageUrl: e.target.value })}
-                    className="w-full px-3 py-2 border border-primary-border rounded-lg"
+                    className="w-full px-3 py-2 border border-primary-border rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="https://..."
+                    disabled={!!selectedFile}
                   />
+                  {selectedFile && (
+                    <p className="text-xs text-gray-500 mt-1">Using uploaded file</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-primary-fg mb-2">
-                    Thumbnail URL *
+                    Thumbnail URL {!selectedFile && '*'}
                   </label>
                   <input
                     type="url"
                     value={uploadForm.thumbnailUrl}
                     onChange={(e) => setUploadForm({ ...uploadForm, thumbnailUrl: e.target.value })}
-                    className="w-full px-3 py-2 border border-primary-border rounded-lg"
+                    className="w-full px-3 py-2 border border-primary-border rounded-lg disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="https://..."
+                    disabled={!!selectedFile}
                   />
+                  {selectedFile && (
+                    <p className="text-xs text-gray-500 mt-1">Using uploaded file</p>
+                  )}
                 </div>
               </div>
 
@@ -404,13 +518,39 @@ export default function GalleryPage() {
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={handleUpload}
-                  className="flex-1 px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors"
+                  disabled={uploading}
+                  className="flex-1 px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Upload
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    'Upload'
+                  )}
                 </button>
                 <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="px-4 py-2 border border-primary-border text-primary-fg rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    setShowUploadModal(false);
+                    setSelectedFile(null);
+                    if (previewUrl) {
+                      URL.revokeObjectURL(previewUrl);
+                      setPreviewUrl(null);
+                    }
+                    setUploadForm({
+                      title: '',
+                      description: '',
+                      imageUrl: '',
+                      thumbnailUrl: '',
+                      category: 'event',
+                      photographer: '',
+                      tags: '',
+                      isFeatured: false,
+                    });
+                  }}
+                  disabled={uploading}
+                  className="px-4 py-2 border border-primary-border text-primary-fg rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   Cancel
                 </button>
