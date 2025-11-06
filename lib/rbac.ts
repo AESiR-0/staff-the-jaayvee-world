@@ -2,6 +2,19 @@
 
 export type TabKey = 'dashboard' | 'wallet' | 'qr' | 'referrals' | 'events' | 'coupons' | 'sellers' | 'downline' | 'tasks' | 'gallery';
 
+// Permission type from API
+export interface Permission {
+  id: string;
+  action: string;
+  resource: string;
+  isActive: boolean;
+}
+
+// Cache for user permissions
+let userPermissionsCache: Permission[] | null = null;
+let permissionsCacheTime: number = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 // Staff Permissions - List of all available permissions for staff
 export const STAFF_PERMISSIONS = {
   dashboard: {
@@ -115,6 +128,79 @@ const ACCESS_DENY: Partial<Record<TabKey, string[]>> = {
   qr: ['v1sales.thejaayveeworld@gmail.com'],
 };
 
+/**
+ * Fetch user permissions from RBAC API
+ */
+export async function fetchUserPermissions(): Promise<Permission[]> {
+  // Check cache first
+  const now = Date.now();
+  if (userPermissionsCache && (now - permissionsCacheTime) < CACHE_DURATION) {
+    return userPermissionsCache;
+  }
+
+  try {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+    
+    // Dynamic import to avoid SSR issues
+    const { authenticatedFetch } = await import('@/lib/auth-utils');
+    const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=users`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.data?.users) {
+        // Get current user's email
+        const { getStaffSession } = await import('@/lib/auth-utils');
+        const session = getStaffSession();
+        const userEmail = session?.email;
+        
+        if (userEmail) {
+          // Find current user in the users list
+          const currentUser = data.data.users.find((u: any) => 
+            u.email?.toLowerCase() === userEmail.toLowerCase()
+          );
+          
+          if (currentUser && currentUser.permissions) {
+            const permissions = currentUser.permissions.map((p: any) => ({
+              id: p.id,
+              action: p.action,
+              resource: p.resource,
+              isActive: p.isActive !== false
+            }));
+            userPermissionsCache = permissions;
+            permissionsCacheTime = now;
+            return permissions;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching user permissions:', err);
+  }
+  
+  // Return empty array on error (fallback to email-based check)
+  return [];
+}
+
+/**
+ * Check if user has permission for a specific resource
+ */
+export async function hasPermission(resource: string): Promise<boolean> {
+  const permissions = await fetchUserPermissions();
+  return permissions.some(p => 
+    p.resource === resource && 
+    p.action === 'access' && 
+    p.isActive
+  );
+}
+
+/**
+ * Clear permissions cache (useful after permission updates)
+ */
+export function clearPermissionsCache(): void {
+  userPermissionsCache = null;
+  permissionsCacheTime = 0;
+}
+
 export function canAccess(tab: TabKey, email?: string | null): boolean {
   const allowed = ACCESS_CONTROL[tab];
   if (!allowed) return false;
@@ -126,6 +212,36 @@ export function canAccess(tab: TabKey, email?: string | null): boolean {
   if (!email) return false;
   const normalized = email.trim().toLowerCase();
   return allowed.map(e => e.toLowerCase()).includes(normalized);
+}
+
+/**
+ * Check access using RBAC API (async version)
+ */
+export async function canAccessRBAC(tab: TabKey): Promise<boolean> {
+  // First try to check via API permissions
+  try {
+    const permissions = await fetchUserPermissions();
+    if (permissions.length > 0) {
+      // Check if user has permission for this tab
+      const hasAccess = permissions.some(p => 
+        p.resource === tab && 
+        p.action === 'access' && 
+        p.isActive
+      );
+      return hasAccess;
+    }
+  } catch (err) {
+    console.error('Error checking RBAC permissions, falling back to email-based check:', err);
+  }
+  
+  // Fallback to email-based check
+  if (typeof window !== 'undefined') {
+    const { getStaffSession } = require('@/lib/auth-utils');
+    const session = getStaffSession();
+    return canAccess(tab, session?.email);
+  }
+  
+  return false;
 }
 
 

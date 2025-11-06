@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   QrCode,
@@ -19,7 +19,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getStaffSession } from "@/lib/auth-utils";
-import { canAccess, routeToTabKey } from "@/lib/rbac";
+import { canAccess, routeToTabKey, canAccessRBAC, fetchUserPermissions, Permission } from "@/lib/rbac";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -39,9 +39,26 @@ const navigation = [
 
 export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const email = typeof window !== 'undefined' ? getStaffSession()?.email : undefined;
+
+  // Fetch RBAC permissions on mount
+  useEffect(() => {
+    const loadPermissions = async () => {
+      try {
+        const perms = await fetchUserPermissions();
+        setPermissions(perms);
+        setPermissionsLoaded(true);
+      } catch (err) {
+        console.error('Error loading permissions:', err);
+        setPermissionsLoaded(true); // Still mark as loaded to avoid infinite loading
+      }
+    };
+    loadPermissions();
+  }, []);
 
   const handleLogout = () => {
     // Clear authentication data
@@ -124,7 +141,20 @@ export default function Sidebar() {
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
                 }
-                return canAccess(routeToTabKey[item.href as keyof typeof routeToTabKey], email);
+                
+                // Check RBAC permissions first if loaded
+                const tabKey = routeToTabKey[item.href as keyof typeof routeToTabKey];
+                if (permissionsLoaded && permissions.length > 0 && tabKey) {
+                  // Check if user has permission for this tab
+                  return permissions.some(p => 
+                    p.resource === tabKey && 
+                    p.action === 'access' && 
+                    p.isActive
+                  );
+                }
+                
+                // Fallback to email-based check
+                return canAccess(tabKey, email);
               })
               .map((item) => {
               const Icon = item.icon;
