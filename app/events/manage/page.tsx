@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter, ChevronDown, ChevronUp } from "lucide-react";
 import { authenticatedFetch, getStaffSession, getAuthToken } from "@/lib/auth-utils";
+import EventFinancialPlanning from "@/components/EventFinancialPlanning";
 
 // Only allow md and thejaayveeworldofficial
 const ALLOWED_EMAIL = [
@@ -104,6 +105,7 @@ export default function ManageEventsPage() {
   const [searchQuery, setSearchQuery] = useState<string>(""); // Search query
   const [filterStatus, setFilterStatus] = useState<string>("all"); // Filter by status
   const [filterPublished, setFilterPublished] = useState<string>("all"); // Filter by published status
+  const [showFinancialPlanning, setShowFinancialPlanning] = useState<{ [key: string]: boolean }>({}); // Track which events have financial planning expanded
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -939,7 +941,8 @@ export default function ManageEventsPage() {
                 </thead>
                 <tbody>
                   {filteredEvents.map((event) => (
-                    <tr key={event.id} className="border-b border-primary-border hover:bg-primary-accent-light/50">
+                    <>
+                      <tr key={event.id} className="border-b border-primary-border hover:bg-primary-accent-light/50">
                       {editingId === event.id ? (
                         <>
                           <td colSpan={5} className="p-4">
@@ -1183,6 +1186,13 @@ export default function ManageEventsPage() {
                           <td className="py-3 px-4">
                             <div className="flex items-center justify-end gap-2">
                               <button
+                                onClick={() => setShowFinancialPlanning(prev => ({ ...prev, [event.id]: !prev[event.id] }))}
+                                className="p-2 text-primary-fg hover:bg-primary-accent-light rounded-lg transition-colors"
+                                title="Financial Planning"
+                              >
+                                {showFinancialPlanning[event.id] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                              </button>
+                              <button
                                 onClick={() => startEdit(event)}
                                 className="p-2 text-primary-fg hover:bg-primary-accent-light rounded-lg transition-colors"
                                 title="Edit"
@@ -1206,6 +1216,14 @@ export default function ManageEventsPage() {
                         </>
                       )}
                     </tr>
+                    {showFinancialPlanning[event.id] && editingId !== event.id && (
+                      <tr key={`financial-${event.id}`}>
+                        <td colSpan={5} className="p-4 bg-primary-accent-light/30">
+                          <EventFinancialPlanning eventId={event.id} eventTitle={event.title} />
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   ))}
                 </tbody>
               </table>

@@ -95,6 +95,24 @@ export const STAFF_PERMISSIONS = {
     description: 'Access to career management',
     tab: 'careers' as TabKey,
   },
+  'event-financials': {
+    action: 'access',
+    resource: 'event-financials',
+    description: 'Access to event financial planning',
+    tab: 'events' as TabKey,
+  },
+  'event-financials-edit': {
+    action: 'edit',
+    resource: 'event-financials',
+    description: 'Edit event financial data',
+    tab: 'events' as TabKey,
+  },
+  'event-financials-export': {
+    action: 'export',
+    resource: 'event-financials',
+    description: 'Export event financial reports',
+    tab: 'events' as TabKey,
+  },
 } as const;
 
 // Array of all permission keys for easy iteration
