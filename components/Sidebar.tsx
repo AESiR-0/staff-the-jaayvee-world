@@ -15,7 +15,8 @@ import {
   Wallet,
   CheckSquare,
   Image as ImageIcon,
-  Layout
+  Layout,
+  Briefcase
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -35,6 +36,7 @@ const navigation = [
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Gallery", href: "/gallery", icon: ImageIcon },
   { name: "Layouts", href: "/layouts", icon: Layout },
+  { name: "Careers", href: "/careers", icon: Briefcase },
   { name: "Create User", href: "/sellers/create", icon: Users },
   { name: "Updates", href: "/updates/create", icon: Bell },
 ];
@@ -166,7 +168,8 @@ export default function Sidebar() {
                 (item.href === "/downline" && pathname.startsWith("/downline")) ||
                 (item.href === "/tasks" && pathname.startsWith("/tasks")) ||
                 (item.href === "/gallery" && pathname.startsWith("/gallery")) ||
-                (item.href === "/layouts" && pathname.startsWith("/layouts"));
+                (item.href === "/layouts" && pathname.startsWith("/layouts")) ||
+                (item.href === "/careers" && pathname.startsWith("/careers"));
               
               return (
                 <Link
