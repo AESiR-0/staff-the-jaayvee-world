@@ -50,6 +50,13 @@ interface StaffDownline {
     email: string;
     fullName: string;
     referralCode: string | null;
+    totalReferrals?: number;
+    totalSignups?: number;
+    totalClicks?: number;
+    commissionRate?: string;
+    currentMilestone?: number;
+    pendingEarnings?: string;
+    commissionEarned?: string;
   } | null;
   downline: DownlineUser[];
   earningsBreakdown?: EarningsBreakdown | null;
@@ -502,7 +509,7 @@ export default function DownlinePage() {
 
       {data?.staff && (
         <div className="card mb-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-primary-fg">{data.staff.fullName}</h3>
               <p className="text-sm text-primary-muted">{data.staff.email}</p>
@@ -513,6 +520,47 @@ export default function DownlinePage() {
                 {data.staff.referralCode || 'Not assigned'}
               </p>
             </div>
+          </div>
+          
+          {/* Staff Referral Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-primary-border">
+            <div>
+              <p className="text-xs text-primary-muted mb-1">Total Referrals</p>
+              <p className="text-lg font-bold text-primary-fg">
+                {data.staff.totalReferrals ?? 0}
+              </p>
+              <p className="text-xs text-primary-muted">Users in downline</p>
+            </div>
+            {data.staff.totalSignups !== undefined && (
+              <div>
+                <p className="text-xs text-primary-muted mb-1">Total Signups</p>
+                <p className="text-lg font-bold text-primary-fg">
+                  {data.staff.totalSignups}
+                </p>
+                <p className="text-xs text-primary-muted">For commissions</p>
+              </div>
+            )}
+            {data.staff.commissionRate && (
+              <div>
+                <p className="text-xs text-primary-muted mb-1">Commission Rate</p>
+                <p className="text-lg font-bold text-green-600">
+                  {parseFloat(data.staff.commissionRate).toFixed(2)}%
+                </p>
+                <p className="text-xs text-primary-muted">Current rate</p>
+              </div>
+            )}
+            {data.staff.pendingEarnings && parseFloat(data.staff.pendingEarnings) > 0 && (
+              <div>
+                <p className="text-xs text-primary-muted mb-1">Pending Earnings</p>
+                <p className="text-lg font-bold text-yellow-600">
+                  ₹{parseFloat(data.staff.pendingEarnings).toLocaleString('en-IN', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })}
+                </p>
+                <p className="text-xs text-primary-muted">Awaiting milestone</p>
+              </div>
+            )}
           </div>
         </div>
       )}
