@@ -28,4 +28,19 @@
   .card {
     @apply border border-primary-border rounded-xl p-4 shadow-soft bg-white;
   }
+  
+  /* Rich Text Editor Styles */
+  [contenteditable][data-placeholder]:empty:before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
+    pointer-events: none;
+  }
+  
+  [contenteditable] {
+    outline: none;
+  }
+  
+  [contenteditable]:focus {
+    outline: none;
+  }
 }

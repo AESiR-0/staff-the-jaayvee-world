@@ -14,7 +14,8 @@ import {
   GitBranch,
   Wallet,
   CheckSquare,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Layout
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -33,6 +34,7 @@ const navigation = [
   { name: "Coupons", href: "/coupons", icon: Ticket },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Gallery", href: "/gallery", icon: ImageIcon },
+  { name: "Layouts", href: "/layouts", icon: Layout },
   { name: "Create User", href: "/sellers/create", icon: Users },
   { name: "Updates", href: "/updates/create", icon: Bell },
 ];
@@ -141,7 +143,6 @@ export default function Sidebar() {
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
                 }
-                
                 // Check RBAC permissions first if loaded
                 const tabKey = routeToTabKey[item.href as keyof typeof routeToTabKey];
                 if (permissionsLoaded && permissions.length > 0 && tabKey) {
@@ -164,7 +165,8 @@ export default function Sidebar() {
                 (item.href === "/events/share-messages" && pathname.startsWith("/events/share-messages")) ||
                 (item.href === "/downline" && pathname.startsWith("/downline")) ||
                 (item.href === "/tasks" && pathname.startsWith("/tasks")) ||
-                (item.href === "/gallery" && pathname.startsWith("/gallery"));
+                (item.href === "/gallery" && pathname.startsWith("/gallery")) ||
+                (item.href === "/layouts" && pathname.startsWith("/layouts"));
               
               return (
                 <Link
