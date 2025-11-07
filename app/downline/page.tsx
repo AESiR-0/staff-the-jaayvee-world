@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Users, UserCheck, Mail, Phone, Calendar, TrendingUp, Building2, Instagram, Youtube, Tag, Wallet, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, X, Edit, Save } from "lucide-react";
+import { Users, UserCheck, Mail, Phone, Calendar, TrendingUp, Building2, Instagram, Youtube, Tag, Wallet, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, X, Edit, Save, Award, CheckCircle2 } from "lucide-react";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 import { format } from "date-fns";
 
@@ -27,6 +27,23 @@ interface DownlineUser {
   downlines?: DownlineUser[]; // Nested downlines
 }
 
+interface EarningsUser {
+  userId: string;
+  userName: string;
+  totalEarnings: number;
+  creditedEarnings: number;
+  pendingEarnings: number;
+  ticketCount: number;
+  milestoneReached: boolean;
+}
+
+interface EarningsBreakdown {
+  totalEarnings: number;
+  creditedEarnings: number;
+  pendingEarnings: number;
+  users: EarningsUser[];
+}
+
 interface StaffDownline {
   staff: {
     id: string;
@@ -35,6 +52,7 @@ interface StaffDownline {
     referralCode: string | null;
   } | null;
   downline: DownlineUser[];
+  earningsBreakdown?: EarningsBreakdown | null;
 }
 
 export default function DownlinePage() {
@@ -674,6 +692,127 @@ export default function DownlinePage() {
             Next
             <ChevronRight className="h-4 w-4" />
           </button>
+        </div>
+      )}
+
+      {/* Earnings Breakdown Section */}
+      {data?.earningsBreakdown && data.earningsBreakdown.users.length > 0 && (
+        <div className="card mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp className="h-5 w-5 text-green-600" />
+            <h2 className="text-xl font-bold text-primary-fg">Upline Earnings Breakdown</h2>
+          </div>
+          
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <p className="text-sm text-green-700 mb-1">Total Earnings</p>
+              <p className="text-2xl font-bold text-green-900">
+                ₹{data.earningsBreakdown.totalEarnings.toLocaleString('en-IN', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                })}
+              </p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <p className="text-sm text-blue-700 mb-1">Credited</p>
+              <p className="text-2xl font-bold text-blue-900">
+                ₹{data.earningsBreakdown.creditedEarnings.toLocaleString('en-IN', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                })}
+              </p>
+            </div>
+            <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+              <p className="text-sm text-yellow-700 mb-1">Pending</p>
+              <p className="text-2xl font-bold text-yellow-900">
+                ₹{data.earningsBreakdown.pendingEarnings.toLocaleString('en-IN', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                })}
+              </p>
+            </div>
+          </div>
+
+          {/* Earnings per User */}
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold text-primary-fg mb-3">Earnings by User</h3>
+            {data.earningsBreakdown.users.map((earningsUser) => {
+              const downlineUser = data.downline.find(u => u.userId === earningsUser.userId);
+              return (
+                <div
+                  key={earningsUser.userId}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    earningsUser.milestoneReached
+                      ? 'bg-green-50 border-green-300 shadow-md'
+                      : 'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-semibold text-primary-fg">{earningsUser.userName}</h4>
+                        {earningsUser.milestoneReached && (
+                          <div className="flex items-center gap-1 bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Milestone Reached
+                          </div>
+                        )}
+                      </div>
+                      {downlineUser && (
+                        <p className="text-sm text-primary-muted mb-2">
+                          {downlineUser.email} • {downlineUser.role}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+                    <div>
+                      <p className="text-xs text-primary-muted mb-1">Total Earnings</p>
+                      <p className="text-sm font-semibold text-primary-fg">
+                        ₹{earningsUser.totalEarnings.toLocaleString('en-IN', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-primary-muted mb-1">Credited</p>
+                      <p className="text-sm font-semibold text-green-700">
+                        ₹{earningsUser.creditedEarnings.toLocaleString('en-IN', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-primary-muted mb-1">Pending</p>
+                      <p className="text-sm font-semibold text-yellow-700">
+                        ₹{earningsUser.pendingEarnings.toLocaleString('en-IN', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        })}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-primary-muted mb-1">Tickets (This Month)</p>
+                      <div className="flex items-center gap-1">
+                        <p className={`text-sm font-semibold ${
+                          earningsUser.ticketCount >= 50 ? 'text-green-700' : 'text-primary-fg'
+                        }`}>
+                          {earningsUser.ticketCount}
+                        </p>
+                        {earningsUser.ticketCount >= 50 && (
+                          <Award className="h-4 w-4 text-green-600" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
