@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Layout, Upload, Edit2, Save, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 import RichTextEditor from "@/components/RichTextEditor";
+import Image from "next/image";
 
 interface LayoutData {
   id: string;
@@ -401,14 +402,19 @@ export default function LayoutsPage() {
                 {(logoPreview || formData.logoUrl) && (
                   <div className="mt-2">
                     <p className="text-sm text-gray-600 mb-2">Preview:</p>
-                    <img 
-                      src={logoPreview || formData.logoUrl || ''} 
-                      alt="Logo preview" 
-                      className="max-h-20 object-contain border border-gray-200 rounded"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
+                    <div className="relative max-h-20 w-auto inline-block">
+                      <Image 
+                        src={logoPreview || formData.logoUrl || ''} 
+                        alt="Logo preview" 
+                        width={200}
+                        height={80}
+                        className="max-h-20 w-auto object-contain border border-gray-200 rounded"
+                        unoptimized
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
                     {logoFile && (
                       <p className="text-xs text-gray-500 mt-1">New file selected: {logoFile.name}</p>
                     )}
@@ -451,14 +457,19 @@ export default function LayoutsPage() {
                 {(backgroundPreview || formData.backgroundImageUrl) && (
                   <div className="mt-2">
                     <p className="text-sm text-gray-600 mb-2">Preview:</p>
-                    <img 
-                      src={backgroundPreview || formData.backgroundImageUrl || ''} 
-                      alt="Background preview" 
-                      className="max-h-48 w-full object-cover border border-gray-200 rounded"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
+                    <div className="relative max-h-48 w-full">
+                      <Image 
+                        src={backgroundPreview || formData.backgroundImageUrl || ''} 
+                        alt="Background preview" 
+                        width={800}
+                        height={192}
+                        className="max-h-48 w-full object-cover border border-gray-200 rounded"
+                        unoptimized
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
                     {backgroundFile && (
                       <p className="text-xs text-gray-500 mt-1">New file selected: {backgroundFile.name}</p>
                     )}
