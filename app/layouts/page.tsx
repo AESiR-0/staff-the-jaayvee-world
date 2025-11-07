@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Layout, Upload, Edit2, Save, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 import RichTextEditor from "@/components/RichTextEditor";
@@ -53,12 +53,7 @@ export default function LayoutsPage() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
 
-  useEffect(() => {
-    checkPermission();
-    fetchLayouts();
-  }, []);
-
-  const checkPermission = async () => {
+  const checkPermission = useCallback(async () => {
     try {
       // Check RBAC permission
       const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=users`);
@@ -103,9 +98,9 @@ export default function LayoutsPage() {
                      userEmail === 'thejaayveeworldofficial@gmail.com';
       setCanManage(isAdmin);
     }
-  };
+  }, [API_BASE_URL]);
 
-  const fetchLayouts = async () => {
+  const fetchLayouts = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -154,7 +149,12 @@ export default function LayoutsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE_URL]);
+
+  useEffect(() => {
+    checkPermission();
+    fetchLayouts();
+  }, [checkPermission, fetchLayouts]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'background') => {
     const file = e.target.files?.[0];
@@ -344,7 +344,7 @@ export default function LayoutsPage() {
         <div className="text-center max-w-md mx-auto p-8">
           <div className="bg-red-50 border border-red-200 rounded-lg p-6">
             <h2 className="text-xl font-semibold text-red-800 mb-2">Access Denied</h2>
-            <p className="text-red-600">You don't have permission to manage layouts. Admin access required.</p>
+            <p className="text-red-600">You don&apos;t have permission to manage layouts. Admin access required.</p>
           </div>
         </div>
       </div>
