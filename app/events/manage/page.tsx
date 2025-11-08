@@ -144,7 +144,9 @@ export default function ManageEventsPage() {
         const data = await response.json();
         const userEmail = data.data?.user?.email || data.data?.email || data.email;
 
-        if (ALLOWED_EMAIL.includes(userEmail?.toLowerCase() || '')) {
+        // Check if user is super admin first
+        const { isSuperAdmin } = require('@/lib/rbac');
+        if (isSuperAdmin(userEmail) || ALLOWED_EMAIL.includes(userEmail?.toLowerCase() || '')) {
           setAuthorized(true);
           fetchEvents();
         } else {

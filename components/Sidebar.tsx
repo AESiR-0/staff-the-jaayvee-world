@@ -136,7 +136,7 @@ export default function Sidebar() {
                     "sm13.thejaayveeworld@gmail.com",
                     "md.thejaayveeworld@gmail.com",
                     "v1sales.thejaayveeworld@gmail.com",
-                    "thejayveeworldofficial@gmail.com"
+                    "thejaayveeworldofficial@gmail.com"
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
                 }
@@ -144,7 +144,7 @@ export default function Sidebar() {
                 if (item.href === "/events/manage") {
                   const allowedEmails = [
                     "md.thejaayveeworld@gmail.com",
-                    "thejayveeworldofficial@gmail.com"
+                    "thejaayveeworldofficial@gmail.com"
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
                 }
@@ -152,7 +152,7 @@ export default function Sidebar() {
                 if (item.href === "/events/share-messages") {
                   const allowedEmails = [
                     "md.thejaayveeworld@gmail.com",
-                    "thejayveeworldofficial@gmail.com"
+                    "thejaayveeworldofficial@gmail.com"
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
                 }

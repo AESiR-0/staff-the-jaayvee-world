@@ -157,7 +157,7 @@ export const ACCESS_CONTROL: Record<TabKey, string[] | ['*']> = {
 
 // Super admin emails - these have access to everything
 const SUPER_ADMIN_EMAILS = [
-  'thejayveeworldofficial@gmail.com',
+  'thejaayveeworldofficial@gmail.com',
   'md.thejaayveeworld@gmail.com',
 ];
 
