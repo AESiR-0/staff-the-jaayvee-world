@@ -88,7 +88,7 @@ export default function DownlinePage() {
     const loadData = async () => {
       const session = getStaffSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = await import('@/lib/rbac');
+      const { isSuperAdmin } = require('@/lib/rbac');
       const admin = isSuperAdmin(userEmail);
       setIsAdmin(admin);
 

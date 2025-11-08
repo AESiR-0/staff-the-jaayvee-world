@@ -77,14 +77,14 @@ export default function CareersPage() {
       // Fallback: check if user is admin
       const session = getStaffSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = await import('@/lib/rbac');
+      const { isSuperAdmin } = require('@/lib/rbac');
       setCanManage(isSuperAdmin(userEmail));
     } catch (err) {
       console.error('Error checking permissions:', err);
       // Fallback: check if user is admin
       const session = getStaffSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = await import('@/lib/rbac');
+      const { isSuperAdmin } = require('@/lib/rbac');
       setCanManage(isSuperAdmin(userEmail));
     }
   }, [API_BASE_URL]);

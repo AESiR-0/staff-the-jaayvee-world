@@ -47,7 +47,7 @@ function DashboardContent() {
           if (meRes.ok) {
             const meData = await meRes.json();
             const userEmail = meData.data?.user?.email || meData.data?.email || meData.email;
-            const { isSuperAdmin } = await import('@/lib/rbac');
+            const { isSuperAdmin } = require('@/lib/rbac');
             
             // Super admins can do everything
             if (isSuperAdmin(userEmail)) {

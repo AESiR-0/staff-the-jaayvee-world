@@ -65,7 +65,7 @@ export default function TasksPage() {
     // Check if user is admin
     const session = getStaffSession();
     const userEmail = session?.email;
-    const { isSuperAdmin } = await import('@/lib/rbac');
+    const { isSuperAdmin } = require('@/lib/rbac');
     setIsAdmin(isSuperAdmin(userEmail));
   }, []);
 
@@ -74,7 +74,7 @@ export default function TasksPage() {
       // Check if user is admin first (admins can always create tasks)
       const session = getStaffSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = await import('@/lib/rbac');
+      const { isSuperAdmin } = require('@/lib/rbac');
       const isAdmin = isSuperAdmin(userEmail);
       
       if (isAdmin) {

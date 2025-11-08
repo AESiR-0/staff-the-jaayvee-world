@@ -201,7 +201,7 @@ export default function CreateUserPage() {
       setCurrentUserEmail(session.email);
       
       // Check if user can create staff accounts
-      const { isSuperAdmin } = await import('@/lib/rbac');
+      const { isSuperAdmin } = require('@/lib/rbac');
       setCanCreateStaff(isSuperAdmin(session.email));
       
       // Fetch user's referral code
