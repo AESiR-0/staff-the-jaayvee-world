@@ -182,23 +182,52 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
         }
       }
 
-      // Fetch expenses
-      const expensesRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/expenses`);
-      if (expensesRes.ok) {
-        const expensesData = await expensesRes.json();
-        if (expensesData.success && expensesData.data) {
-          setExpenses(expensesData.data);
+      // Fetch templates first
+      const templatesRes = await authenticatedFetch(`${API_BASE_URL}/api/event-expense-templates?activeOnly=true`);
+      let templatesData: ExpenseTemplate[] = [];
+      if (templatesRes.ok) {
+        const templatesResult = await templatesRes.json();
+        if (templatesResult.success && templatesResult.data) {
+          templatesData = templatesResult.data;
+          setTemplates(templatesData);
         }
       }
 
-      // Fetch templates
-      const templatesRes = await authenticatedFetch(`${API_BASE_URL}/api/event-expense-templates?activeOnly=true`);
-      if (templatesRes.ok) {
-        const templatesData = await templatesRes.json();
-        if (templatesData.success && templatesData.data) {
-          setTemplates(templatesData.data);
+      // Fetch expenses
+      const expensesRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/expenses`);
+      let existingExpenses: EventExpense[] = [];
+      if (expensesRes.ok) {
+        const expensesData = await expensesRes.json();
+        if (expensesData.success && expensesData.data) {
+          existingExpenses = expensesData.data;
         }
       }
+
+      // Merge templates with existing expenses
+      // For templates that don't have corresponding expenses, create virtual expense entries
+      const templateExpenseMap = new Map(existingExpenses
+        .filter(e => e.templateId)
+        .map(e => [e.templateId!, e]));
+      
+      const allExpenses: EventExpense[] = [...existingExpenses];
+      
+      // Add template expenses that don't have corresponding event expenses yet
+      templatesData.forEach(template => {
+        if (!templateExpenseMap.has(template.id)) {
+          // Create a virtual expense entry for this template
+          allExpenses.push({
+            id: `template-${template.id}`, // Virtual ID
+            templateId: template.id,
+            name: template.name,
+            category: template.category,
+            expenseType: 'fixed',
+            amount: template.defaultAmount,
+            isOptional: false,
+          } as EventExpense);
+        }
+      });
+      
+      setExpenses(allExpenses);
     } catch (err: any) {
       console.error('Error fetching financial data:', err);
       setError(err.message || 'Failed to fetch financial data');
@@ -302,12 +331,14 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
       setError(null);
       setSuccess(null);
 
-      const url = editingExpense
+      // If editing a virtual template expense (starts with 'template-'), treat it as a new expense
+      const isVirtualExpense = editingExpense?.id.startsWith('template-');
+      const url = (editingExpense && !isVirtualExpense)
         ? `${API_BASE_URL}/api/events/${eventId}/expenses/${editingExpense.id}`
         : `${API_BASE_URL}/api/events/${eventId}/expenses`;
 
       const response = await authenticatedFetch(url, {
-        method: editingExpense ? 'PUT' : 'POST',
+        method: (editingExpense && !isVirtualExpense) ? 'PUT' : 'POST',
         body: JSON.stringify(expenseForm),
       });
 
@@ -317,7 +348,7 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
         throw new Error(data.error || 'Failed to save expense');
       }
 
-      setSuccess(editingExpense ? 'Expense updated successfully!' : 'Expense added successfully!');
+      setSuccess(editingExpense && !isVirtualExpense ? 'Expense updated successfully!' : 'Expense added successfully!');
       setShowExpenseForm(false);
       setEditingExpense(null);
       setExpenseForm({
@@ -374,17 +405,35 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
     if (expense.expenseType === 'calculated') {
       return;
     }
-    setExpenseForm({
-      templateId: expense.templateId,
-      name: expense.name,
-      category: expense.category,
-      expenseType: expense.expenseType as 'fixed' | 'per_person' | 'percentage',
-      amount: expense.amount || undefined,
-      percentage: expense.percentage || undefined,
-      perPersonAmount: expense.perPersonAmount || undefined,
-      numberOfInvitees: expense.numberOfInvitees || undefined,
-      isOptional: expense.isOptional,
-    });
+    
+    // If this is a virtual template expense (starts with 'template-'), create it first
+    if (expense.id.startsWith('template-')) {
+      // This is a template that hasn't been added as an expense yet
+      // Create it when saving
+      setExpenseForm({
+        templateId: expense.templateId,
+        name: expense.name,
+        category: expense.category,
+        expenseType: 'fixed' as 'fixed' | 'per_person' | 'percentage',
+        amount: expense.amount || undefined,
+        percentage: expense.percentage || undefined,
+        perPersonAmount: expense.perPersonAmount || undefined,
+        numberOfInvitees: expense.numberOfInvitees || undefined,
+        isOptional: expense.isOptional,
+      });
+    } else {
+      setExpenseForm({
+        templateId: expense.templateId,
+        name: expense.name,
+        category: expense.category,
+        expenseType: expense.expenseType as 'fixed' | 'per_person' | 'percentage',
+        amount: expense.amount || undefined,
+        percentage: expense.percentage || undefined,
+        perPersonAmount: expense.perPersonAmount || undefined,
+        numberOfInvitees: expense.numberOfInvitees || undefined,
+        isOptional: expense.isOptional,
+      });
+    }
     setShowExpenseForm(true);
   };
 
@@ -647,21 +696,33 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
               </h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-primary-fg mb-2">Name *</label>
+                  <label className="block text-sm font-medium text-primary-fg mb-2">
+                    Name * 
+                    {expenseForm.templateId && (
+                      <span className="text-xs text-primary-muted ml-2">(Fixed - from template)</span>
+                    )}
+                  </label>
                   <input
                     type="text"
                     value={expenseForm.name}
                     onChange={(e) => setExpenseForm({ ...expenseForm, name: e.target.value })}
-                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                    disabled={!!expenseForm.templateId}
+                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:bg-primary-accent-light disabled:cursor-not-allowed"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-primary-fg mb-2">Category *</label>
+                    <label className="block text-sm font-medium text-primary-fg mb-2">
+                      Category *
+                      {expenseForm.templateId && (
+                        <span className="text-xs text-primary-muted ml-2">(Fixed - from template)</span>
+                      )}
+                    </label>
                     <select
                       value={expenseForm.category}
                       onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
-                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                      disabled={!!expenseForm.templateId}
+                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:bg-primary-accent-light disabled:cursor-not-allowed"
                     >
                       <option value="direct">Direct</option>
                       <option value="indirect">Indirect</option>
@@ -669,11 +730,17 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-primary-fg mb-2">Type *</label>
+                    <label className="block text-sm font-medium text-primary-fg mb-2">
+                      Type *
+                      {expenseForm.templateId && (
+                        <span className="text-xs text-primary-muted ml-2">(Fixed - from template)</span>
+                      )}
+                    </label>
                     <select
                       value={expenseForm.expenseType}
                       onChange={(e) => setExpenseForm({ ...expenseForm, expenseType: e.target.value as any })}
-                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                      disabled={!!expenseForm.templateId}
+                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:bg-primary-accent-light disabled:cursor-not-allowed"
                     >
                       <option value="fixed">Fixed</option>
                       <option value="per_person">Per Person</option>
@@ -797,37 +864,62 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
               <p className="text-primary-muted text-center py-8">No expenses added yet. Add expenses from templates or create custom ones.</p>
             ) : (
               <div className="space-y-2">
-                {expenses.map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="p-4 border border-primary-border rounded-lg flex justify-between items-center"
-                  >
-                    <div>
-                      <div className="font-medium text-primary-fg">{expense.name}</div>
-                      <div className="text-sm text-primary-muted">
-                        {expense.category} • {expense.expenseType}
-                        {expense.expenseType === 'fixed' && expense.amount && ` • ₹${expense.amount.toFixed(2)}`}
-                        {expense.expenseType === 'per_person' && expense.perPersonAmount && expense.numberOfInvitees && ` • ₹${expense.perPersonAmount.toFixed(2)} × ${expense.numberOfInvitees}`}
-                        {expense.expenseType === 'percentage' && expense.percentage && ` • ${expense.percentage}%`}
-                        {expense.isOptional && ' • Optional'}
+                {expenses.map((expense) => {
+                  const isTemplateExpense = !!expense.templateId;
+                  const isVirtualExpense = expense.id.startsWith('template-');
+                  
+                  return (
+                    <div
+                      key={expense.id}
+                      className={`p-4 border rounded-lg flex justify-between items-center ${
+                        isTemplateExpense 
+                          ? 'border-primary-accent bg-primary-accent-light/30' 
+                          : 'border-primary-border'
+                      }`}
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium text-primary-fg">{expense.name}</div>
+                          {isTemplateExpense && (
+                            <span className="text-xs px-2 py-0.5 bg-primary-accent text-primary-fg rounded">
+                              Fixed Template
+                            </span>
+                          )}
+                          {isVirtualExpense && (
+                            <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded">
+                              Not Added Yet
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-primary-muted">
+                          {expense.category} • {expense.expenseType}
+                          {expense.expenseType === 'fixed' && expense.amount && ` • ₹${expense.amount.toFixed(2)}`}
+                          {expense.expenseType === 'per_person' && expense.perPersonAmount && expense.numberOfInvitees && ` • ₹${expense.perPersonAmount.toFixed(2)} × ${expense.numberOfInvitees}`}
+                          {expense.expenseType === 'percentage' && expense.percentage && ` • ${expense.percentage}%`}
+                          {expense.isOptional && ' • Optional'}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => startEditExpense(expense)}
+                          className="p-2 text-primary-fg hover:bg-primary-accent-light rounded-lg"
+                          title={isTemplateExpense ? "Edit amount (label is fixed)" : "Edit expense"}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        {!isVirtualExpense && (
+                          <button
+                            onClick={() => handleDeleteExpense(expense.id)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                            title="Delete expense"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => startEditExpense(expense)}
-                        className="p-2 text-primary-fg hover:bg-primary-accent-light rounded-lg"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteExpense(expense.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

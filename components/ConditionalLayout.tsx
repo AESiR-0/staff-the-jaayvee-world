@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
+import NotificationPanel from "./NotificationPanel";
 
 interface ConditionalLayoutProps {
   children: React.ReactNode;
@@ -65,6 +66,10 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
     <div className="min-h-screen bg-primary-bg text-primary-fg">
       <Sidebar />
       <main className="lg:ml-64">
+        {/* Header with Notifications */}
+        <div className="sticky top-0 z-30 bg-white border-b border-primary-border px-6 py-4 flex items-center justify-end">
+          <NotificationPanel />
+        </div>
         <div className="p-6">
           {children}
         </div>
