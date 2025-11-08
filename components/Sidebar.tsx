@@ -16,7 +16,8 @@ import {
   CheckSquare,
   Image as ImageIcon,
   Layout,
-  Briefcase
+  Briefcase,
+  Shield
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -39,6 +40,7 @@ const navigation = [
   { name: "Careers", href: "/careers", icon: Briefcase },
   { name: "Create User", href: "/sellers/create", icon: Users },
   { name: "Updates", href: "/updates/create", icon: Bell },
+  { name: "RBAC", href: "/rbac", icon: Shield },
 ];
 
 export default function Sidebar() {
@@ -119,13 +121,22 @@ export default function Sidebar() {
           <div className="space-y-2">
             {navigation
               .filter((item) => {
+                // Import isSuperAdmin helper
+                const { isSuperAdmin } = require('@/lib/rbac');
+                
+                // Super admins have access to everything
+                if (isSuperAdmin(email)) {
+                  return true;
+                }
+                
                 // Special handling for Updates - show to authorized users
                 if (item.href === "/updates/create") {
                   const allowedEmails = [
                     "sm2.thejaayveeworld@gmail.com",
                     "sm13.thejaayveeworld@gmail.com",
                     "md.thejaayveeworld@gmail.com",
-                    "v1sales.thejaayveeworld@gmail.com"
+                    "v1sales.thejaayveeworld@gmail.com",
+                    "thejayveeworldofficial@gmail.com"
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
                 }
@@ -133,7 +144,7 @@ export default function Sidebar() {
                 if (item.href === "/events/manage") {
                   const allowedEmails = [
                     "md.thejaayveeworld@gmail.com",
-                    "thejaayveeworldofficial@gmail.com"
+                    "thejayveeworldofficial@gmail.com"
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
                 }
@@ -141,9 +152,13 @@ export default function Sidebar() {
                 if (item.href === "/events/share-messages") {
                   const allowedEmails = [
                     "md.thejaayveeworld@gmail.com",
-                    "thejaayveeworldofficial@gmail.com"
+                    "thejayveeworldofficial@gmail.com"
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
+                }
+                // RBAC management - only for thejaayveeworldofficial@gmail.com
+                if (item.href === "/rbac") {
+                  return email?.toLowerCase() === "thejaayveeworldofficial@gmail.com";
                 }
                 // Check RBAC permissions first if loaded
                 const tabKey = routeToTabKey[item.href as keyof typeof routeToTabKey];

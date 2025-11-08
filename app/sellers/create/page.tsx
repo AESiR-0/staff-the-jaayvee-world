@@ -201,8 +201,8 @@ export default function CreateUserPage() {
       setCurrentUserEmail(session.email);
       
       // Check if user can create staff accounts
-      const allowedEmails = ['md.thejaayveeworld@gmail.com', 'thejaayveeworldofficial@gmail.com'];
-      setCanCreateStaff(allowedEmails.includes(session.email));
+      const { isSuperAdmin } = await import('@/lib/rbac');
+      setCanCreateStaff(isSuperAdmin(session.email));
       
       // Fetch user's referral code
       fetch(`${API_BASE_URL}/api/staff/affiliate`, {

@@ -87,9 +87,9 @@ export default function DownlinePage() {
   useEffect(() => {
     const loadData = async () => {
       const session = getStaffSession();
-      const userEmail = session?.email?.toLowerCase();
-      const admin = userEmail === 'md.thejaayveeworld@gmail.com' || 
-                    userEmail === 'thejaayveeworldofficial@gmail.com';
+      const userEmail = session?.email;
+      const { isSuperAdmin } = await import('@/lib/rbac');
+      const admin = isSuperAdmin(userEmail);
       setIsAdmin(admin);
 
       // If admin, fetch all staff list first, then downline

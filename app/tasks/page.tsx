@@ -64,18 +64,18 @@ export default function TasksPage() {
     
     // Check if user is admin
     const session = getStaffSession();
-    const userEmail = session?.email?.toLowerCase();
-    setIsAdmin(userEmail === 'md.thejaayveeworld@gmail.com' || 
-               userEmail === 'thejaayveeworldofficial@gmail.com');
+    const userEmail = session?.email;
+    const { isSuperAdmin } = await import('@/lib/rbac');
+    setIsAdmin(isSuperAdmin(userEmail));
   }, []);
 
   const checkCreatePermission = async () => {
     try {
       // Check if user is admin first (admins can always create tasks)
       const session = getStaffSession();
-      const userEmail = session?.email?.toLowerCase();
-      const isAdmin = userEmail === 'md.thejaayveeworld@gmail.com' || 
-                     userEmail === 'thejaayveeworldofficial@gmail.com';
+      const userEmail = session?.email;
+      const { isSuperAdmin } = await import('@/lib/rbac');
+      const isAdmin = isSuperAdmin(userEmail);
       
       if (isAdmin) {
         setCanCreate(true);

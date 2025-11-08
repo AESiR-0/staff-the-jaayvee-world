@@ -155,12 +155,27 @@ export const ACCESS_CONTROL: Record<TabKey, string[] | ['*']> = {
   careers: ['*'],
 };
 
+// Super admin emails - these have access to everything
+const SUPER_ADMIN_EMAILS = [
+  'thejayveeworldofficial@gmail.com',
+  'md.thejaayveeworld@gmail.com',
+];
+
 // Optional deny list per tab (takes precedence over allow list)
 const ACCESS_DENY: Partial<Record<TabKey, string[]>> = {
   events: ['v1sales.thejaayveeworld@gmail.com'],
   coupons: ['v1sales.thejaayveeworld@gmail.com'],
   qr: ['v1sales.thejaayveeworld@gmail.com'],
 };
+
+/**
+ * Check if an email is a super admin
+ */
+export function isSuperAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  const normalized = email.trim().toLowerCase();
+  return SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(normalized);
+}
 
 /**
  * Fetch user permissions from RBAC API
@@ -236,6 +251,11 @@ export function clearPermissionsCache(): void {
 }
 
 export function canAccess(tab: TabKey, email?: string | null): boolean {
+  // Super admins have access to everything
+  if (isSuperAdmin(email)) {
+    return true;
+  }
+  
   const allowed = ACCESS_CONTROL[tab];
   if (!allowed) return false;
   // Check deny list first

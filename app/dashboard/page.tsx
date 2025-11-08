@@ -47,17 +47,21 @@ function DashboardContent() {
           if (meRes.ok) {
             const meData = await meRes.json();
             const userEmail = meData.data?.user?.email || meData.data?.email || meData.email;
-            const allowedEmails = [
-              "sm2.thejaayveeworld@gmail.com",
-              "sm13.thejaayveeworld@gmail.com",
-              "md.thejaayveeworld@gmail.com"
-            ];
-            if (allowedEmails.includes(userEmail?.toLowerCase() || '')) {
+            const { isSuperAdmin } = await import('@/lib/rbac');
+            
+            // Super admins can do everything
+            if (isSuperAdmin(userEmail)) {
               setCanCreateUpdates(true);
-            }
-            // Check RBAC access
-            if (userEmail?.toLowerCase() === "thejaayveeworldofficial@gmail.com") {
               setCanAccessRBAC(true);
+            } else {
+              const allowedEmails = [
+                "sm2.thejaayveeworld@gmail.com",
+                "sm13.thejaayveeworld@gmail.com",
+                "md.thejaayveeworld@gmail.com"
+              ];
+              if (allowedEmails.includes(userEmail?.toLowerCase() || '')) {
+                setCanCreateUpdates(true);
+              }
             }
           }
         } catch (err) {

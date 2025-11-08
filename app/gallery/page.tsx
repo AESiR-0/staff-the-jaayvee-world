@@ -68,11 +68,10 @@ export default function GalleryPage() {
     try {
       // Check if user is admin first (admins can always upload)
       const session = getStaffSession();
-      const userEmail = session?.email?.toLowerCase();
-      const isAdmin = userEmail === 'md.thejaayveeworld@gmail.com' || 
-                     userEmail === 'thejaayveeworldofficial@gmail.com';
+      const userEmail = session?.email;
+      const { isSuperAdmin } = await import('@/lib/rbac');
       
-      if (isAdmin) {
+      if (isSuperAdmin(userEmail)) {
         setCanManage(true);
         return;
       }

@@ -85,18 +85,16 @@ export default function LayoutsPage() {
       
       // Fallback: check if user is admin
       const session = getStaffSession();
-      const userEmail = session?.email?.toLowerCase();
-      const isAdmin = userEmail === 'md.thejaayveeworld@gmail.com' || 
-                     userEmail === 'thejaayveeworldofficial@gmail.com';
-      setCanManage(isAdmin);
+      const userEmail = session?.email;
+      const { isSuperAdmin } = await import('@/lib/rbac');
+      setCanManage(isSuperAdmin(userEmail));
     } catch (err) {
       console.error('Error checking permissions:', err);
       // Fallback: check if user is admin
       const session = getStaffSession();
-      const userEmail = session?.email?.toLowerCase();
-      const isAdmin = userEmail === 'md.thejaayveeworld@gmail.com' || 
-                     userEmail === 'thejaayveeworldofficial@gmail.com';
-      setCanManage(isAdmin);
+      const userEmail = session?.email;
+      const { isSuperAdmin } = await import('@/lib/rbac');
+      setCanManage(isSuperAdmin(userEmail));
     }
   }, [API_BASE_URL]);
 

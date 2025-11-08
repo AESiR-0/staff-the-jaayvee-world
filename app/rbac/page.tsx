@@ -61,7 +61,7 @@ export default function RBACPage() {
           return;
         }
 
-        if (session.email !== ALLOWED_EMAIL) {
+        if (session.email?.toLowerCase() !== ALLOWED_EMAIL.toLowerCase()) {
           setError("You don't have permission to access this page.");
           setLoading(false);
           return;
