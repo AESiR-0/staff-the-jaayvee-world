@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Bell, Check, CheckCheck, X, Task, TrendingUp, Wallet, Info, Loader2 } from "lucide-react";
+import { Bell, Check, CheckCheck, X, CheckSquare, TrendingUp, Wallet, Info, Loader2 } from "lucide-react";
 import { authenticatedFetch } from "@/lib/auth-utils";
 import { API_BASE_URL } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
@@ -120,7 +120,7 @@ export default function NotificationPanel() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'task':
-        return <Task className="h-4 w-4" />;
+        return <CheckSquare className="h-4 w-4" />;
       case 'referral_earning':
         return <TrendingUp className="h-4 w-4" />;
       case 'wallet_transaction':
