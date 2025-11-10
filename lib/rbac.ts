@@ -161,6 +161,31 @@ const SUPER_ADMIN_EMAILS = [
   'md.thejaayveeworld@gmail.com',
 ];
 
+// Auto-ensure super admin has all permissions in database
+let superAdminEnsured = false;
+const ensureSuperAdminInDB = async () => {
+  if (superAdminEnsured || typeof window === 'undefined') return;
+  
+  try {
+    const { getStaffSession } = await import('@/lib/auth-utils');
+    const session = getStaffSession();
+    const userEmail = session?.email?.toLowerCase();
+    
+    if (userEmail === 'thejaayveeworldofficial@gmail.com' && !superAdminEnsured) {
+      superAdminEnsured = true;
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const { authenticatedFetch } = await import('@/lib/auth-utils');
+      
+      // Call RBAC API which will auto-assign all permissions
+      await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=users`);
+    }
+  } catch (err) {
+    // Silently fail - this is just a convenience feature
+    console.debug('Auto-ensure super admin permissions:', err);
+    superAdminEnsured = false; // Reset on error to retry
+  }
+};
+
 // Optional deny list per tab (takes precedence over allow list)
 const ACCESS_DENY: Partial<Record<TabKey, string[]>> = {
   events: ['v1sales.thejaayveeworld@gmail.com'],
@@ -181,6 +206,9 @@ export function isSuperAdmin(email?: string | null): boolean {
  * Fetch user permissions from RBAC API
  */
 export async function fetchUserPermissions(): Promise<Permission[]> {
+  // Auto-ensure super admin permissions before fetching
+  await ensureSuperAdminInDB();
+  
   // Check cache first
   const now = Date.now();
   if (userPermissionsCache && (now - permissionsCacheTime) < CACHE_DURATION) {

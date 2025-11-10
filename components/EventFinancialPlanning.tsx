@@ -594,7 +594,7 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
               </div>
               <div>
                 <label className="block text-sm font-medium text-primary-fg mb-2">
-                  TJW Points Percentage (%)
+                  TJW Coins Percentage (%)
                 </label>
                 <input
                   type="number"
@@ -606,7 +606,7 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
               </div>
               <div>
                 <label className="block text-sm font-medium text-primary-fg mb-2">
-                  TJW Points Max Amount
+                  TJW Coins Max Amount
                 </label>
                 <input
                   type="number"

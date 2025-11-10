@@ -17,7 +17,10 @@ import {
   Image as ImageIcon,
   Layout,
   Briefcase,
-  Shield
+  Shield,
+  ArrowRight,
+  UserCircle,
+  ChevronDown
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -47,9 +50,38 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [permissionsLoaded, setPermissionsLoaded] = useState(false);
+  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const email = typeof window !== 'undefined' ? getStaffSession()?.email : undefined;
+
+  // Role switcher configuration
+  const roles = [
+    {
+      name: 'Staff Portal',
+      url: typeof window !== 'undefined' ? window.location.origin : '',
+      icon: Shield,
+      current: true
+    },
+    {
+      name: 'Influencer Portal',
+      url: 'https://influencer.thejaayveeworld.com',
+      icon: UserCircle,
+      current: false
+    },
+    {
+      name: 'Affiliate Portal',
+      url: 'https://affiliates.thejaayveeworld.com',
+      icon: Users,
+      current: false
+    },
+    {
+      name: 'Main Site',
+      url: 'https://thejaayveeworld.com',
+      icon: ArrowRight,
+      current: false
+    }
+  ];
 
   // Fetch RBAC permissions on mount
   useEffect(() => {
@@ -65,6 +97,24 @@ export default function Sidebar() {
     };
     loadPermissions();
   }, []);
+
+  // Close role switcher when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showRoleSwitcher && !target.closest('.role-switcher-container')) {
+        setShowRoleSwitcher(false);
+      }
+    };
+
+    if (showRoleSwitcher) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showRoleSwitcher]);
 
   const handleLogout = () => {
     // Clear authentication data
@@ -201,8 +251,60 @@ export default function Sidebar() {
           </div>
         </nav>
 
-        {/* Logout button - Fixed at bottom */}
-        <div className="p-6 pt-4 flex-shrink-0 border-t border-primary-border">
+        {/* Role Switcher and Logout - Fixed at bottom */}
+        <div className="p-6 pt-4 flex-shrink-0 border-t border-primary-border space-y-2">
+          {/* Role Switcher */}
+          <div className="relative role-switcher-container">
+            <button
+              onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
+              className="sidebar-item w-full text-left hover:bg-blue-50 hover:text-blue-600"
+            >
+              <UserCircle size={20} />
+              <span className="font-medium flex-1">Switch Role</span>
+              <ChevronDown 
+                size={16} 
+                className={`transition-transform duration-200 ${showRoleSwitcher ? 'rotate-180' : ''}`}
+              />
+            </button>
+            
+            {/* Role Switcher Dropdown */}
+            {showRoleSwitcher && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-primary-border rounded-lg shadow-lg overflow-hidden z-50 max-h-64 overflow-y-auto">
+                {roles.map((role) => {
+                  const Icon = role.icon;
+                  return (
+                    <a
+                      key={role.name}
+                      href={role.url}
+                      target={role.current ? undefined : "_blank"}
+                      rel={role.current ? undefined : "noopener noreferrer"}
+                      onClick={(e) => {
+                        setShowRoleSwitcher(false);
+                        if (role.current) {
+                          e.preventDefault();
+                        }
+                      }}
+                      className={`
+                        flex items-center gap-3 px-4 py-3 text-sm transition-colors
+                        ${role.current 
+                          ? 'bg-primary-accent/10 text-primary-accent cursor-default' 
+                          : 'hover:bg-gray-50 text-primary-fg cursor-pointer'
+                        }
+                      `}
+                    >
+                      <Icon size={18} />
+                      <span className="font-medium">{role.name}</span>
+                      {role.current && (
+                        <span className="ml-auto text-xs text-primary-muted">(Current)</span>
+                      )}
+                    </a>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Logout */}
           <button 
             onClick={handleLogout}
             className="sidebar-item w-full text-left hover:bg-red-50 hover:text-red-600"

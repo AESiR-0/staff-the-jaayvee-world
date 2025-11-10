@@ -402,16 +402,35 @@ export default function RBACPage() {
             <div className="space-y-4">
               {users.map((user) => {
                 const userPermissionIds = new Set(user.permissions?.map(p => p.id) || []);
+                const isSuperAdmin = user.email?.toLowerCase() === 'thejaayveeworldofficial@gmail.com';
                 return (
                   <div key={user.id} className="border border-primary-border rounded-lg p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h3 className="font-semibold text-primary-fg">{user.fullName}</h3>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-primary-fg">{user.fullName}</h3>
+                          {isSuperAdmin && (
+                            <span className="px-2 py-1 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-xs font-bold rounded-full">
+                              SUPER ADMIN
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-primary-muted">{user.email}</p>
                         <div className="mt-2">
-                          <p className="text-sm font-medium text-primary-fg mb-2">Current Permissions:</p>
+                          <p className="text-sm font-medium text-primary-fg mb-2">
+                            Current Permissions:
+                            {isSuperAdmin && (
+                              <span className="ml-2 text-xs text-yellow-600 font-normal">
+                                (Universal Access - All Permissions)
+                              </span>
+                            )}
+                          </p>
                           <div className="flex flex-wrap gap-2">
-                            {user.permissions && user.permissions.length > 0 ? (
+                            {isSuperAdmin ? (
+                              <span className="px-3 py-1 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/50 text-yellow-600 rounded text-sm font-medium">
+                                All Permissions Enabled
+                              </span>
+                            ) : user.permissions && user.permissions.length > 0 ? (
                               user.permissions.map((permission) => (
                                 <span
                                   key={permission.id}
@@ -432,39 +451,41 @@ export default function RBACPage() {
                           </div>
                         </div>
                       </div>
-                      <div className="ml-4 flex flex-col gap-2">
-                        <label className="block text-sm font-medium text-primary-fg mb-2">Assign Permission:</label>
-                        <div className="flex gap-2">
-                          <select
-                            onChange={(e) => {
-                              if (e.target.value) {
-                                handleAssignPermissionToUser(user.id, e.target.value);
-                                e.target.value = "";
-                              }
-                            }}
-                            className="px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg text-sm flex-1"
-                          >
-                            <option value="">Select permission...</option>
-                            {permissions
-                              .filter(permission => !userPermissionIds.has(permission.id))
-                              .map((permission) => {
-                                const permInfo = STAFF_PERMISSIONS[permission.resource as keyof typeof STAFF_PERMISSIONS];
-                                return (
-                                  <option key={permission.id} value={permission.id}>
-                                    {permInfo?.description || `${permission.action}:${permission.resource}`}
-                                  </option>
-                                );
-                              })}
-                          </select>
-                          <button
-                            onClick={() => handleAssignAllPermissionsToUser(user.id)}
-                            className="px-3 py-2 bg-primary-accent text-white rounded-lg text-sm hover:bg-primary-accent-dark transition-colors whitespace-nowrap"
-                            title="Assign all permissions"
-                          >
-                            Assign All
-                          </button>
+                      {!isSuperAdmin && (
+                        <div className="ml-4 flex flex-col gap-2">
+                          <label className="block text-sm font-medium text-primary-fg mb-2">Assign Permission:</label>
+                          <div className="flex gap-2">
+                            <select
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handleAssignPermissionToUser(user.id, e.target.value);
+                                  e.target.value = "";
+                                }
+                              }}
+                              className="px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg text-sm flex-1"
+                            >
+                              <option value="">Select permission...</option>
+                              {permissions
+                                .filter(permission => !userPermissionIds.has(permission.id))
+                                .map((permission) => {
+                                  const permInfo = STAFF_PERMISSIONS[permission.resource as keyof typeof STAFF_PERMISSIONS];
+                                  return (
+                                    <option key={permission.id} value={permission.id}>
+                                      {permInfo?.description || `${permission.action}:${permission.resource}`}
+                                    </option>
+                                  );
+                                })}
+                            </select>
+                            <button
+                              onClick={() => handleAssignAllPermissionsToUser(user.id)}
+                              className="px-3 py-2 bg-primary-accent text-white rounded-lg text-sm hover:bg-primary-accent-dark transition-colors whitespace-nowrap"
+                              title="Assign all permissions"
+                            >
+                              Assign All
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 );

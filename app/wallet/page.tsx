@@ -21,6 +21,7 @@ interface WalletData {
     reference: string | null;
     createdAt: Date | string;
   }>;
+  partnerCode?: string | null;
 }
 
 export default function WalletPage() {
@@ -31,6 +32,13 @@ export default function WalletPage() {
   useEffect(() => {
     fetchWalletData();
   }, []);
+
+  // Store partner code in cookie if available
+  useEffect(() => {
+    if (walletData?.partnerCode && typeof window !== 'undefined') {
+      document.cookie = `partnerCode=${walletData.partnerCode}; path=/; max-age=${365 * 24 * 60 * 60}`; // 1 year
+    }
+  }, [walletData?.partnerCode]);
 
   const fetchWalletData = async () => {
     try {
@@ -96,6 +104,34 @@ export default function WalletPage() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold text-primary-fg mb-6">Wallet & Earnings</h1>
+
+      {/* Partner Code Display */}
+      {walletData?.partnerCode && (
+        <div className="card mb-6 bg-gray-800 border border-gray-700">
+          <div className="p-6">
+            <h2 className="text-lg font-semibold text-primary-fg mb-4">Partner Code</h2>
+            <div className="flex items-center gap-4">
+              <input
+                type="text"
+                value={walletData.partnerCode}
+                disabled
+                readOnly
+                className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white font-mono"
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(walletData.partnerCode!);
+                  alert('Partner code copied to clipboard!');
+                }}
+                className="px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent/90 transition-colors"
+              >
+                Copy
+              </button>
+            </div>
+            <p className="text-sm text-primary-muted mt-2">This is the referral code used when you signed up</p>
+          </div>
+        </div>
+      )}
 
       {/* Wallet Balance Card */}
       <div className="card mb-6 bg-gradient-to-r from-primary-accent to-blue-600 text-white">
