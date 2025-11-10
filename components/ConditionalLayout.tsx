@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import NotificationPanel from "./NotificationPanel";
+import NotificationManager from "./NotificationManager";
 
 interface ConditionalLayoutProps {
   children: React.ReactNode;
@@ -74,6 +75,8 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
           {children}
         </div>
       </main>
+      {/* Notification Popup Manager */}
+      <NotificationManager />
     </div>
   );
 }
