@@ -76,6 +76,12 @@ export default function Sidebar() {
       current: false
     },
     {
+      name: 'Talaash',
+      url: 'https://talaash.thejaayveeworld.com',
+      icon: ArrowRight,
+      current: false
+    },
+    {
       name: 'Main Site',
       url: 'https://thejaayveeworld.com',
       icon: ArrowRight,
