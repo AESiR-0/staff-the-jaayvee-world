@@ -857,7 +857,7 @@ export default function ManageEventsPage() {
                   </button>
                 </div>
                 {createForm.ticketTypes.length === 0 ? (
-                  <p className="text-sm text-primary-muted italic">No ticket types added. Click "Add Ticket Type" to add one.</p>
+                  <p className="text-sm text-primary-muted italic">No ticket types added. Click &quot;Add Ticket Type&quot; to add one.</p>
                 ) : (
                   <div className="space-y-4">
                     {createForm.ticketTypes.map((ticketType, index) => (
@@ -1327,7 +1327,7 @@ export default function ManageEventsPage() {
                                 {loadingTicketTypes ? (
                                   <p className="text-sm text-primary-muted italic">Loading ticket types...</p>
                                 ) : editTicketTypes.length === 0 ? (
-                                  <p className="text-sm text-primary-muted italic">No ticket types added. Click "Add Ticket Type" to add one.</p>
+                                  <p className="text-sm text-primary-muted italic">No ticket types added. Click &quot;Add Ticket Type&quot; to add one.</p>
                                 ) : (
                                   <div className="space-y-4">
                                     {editTicketTypes.map((ticketType, index) => (

@@ -57,6 +57,7 @@ export default function CalendarPage() {
   useEffect(() => {
     fetchBlocks();
     fetchFestivals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentDate]);
 
   const fetchBlocks = async () => {

@@ -277,7 +277,7 @@ export default function WhatsAppBulkPage() {
               rows={6}
             />
             <p className="text-xs text-primary-muted mt-2">
-              Use {'{name}'} as a placeholder for contact names. Example: "Hi {name}, welcome to our service!"
+              Use {'{name}'} as a placeholder for contact names. Example: &quot;Hi {'{name}'}, welcome to our service!&quot;
             </p>
           </div>
 
