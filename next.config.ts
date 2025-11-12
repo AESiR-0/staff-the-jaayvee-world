@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'talaash.thejaayveeworld.com',
+      },
+    ],
+  },
 };
 
 const pwaConfig = withPWA({

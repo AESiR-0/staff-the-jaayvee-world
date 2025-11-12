@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { TrendingUp, BarChart3, RefreshCw, ExternalLink, Loader2, Filter } from "lucide-react";
 import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
 import { isSuperAdmin } from "@/lib/rbac";
+import { API_BASE_URL } from "@/lib/api";
 
 interface Event {
   id: string;
@@ -18,6 +19,11 @@ interface Event {
 interface FinancialCalculations {
   expenses: {
     totalExpenses: number;
+    breakdown?: {
+      fixed?: Array<{ name: string; amount: number }>;
+      perPerson?: Array<{ name: string; amount: number; invitees: number }>;
+      percentage?: Array<{ name: string; amount: number; percentage: number }>;
+    };
   };
   income: {
     ticketIncome: number;
@@ -73,41 +79,7 @@ export default function EventScenariosPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://thejaayveeworld.com";
-
-  useEffect(() => {
-    const checkAuthorization = async () => {
-      const session = getStaffSession();
-      if (!session?.email) {
-        router.push("/login");
-        return;
-      }
-
-      if (!isSuperAdmin(session.email)) {
-        setAuthorized(false);
-        setLoading(false);
-        return;
-      }
-
-      setAuthorized(true);
-      await fetchEvents();
-    };
-
-    checkAuthorization();
-  }, [router]);
-
-  // Auto-refresh every 10 seconds
-  useEffect(() => {
-    if (!authorized) return;
-
-    const interval = setInterval(() => {
-      fetchEvents(true);
-    }, 10000); // 10 seconds
-
-    return () => clearInterval(interval);
-  }, [authorized]);
-
-  const fetchEvents = async (silent = false) => {
+  const fetchEvents = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     else setRefreshing(true);
 
@@ -176,7 +148,39 @@ export default function EventScenariosPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const checkAuthorization = async () => {
+      const session = getStaffSession();
+      if (!session?.email) {
+        router.push("/login");
+        return;
+      }
+
+      if (!isSuperAdmin(session.email)) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
+
+      setAuthorized(true);
+      await fetchEvents();
+    };
+
+    checkAuthorization();
+  }, [router, fetchEvents]);
+
+  // Auto-refresh every 10 seconds
+  useEffect(() => {
+    if (!authorized) return;
+
+    const interval = setInterval(() => {
+      fetchEvents(true);
+    }, 60000); // 10 seconds
+
+    return () => clearInterval(interval);
+  }, [authorized, fetchEvents]);
 
   const filteredEvents = events.filter((event) => {
     if (filterStatus === "all") return true;

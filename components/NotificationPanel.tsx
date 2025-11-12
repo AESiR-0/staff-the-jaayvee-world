@@ -67,9 +67,12 @@ export default function NotificationPanel() {
   // Mark notification as read
   const markAsRead = async (notificationId: string) => {
     try {
-      const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
-      const response = await authenticatedFetch(`${baseUrl}/api/notifications`, {
-        method: 'PATCH',
+      // Use API_BASE_URL directly - it should point to the main site (jaayvee-world)
+      // For local dev: NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+      // For prod: defaults to https://talaash.thejaayveeworld.com
+      const baseUrl = API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const response = await authenticatedFetch(`${baseUrl}/api/notifications/read`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -106,14 +109,15 @@ export default function NotificationPanel() {
   // Mark all as read
   const markAllAsRead = async () => {
     try {
-      const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
-      const url = `${baseUrl}/api/notifications`;
+      // Use API_BASE_URL directly - it should point to the main site (jaayvee-world)
+      const baseUrl = API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const url = `${baseUrl}/api/notifications/read`;
       console.log('Marking all notifications as read:', url);
       console.log('API_BASE_URL:', API_BASE_URL);
       console.log('Base URL used:', baseUrl);
       
       const response = await authenticatedFetch(url, {
-        method: 'PATCH',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -194,15 +198,10 @@ export default function NotificationPanel() {
     };
   }, [isOpen]);
 
-  // Fetch notifications on mount and set up polling
+  // Fetch notifications on mount and when panel opens
   useEffect(() => {
     fetchNotifications();
-    
-    // Poll for new notifications every 30 seconds
-    const interval = setInterval(fetchNotifications, 30000);
-    
-    return () => clearInterval(interval);
-  }, []);
+  }, [isOpen]); // Re-fetch when panel opens/closes
 
   return (
     <div className="relative" ref={panelRef}>

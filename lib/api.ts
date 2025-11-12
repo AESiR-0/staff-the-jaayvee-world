@@ -14,7 +14,11 @@ function getApiBaseUrl(): string {
   return 'https://talaash.thejaayveeworld.com';
 }
 
-export const API_BASE_URL = getApiBaseUrl();
+// API_BASE_URL should point to the main site (jaayvee-world) where notifications API is hosted
+// For local dev: Set NEXT_PUBLIC_API_BASE_URL=http://localhost:3000 in .env.local
+// For production: Defaults to talaash (staff portal API) - notifications API is on main site
+// Note: Notifications API is on the main site, so if using talaash, you need to set NEXT_PUBLIC_API_BASE_URL
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
 
 export const API_ENDPOINTS = {
   // Staff Auth (backend routes remain as staff)

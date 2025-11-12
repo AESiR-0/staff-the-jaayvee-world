@@ -55,7 +55,7 @@ export default function TeamAuthFlow() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-primary-bg text-primary-fg p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[url('https://talaash.thejaayveeworld.com/Partners_patterns.webp')] text-primary-fg p-6">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">

@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import NotificationPopup from "./NotificationPopup";
 import { playNotificationSound } from "@/lib/sound-utils";
 import { authenticatedFetch } from "@/lib/auth-utils";
 import { API_BASE_URL } from "@/lib/api";
 import { fetchTasksForReminders, getTaskReminders, formatTimeRemaining, TaskReminder } from "@/lib/task-reminder";
-import { CheckSquare, Clock } from "lucide-react";
 
 interface Notification {
   id: string;
@@ -23,176 +22,225 @@ interface NotificationManagerProps {
   onMarkAsRead?: (id: string) => void;
 }
 
+// localStorage keys
+const STORAGE_KEYS = {
+  SHOWN_IDS: 'notification_shown_ids',
+  DISMISSED_REMINDERS: 'notification_dismissed_reminders',
+};
+
 export default function NotificationManager({ onMarkAsRead }: NotificationManagerProps) {
   const [activeNotifications, setActiveNotifications] = useState<Notification[]>([]);
-  const [taskReminders, setTaskReminders] = useState<TaskReminder[]>([]);
-  const [shownReminderIds, setShownReminderIds] = useState<Set<string>>(new Set());
-  const lastNotificationIds = useRef<Set<string>>(new Set());
-  const lastReminderCheck = useRef<number>(0);
+  const shownIdsRef = useRef<Set<string>>(new Set());
+  const dismissedRemindersRef = useRef<Set<string>>(new Set());
+  const isInitializedRef = useRef(false);
 
-  // Fetch notifications and check for new ones
-  const checkForNewNotifications = async () => {
+  // Load persisted data from localStorage
+  const loadPersistedData = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/notifications?limit=5`);
-      if (!response.ok) return;
+      // Load shown notification IDs
+      const shownIdsStr = localStorage.getItem(STORAGE_KEYS.SHOWN_IDS);
+      if (shownIdsStr) {
+        const ids = JSON.parse(shownIdsStr);
+        shownIdsRef.current = new Set(ids);
+        console.log('📦 Loaded', ids.length, 'shown notification IDs');
+      }
 
-      const data = await response.json();
-      if (data.success && data.data) {
-        const notifications = data.data as Notification[];
-        const unreadNotifications = notifications.filter(n => !n.isRead);
-        
-        // Find new notifications that haven't been shown yet
-        const newNotifications = unreadNotifications.filter(
-          n => !lastNotificationIds.current.has(n.id)
-        );
-
-        // Add new notifications to active popups
-        if (newNotifications.length > 0) {
-          newNotifications.forEach(notification => {
-            lastNotificationIds.current.add(notification.id);
-            setActiveNotifications(prev => {
-              // Avoid duplicates
-              if (prev.some(n => n.id === notification.id)) {
-                return prev;
-              }
-              return [...prev, notification];
-            });
-            // Play sound for new notification
-            playNotificationSound();
-          });
-        }
+      // Load dismissed reminder IDs
+      const dismissedStr = localStorage.getItem(STORAGE_KEYS.DISMISSED_REMINDERS);
+      if (dismissedStr) {
+        const ids = JSON.parse(dismissedStr);
+        dismissedRemindersRef.current = new Set(ids);
+        console.log('📦 Loaded', ids.length, 'dismissed reminder IDs');
       }
     } catch (error) {
-      console.error('Error checking for new notifications:', error);
+      console.error('❌ Error loading persisted data:', error);
     }
-  };
+  }, []);
+
+  // Save shown IDs to localStorage
+  const saveShownIds = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.SHOWN_IDS, JSON.stringify(Array.from(shownIdsRef.current)));
+    } catch (error) {
+      console.error('❌ Error saving shown IDs:', error);
+    }
+  }, []);
+
+  // Save dismissed reminders to localStorage
+  const saveDismissedReminders = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(STORAGE_KEYS.DISMISSED_REMINDERS, JSON.stringify(Array.from(dismissedRemindersRef.current)));
+    } catch (error) {
+      console.error('❌ Error saving dismissed reminders:', error);
+    }
+  }, []);
+
+  // Initialize on mount
+  useEffect(() => {
+    if (!isInitializedRef.current) {
+      loadPersistedData();
+      isInitializedRef.current = true;
+    }
+  }, [loadPersistedData]);
+
+  // Fetch and process notifications
+  const fetchNotifications = useCallback(async () => {
+    try {
+      // Use API_BASE_URL from lib/api.ts - notifications API is on the main site
+      // For local dev: Set NEXT_PUBLIC_API_BASE_URL=http://localhost:3000 in .env.local
+      const baseUrl = API_BASE_URL || 'https://thejaayveeworld.com';  
+      console.log('📡 Fetching notifications from:', `${baseUrl}/api/notifications`);
+      const response = await authenticatedFetch(`${baseUrl}/api/notifications?limit=10`);
+      
+      if (!response.ok) {
+        console.log('❌ Failed to fetch notifications:', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      if (!data.success || !data.data) return;
+
+      const notifications = data.data as Notification[];
+      const unreadNotifications = notifications.filter(n => !n.isRead);
+
+      // Filter out notifications that have already been shown
+      const newNotifications = unreadNotifications.filter(n => {
+        const wasShown = shownIdsRef.current.has(n.id);
+        const isActive = activeNotifications.some(active => active.id === n.id);
+        return !wasShown && !isActive;
+      });
+
+      if (newNotifications.length > 0) {
+        console.log('✨ Found', newNotifications.length, 'new notifications');
+        
+        // Mark as shown immediately
+        newNotifications.forEach(n => {
+          shownIdsRef.current.add(n.id);
+        });
+        saveShownIds();
+
+        // Add to active notifications
+        setActiveNotifications(prev => {
+          const existingIds = new Set(prev.map(n => n.id));
+          const toAdd = newNotifications.filter(n => !existingIds.has(n.id));
+          return [...prev, ...toAdd];
+        });
+
+        // Play sound for each new notification
+        newNotifications.forEach(() => playNotificationSound());
+      }
+    } catch (error) {
+      console.error('❌ Error fetching notifications:', error);
+    }
+  }, [activeNotifications, saveShownIds]);
 
   // Check for task reminders
-  const checkTaskReminders = async () => {
+  const checkTaskReminders = useCallback(async () => {
     try {
       const tasks = await fetchTasksForReminders();
       const reminders = getTaskReminders(tasks);
-      
-      // Filter reminders:
-      // - Show new reminders (not shown before)
-      // - Re-show urgent reminders even if shown before (to keep reminding)
-      const remindersToShow = reminders.filter(
-        r => {
-          const wasShown = shownReminderIds.has(r.task.id);
-          // Show if: not shown before, or urgent (re-show urgent reminders)
-          return (!wasShown && (r.isUrgent || r.timeUntilDeadline <= 120)) || (wasShown && r.isUrgent);
-        }
-      );
+
+      const remindersToShow = reminders.filter(r => {
+        const wasDismissed = dismissedRemindersRef.current.has(r.task.id);
+        const isActive = activeNotifications.some(n => n.id === `task-reminder-${r.task.id}`);
+        return !wasDismissed && !isActive && (r.isUrgent || r.timeUntilDeadline <= 120);
+      });
 
       if (remindersToShow.length > 0) {
-        remindersToShow.forEach(reminder => {
-          // Only add to shown set if not urgent (urgent ones can be re-shown)
-          if (!reminder.isUrgent) {
-            setShownReminderIds(prev => new Set(prev).add(reminder.task.id));
-          }
-          
-          // Check if a popup for this task already exists
-          const reminderId = `task-reminder-${reminder.task.id}`;
-          const alreadyShown = activeNotifications.some(n => n.id === reminderId);
-          
-          if (!alreadyShown) {
-            // Create a notification-like popup for task reminder
-            const reminderNotification: Notification = {
-              id: reminderId,
-              type: 'task',
-              title: reminder.isUrgent ? '⚠️ Urgent Task Reminder' : '📋 Task Reminder',
-              message: `${reminder.task.title} - Deadline in ${formatTimeRemaining(reminder.timeUntilDeadline)}`,
-              isRead: false,
-              metadata: { taskId: reminder.task.id, isReminder: true },
-              createdAt: new Date().toISOString(),
-            };
+        const reminderNotifications: Notification[] = remindersToShow.map(reminder => ({
+          id: `task-reminder-${reminder.task.id}`,
+          type: 'task' as const,
+          title: reminder.isUrgent ? '⚠️ Urgent Task Reminder' : '📋 Task Reminder',
+          message: `${reminder.task.title} - Deadline in ${formatTimeRemaining(reminder.timeUntilDeadline)}`,
+          isRead: false,
+          metadata: { taskId: reminder.task.id, isReminder: true },
+          createdAt: new Date().toISOString(),
+        }));
 
-            setActiveNotifications(prev => {
-              if (prev.some(n => n.id === reminderNotification.id)) {
-                return prev;
-              }
-              return [...prev, reminderNotification];
-            });
-            
-            // Play sound for task reminder
-            playNotificationSound();
-          }
+        setActiveNotifications(prev => {
+          const existingIds = new Set(prev.map(n => n.id));
+          const toAdd = reminderNotifications.filter(n => !existingIds.has(n.id));
+          return [...prev, ...toAdd];
         });
+
+        reminderNotifications.forEach(() => playNotificationSound());
       }
-
-      setTaskReminders(reminders);
     } catch (error) {
-      console.error('Error checking task reminders:', error);
+      console.error('❌ Error checking task reminders:', error);
     }
-  };
+  }, [activeNotifications]);
 
-  // Remove notification from active popups
-  const removeNotification = (id: string) => {
+  // Remove notification
+  const removeNotification = useCallback((id: string) => {
+    console.log('🗑️ Removing notification:', id);
+    
     setActiveNotifications(prev => prev.filter(n => n.id !== id));
-  };
 
-  // Handle mark as read
-  const handleMarkAsRead = async (id: string) => {
-    // Don't mark task reminders as read via API
+    // Handle task reminders
+    if (id.startsWith('task-reminder-')) {
+      const taskId = id.replace('task-reminder-', '');
+      dismissedRemindersRef.current.add(taskId);
+      saveDismissedReminders();
+      console.log('✅ Dismissed task reminder:', taskId);
+    } else {
+      // Regular notifications - mark as shown
+      shownIdsRef.current.add(id);
+      saveShownIds();
+      console.log('✅ Marked notification as shown:', id);
+    }
+  }, [saveShownIds, saveDismissedReminders]);
+
+  // Mark as read
+  const handleMarkAsRead = useCallback(async (id: string) => {
+    // Task reminders don't need API call
     if (id.startsWith('task-reminder-')) {
       removeNotification(id);
       return;
     }
 
     try {
-      // Mark notification as read via API
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/notifications`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      // Notifications API is on the main site
+      const baseUrl = API_BASE_URL || 'https://thejaayveeworld.com';
+      const response = await authenticatedFetch(`${baseUrl}/api/notifications/read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notificationIds: [id] }),
       });
 
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          // Also call the callback if provided
-          if (onMarkAsRead) {
-            onMarkAsRead(id);
-          }
+          shownIdsRef.current.add(id);
+          saveShownIds();
+          if (onMarkAsRead) onMarkAsRead(id);
         }
       }
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error('❌ Error marking as read:', error);
     }
-    
+
     removeNotification(id);
-  };
+  }, [removeNotification, onMarkAsRead, saveShownIds]);
 
-  // Set up polling for notifications and task reminders
+  // Fetch only on page load/refresh (no polling, no event listeners)
   useEffect(() => {
-    // Initial check after a short delay to allow page to load
-    const initialTimeout = setTimeout(() => {
-      checkForNewNotifications();
+    if (!isInitializedRef.current) return;
+
+    // Fetch once after a short delay to allow page to load
+    const timeout = setTimeout(() => {
+      console.log('🔄 Fetching notifications on page load');
       checkTaskReminders();
-    }, 2000);
-
-    // Poll for new notifications every 30 seconds
-    const notificationInterval = setInterval(checkForNewNotifications, 30000);
-
-    // Check task reminders every 2 minutes (more frequent for better UX)
-    const taskReminderInterval = setInterval(() => {
-      const now = Date.now();
-      // Check reminders every 2 minutes
-      if (now - lastReminderCheck.current >= 2 * 60 * 1000) {
-        lastReminderCheck.current = now;
-        checkTaskReminders();
-      }
-    }, 60000); // Check every minute, but only process if 2 minutes passed
+    }, 1000);
 
     return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(notificationInterval);
-      clearInterval(taskReminderInterval);
+      clearTimeout(timeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isInitializedRef.current]); // Only run once when initialized
 
   return (
     <>
@@ -216,4 +264,3 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
     </>
   );
 }
-
