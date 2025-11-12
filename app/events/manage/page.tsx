@@ -77,6 +77,8 @@ export default function ManageEventsPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Event>>({});
+  const [editTicketTypes, setEditTicketTypes] = useState<Array<{ id?: string; name: string; price: number; quantity: number; description?: string }>>([]);
+  const [loadingTicketTypes, setLoadingTicketTypes] = useState(false);
   const [originalBanner, setOriginalBanner] = useState<string | null>(null); // Track original banner URL for deletion
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -284,7 +286,8 @@ export default function ManageEventsPage() {
         state: "",
         slug: "",
         published: false,
-        status: "upcoming"
+        status: "upcoming",
+        ticketTypes: []
       });
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -383,6 +386,35 @@ export default function ManageEventsPage() {
         throw new Error(data.error || "Failed to update event");
       }
 
+      // Update ticket types if they were modified
+      if (editTicketTypes.length > 0) {
+        setUploadProgress('Updating ticket types...');
+        try {
+          const ticketTypesData = editTicketTypes.map(tt => ({
+            name: tt.name,
+            price: tt.price,
+            capacity: tt.quantity,
+            admissionCount: 1,
+            attributes: tt.description ? { description: tt.description } : null
+          }));
+
+          const ticketsRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${id}/tickets`, {
+            method: "POST",
+            body: JSON.stringify({
+              ticketTypes: ticketTypesData,
+              generateTickets: false
+            }),
+          });
+
+          if (!ticketsRes.ok) {
+            console.warn("Failed to update ticket types, but event was updated");
+          }
+        } catch (ticketErr) {
+          console.error("Error updating ticket types:", ticketErr);
+          // Don't fail the whole update if ticket types fail
+        }
+      }
+
       setSuccess("Event updated successfully!");
       
       // Clean up preview URLs
@@ -392,6 +424,7 @@ export default function ManageEventsPage() {
       
       setEditingId(null);
       setEditForm({});
+      setEditTicketTypes([]);
       setOriginalBanner(null);
       setSelectedEditFile(null);
       setPreviewEditUrl(null);
@@ -440,7 +473,7 @@ export default function ManageEventsPage() {
     }
   };
 
-  const startEdit = (event: Event) => {
+  const startEdit = async (event: Event) => {
     setEditingId(event.id);
     setOriginalBanner(event.banner || null); // Store original banner URL
     setSelectedEditFile(null); // Clear any selected file
@@ -464,6 +497,34 @@ export default function ManageEventsPage() {
       published: event.published,
       status: event.status
     });
+
+    // Fetch existing ticket types
+    setLoadingTicketTypes(true);
+    try {
+      const ticketsRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${event.id}/tickets`);
+      if (ticketsRes.ok) {
+        const ticketsData = await ticketsRes.json();
+        if (ticketsData.success && ticketsData.data?.ticketTypes) {
+          const ticketTypes = ticketsData.data.ticketTypes.map((tt: any) => ({
+            id: tt.id,
+            name: tt.name,
+            price: tt.price,
+            quantity: tt.capacity,
+            description: tt.attributes?.description || ""
+          }));
+          setEditTicketTypes(ticketTypes);
+        } else {
+          setEditTicketTypes([]);
+        }
+      } else {
+        setEditTicketTypes([]);
+      }
+    } catch (err) {
+      console.error("Error fetching ticket types:", err);
+      setEditTicketTypes([]);
+    } finally {
+      setLoadingTicketTypes(false);
+    }
   };
 
   const handleImageSelect = (file: File, isEdit: boolean = false) => {
@@ -1240,6 +1301,125 @@ export default function ManageEventsPage() {
                                   className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg"
                                 />
                               </div>
+
+                              {/* Ticket Types Section for Edit */}
+                              <div className="border-t border-primary-border pt-4">
+                                <div className="flex justify-between items-center mb-4">
+                                  <label className="block text-sm font-medium text-primary-fg">Ticket Types</label>
+                                  {loadingTicketTypes ? (
+                                    <span className="text-sm text-primary-muted">Loading...</span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditTicketTypes([
+                                          ...editTicketTypes,
+                                          { name: "", price: 0, quantity: 0, description: "" }
+                                        ]);
+                                      }}
+                                      className="btn-secondary flex items-center gap-2 text-sm"
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                      Add Ticket Type
+                                    </button>
+                                  )}
+                                </div>
+                                {loadingTicketTypes ? (
+                                  <p className="text-sm text-primary-muted italic">Loading ticket types...</p>
+                                ) : editTicketTypes.length === 0 ? (
+                                  <p className="text-sm text-primary-muted italic">No ticket types added. Click "Add Ticket Type" to add one.</p>
+                                ) : (
+                                  <div className="space-y-4">
+                                    {editTicketTypes.map((ticketType, index) => (
+                                      <div key={index} className="border border-primary-border rounded-lg p-4 bg-primary-accent-light">
+                                        <div className="flex justify-between items-start mb-3">
+                                          <h4 className="text-sm font-medium text-primary-fg">Ticket Type {index + 1}</h4>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const newTicketTypes = editTicketTypes.filter((_, i) => i !== index);
+                                              setEditTicketTypes(newTicketTypes);
+                                            }}
+                                            className="text-red-600 hover:text-red-700"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </button>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                          <div>
+                                            <label className="block text-xs font-medium text-primary-fg mb-1">
+                                              Name *
+                                            </label>
+                                            <input
+                                              type="text"
+                                              required
+                                              value={ticketType.name}
+                                              onChange={(e) => {
+                                                const newTicketTypes = [...editTicketTypes];
+                                                newTicketTypes[index] = { ...ticketType, name: e.target.value };
+                                                setEditTicketTypes(newTicketTypes);
+                                              }}
+                                              placeholder="e.g., VIP, General, Early Bird"
+                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs font-medium text-primary-fg mb-1">
+                                              Price (₹) *
+                                            </label>
+                                            <input
+                                              type="number"
+                                              required
+                                              min="0"
+                                              step="0.01"
+                                              value={ticketType.price || ""}
+                                              onChange={(e) => {
+                                                const newTicketTypes = [...editTicketTypes];
+                                                newTicketTypes[index] = { ...ticketType, price: parseFloat(e.target.value) || 0 };
+                                                setEditTicketTypes(newTicketTypes);
+                                              }}
+                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs font-medium text-primary-fg mb-1">
+                                              Quantity (Available Tickets) *
+                                            </label>
+                                            <input
+                                              type="number"
+                                              required
+                                              min="1"
+                                              value={ticketType.quantity || ""}
+                                              onChange={(e) => {
+                                                const newTicketTypes = [...editTicketTypes];
+                                                newTicketTypes[index] = { ...ticketType, quantity: parseInt(e.target.value) || 0 };
+                                                setEditTicketTypes(newTicketTypes);
+                                              }}
+                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                            />
+                                          </div>
+                                          <div>
+                                            <label className="block text-xs font-medium text-primary-fg mb-1">
+                                              Description (Optional)
+                                            </label>
+                                            <input
+                                              type="text"
+                                              value={ticketType.description || ""}
+                                              onChange={(e) => {
+                                                const newTicketTypes = [...editTicketTypes];
+                                                newTicketTypes[index] = { ...ticketType, description: e.target.value };
+                                                setEditTicketTypes(newTicketTypes);
+                                              }}
+                                              placeholder="Brief description of this ticket type"
+                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                            />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                   <input
@@ -1262,6 +1442,7 @@ export default function ManageEventsPage() {
                                       }
                                       setEditingId(null);
                                       setEditForm({});
+                                      setEditTicketTypes([]);
                                       setOriginalBanner(null);
                                       setSelectedEditFile(null);
                                       setPreviewEditUrl(null);

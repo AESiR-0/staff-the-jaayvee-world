@@ -37,6 +37,7 @@ const navigation = [
   // { name: "Events", href: "/events", icon: Calendar },
   { name: "Manage Events", href: "/events/manage", icon: Calendar },
   { name: "Event Share Messages", href: "/events/share-messages", icon: MessageSquare },
+  { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Event Scenarios", href: "/events/scenarios", icon: TrendingUp },
   { name: "Coupons", href: "/coupons", icon: Ticket },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
@@ -241,6 +242,7 @@ export default function Sidebar() {
                 (item.href === "/events/manage" && pathname.startsWith("/events/manage")) ||
                 (item.href === "/events/share-messages" && pathname.startsWith("/events/share-messages")) ||
                 (item.href === "/events/scenarios" && pathname.startsWith("/events/scenarios")) ||
+                (item.href === "/calendar" && pathname.startsWith("/calendar")) ||
                 (item.href === "/downline" && pathname.startsWith("/downline")) ||
                 (item.href === "/tasks" && pathname.startsWith("/tasks")) ||
                 (item.href === "/gallery" && pathname.startsWith("/gallery")) ||

@@ -405,6 +405,66 @@ export default function EventScenariosPage() {
                 </div>
               )}
 
+              {/* Expenses Breakdown */}
+              {event.calculations && event.calculations.expenses && (
+                <div className="mt-6 pt-6 border-t border-primary-border">
+                  <h3 className="text-lg font-semibold text-primary-fg mb-4">Expenses Breakdown</h3>
+                  <div className="space-y-3">
+                    {event.calculations.expenses.breakdown && (
+                      <>
+                        {event.calculations.expenses.breakdown.fixed && event.calculations.expenses.breakdown.fixed.length > 0 && (
+                          <div>
+                            <div className="text-sm font-medium text-primary-muted mb-2">Fixed Expenses</div>
+                            <div className="space-y-1">
+                              {event.calculations.expenses.breakdown.fixed.map((expense: any, idx: number) => (
+                                <div key={idx} className="flex justify-between text-sm">
+                                  <span className="text-primary-fg">{expense.name}</span>
+                                  <span className="text-primary-fg font-medium">{formatCurrency(expense.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {event.calculations.expenses.breakdown.perPerson && event.calculations.expenses.breakdown.perPerson.length > 0 && (
+                          <div>
+                            <div className="text-sm font-medium text-primary-muted mb-2">Per-Person Expenses</div>
+                            <div className="space-y-1">
+                              {event.calculations.expenses.breakdown.perPerson.map((expense: any, idx: number) => (
+                                <div key={idx} className="flex justify-between text-sm">
+                                  <span className="text-primary-fg">{expense.name} ({expense.invitees} invitees)</span>
+                                  <span className="text-primary-fg font-medium">{formatCurrency(expense.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {event.calculations.expenses.breakdown.percentage && event.calculations.expenses.breakdown.percentage.length > 0 && (
+                          <div>
+                            <div className="text-sm font-medium text-primary-muted mb-2">Percentage Expenses</div>
+                            <div className="space-y-1">
+                              {event.calculations.expenses.breakdown.percentage.map((expense: any, idx: number) => (
+                                <div key={idx} className="flex justify-between text-sm">
+                                  <span className="text-primary-fg">{expense.name} ({expense.percentage}%)</span>
+                                  <span className="text-primary-fg font-medium">{formatCurrency(expense.amount)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    <div className="pt-3 border-t border-primary-border">
+                      <div className="flex justify-between">
+                        <span className="text-sm font-semibold text-primary-fg">Total Expenses</span>
+                        <span className="text-sm font-semibold text-primary-fg">
+                          {formatCurrency(event.calculations.expenses.totalExpenses)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Financial Summary */}
               {event.calculations && (
                 <div className="mt-6 pt-6 border-t border-primary-border">
