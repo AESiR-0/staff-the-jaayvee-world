@@ -90,7 +90,8 @@ export default function ManageEventsPage() {
     state: "",
     slug: "",
     published: false,
-    status: "upcoming"
+    status: "upcoming",
+    ticketTypes: [] as Array<{ name: string; price: number; quantity: number; description?: string }>
   });
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -254,6 +255,7 @@ export default function ManageEventsPage() {
           slug: createForm.slug || null,
           published: createForm.published,
           status: createForm.status,
+          ticketTypes: createForm.ticketTypes.length > 0 ? createForm.ticketTypes : undefined,
           // ventureId will be auto-detected from Talaash venture
         }),
       });
@@ -770,6 +772,129 @@ export default function ManageEventsPage() {
                   </select>
                 </div>
               </div>
+              
+              {/* Ticket Types Section */}
+              <div className="border-t border-primary-border pt-4">
+                <div className="flex justify-between items-center mb-4">
+                  <label className="block text-sm font-medium text-primary-fg">Ticket Types</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreateForm({
+                        ...createForm,
+                        ticketTypes: [
+                          ...createForm.ticketTypes,
+                          { name: "", price: 0, quantity: 0, description: "" }
+                        ]
+                      });
+                    }}
+                    className="btn-secondary flex items-center gap-2 text-sm"
+                    disabled={submitting}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Ticket Type
+                  </button>
+                </div>
+                {createForm.ticketTypes.length === 0 ? (
+                  <p className="text-sm text-primary-muted italic">No ticket types added. Click "Add Ticket Type" to add one.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {createForm.ticketTypes.map((ticketType, index) => (
+                      <div key={index} className="border border-primary-border rounded-lg p-4 bg-primary-accent-light">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="text-sm font-medium text-primary-fg">Ticket Type {index + 1}</h4>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newTicketTypes = createForm.ticketTypes.filter((_, i) => i !== index);
+                              setCreateForm({ ...createForm, ticketTypes: newTicketTypes });
+                            }}
+                            className="text-red-600 hover:text-red-700"
+                            disabled={submitting}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-primary-fg mb-1">
+                              Name *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              disabled={submitting}
+                              value={ticketType.name}
+                              onChange={(e) => {
+                                const newTicketTypes = [...createForm.ticketTypes];
+                                newTicketTypes[index] = { ...ticketType, name: e.target.value };
+                                setCreateForm({ ...createForm, ticketTypes: newTicketTypes });
+                              }}
+                              placeholder="e.g., VIP, General, Early Bird"
+                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-primary-fg mb-1">
+                              Price (₹) *
+                            </label>
+                            <input
+                              type="number"
+                              required
+                              min="0"
+                              step="0.01"
+                              disabled={submitting}
+                              value={ticketType.price || ""}
+                              onChange={(e) => {
+                                const newTicketTypes = [...createForm.ticketTypes];
+                                newTicketTypes[index] = { ...ticketType, price: parseFloat(e.target.value) || 0 };
+                                setCreateForm({ ...createForm, ticketTypes: newTicketTypes });
+                              }}
+                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-primary-fg mb-1">
+                              Quantity (Available Tickets) *
+                            </label>
+                            <input
+                              type="number"
+                              required
+                              min="1"
+                              disabled={submitting}
+                              value={ticketType.quantity || ""}
+                              onChange={(e) => {
+                                const newTicketTypes = [...createForm.ticketTypes];
+                                newTicketTypes[index] = { ...ticketType, quantity: parseInt(e.target.value) || 0 };
+                                setCreateForm({ ...createForm, ticketTypes: newTicketTypes });
+                              }}
+                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-primary-fg mb-1">
+                              Description (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              disabled={submitting}
+                              value={ticketType.description || ""}
+                              onChange={(e) => {
+                                const newTicketTypes = [...createForm.ticketTypes];
+                                newTicketTypes[index] = { ...ticketType, description: e.target.value };
+                                setCreateForm({ ...createForm, ticketTypes: newTicketTypes });
+                              }}
+                              placeholder="Brief description of this ticket type"
+                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-primary-fg mb-2">Description</label>
                 <textarea
@@ -814,7 +939,8 @@ export default function ManageEventsPage() {
         state: "",
         slug: "",
         published: false,
-        status: "upcoming"
+        status: "upcoming",
+        ticketTypes: []
       });
       setSelectedFile(null);
       setPreviewUrl(null);

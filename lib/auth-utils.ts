@@ -85,10 +85,56 @@ export async function authenticatedFetch(url: string, options?: RequestInit): Pr
     headers.set('Content-Type', 'application/json');
   }
   
-  return fetch(url, {
-    ...options,
-    headers,
-    credentials: 'include' // Include cookies (auth-token from server)
-  });
+  try {
+    const fetchOptions = {
+      ...options,
+      headers,
+      credentials: 'include' as RequestCredentials, // Include cookies (auth-token from server)
+      mode: 'cors' as RequestMode, // Explicitly set CORS mode
+    };
+    
+    console.log('📤 Fetch request:', {
+      url,
+      method: fetchOptions.method || 'GET',
+      headers: Object.fromEntries(headers.entries()),
+      hasBody: !!fetchOptions.body,
+    });
+    
+    const response = await fetch(url, fetchOptions);
+    
+    console.log('📥 Fetch response:', {
+      url,
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+    });
+    
+    return response;
+  } catch (error: any) {
+    // Enhanced error logging for fetch failures
+    const errorDetails: any = {
+      url,
+      method: options?.method || 'GET',
+    };
+    
+    // Try to extract error information
+    if (error) {
+      if (error.message) errorDetails.message = error.message;
+      if (error.name) errorDetails.name = error.name;
+      if (error.stack) errorDetails.stack = error.stack;
+      if (error.cause) errorDetails.cause = error.cause;
+      // Log the full error object
+      errorDetails.fullError = error;
+    } else {
+      errorDetails.note = 'Error object is empty or undefined';
+    }
+    
+    console.error('❌ Fetch error details:', errorDetails);
+    console.error('❌ Full error object:', error);
+    
+    // Re-throw with more context
+    const errorMessage = error?.message || error?.toString() || 'Failed to fetch';
+    throw new Error(`Network error: ${errorMessage}. URL: ${url}. Check CORS and network connectivity.`);
+  }
 }
 

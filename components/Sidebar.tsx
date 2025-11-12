@@ -20,12 +20,13 @@ import {
   Shield,
   ArrowRight,
   UserCircle,
-  ChevronDown
+  ChevronDown,
+  TrendingUp
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getStaffSession } from "@/lib/auth-utils";
-import { canAccess, routeToTabKey, canAccessRBAC, fetchUserPermissions, Permission } from "@/lib/rbac";
+import { canAccess, routeToTabKey, canAccessRBAC, fetchUserPermissions, Permission, isSuperAdmin } from "@/lib/rbac";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -36,6 +37,7 @@ const navigation = [
   // { name: "Events", href: "/events", icon: Calendar },
   { name: "Manage Events", href: "/events/manage", icon: Calendar },
   { name: "Event Share Messages", href: "/events/share-messages", icon: MessageSquare },
+  { name: "Event Scenarios", href: "/events/scenarios", icon: TrendingUp },
   { name: "Coupons", href: "/coupons", icon: Ticket },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
   { name: "Gallery", href: "/gallery", icon: ImageIcon },
@@ -43,6 +45,7 @@ const navigation = [
   { name: "Careers", href: "/careers", icon: Briefcase },
   { name: "Create User", href: "/sellers/create", icon: Users },
   { name: "Updates", href: "/updates/create", icon: Bell },
+  { name: "WhatsApp Bulk", href: "/whatsapp-bulk", icon: MessageSquare },
   { name: "RBAC", href: "/rbac", icon: Shield },
 ];
 
@@ -177,9 +180,6 @@ export default function Sidebar() {
           <div className="space-y-2">
             {navigation
               .filter((item) => {
-                // Import isSuperAdmin helper
-                const { isSuperAdmin } = require('@/lib/rbac');
-                
                 // Super admins have access to everything
                 if (isSuperAdmin(email)) {
                   return true;
@@ -212,6 +212,10 @@ export default function Sidebar() {
                   ];
                   return allowedEmails.includes(email?.toLowerCase() || '');
                 }
+                // Event Scenarios - admin only
+                if (item.href === "/events/scenarios") {
+                  return isSuperAdmin(email);
+                }
                 // RBAC management - only for thejaayveeworldofficial@gmail.com
                 if (item.href === "/rbac") {
                   return email?.toLowerCase() === "thejaayveeworldofficial@gmail.com";
@@ -236,11 +240,13 @@ export default function Sidebar() {
                 (item.href === "/updates/create" && pathname.startsWith("/updates")) ||
                 (item.href === "/events/manage" && pathname.startsWith("/events/manage")) ||
                 (item.href === "/events/share-messages" && pathname.startsWith("/events/share-messages")) ||
+                (item.href === "/events/scenarios" && pathname.startsWith("/events/scenarios")) ||
                 (item.href === "/downline" && pathname.startsWith("/downline")) ||
                 (item.href === "/tasks" && pathname.startsWith("/tasks")) ||
                 (item.href === "/gallery" && pathname.startsWith("/gallery")) ||
                 (item.href === "/layouts" && pathname.startsWith("/layouts")) ||
-                (item.href === "/careers" && pathname.startsWith("/careers"));
+                (item.href === "/careers" && pathname.startsWith("/careers")) ||
+                (item.href === "/whatsapp-bulk" && pathname.startsWith("/whatsapp-bulk"));
               
               return (
                 <Link

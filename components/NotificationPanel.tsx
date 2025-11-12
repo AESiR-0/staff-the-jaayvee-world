@@ -28,8 +28,12 @@ export default function NotificationPanel() {
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const url = `${API_BASE_URL}/api/notifications?limit=20`;
+      // Ensure URL is properly formatted (handle empty API_BASE_URL for relative URLs)
+      const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+      const url = `${baseUrl}/api/notifications?limit=20`;
       console.log('Fetching notifications:', url);
+      console.log('API_BASE_URL:', API_BASE_URL);
+      console.log('Base URL used:', baseUrl);
       
       const response = await authenticatedFetch(url);
       
@@ -49,6 +53,11 @@ export default function NotificationPanel() {
       }
     } catch (error: any) {
       console.error('Error fetching notifications:', error);
+      // Log network errors with more detail
+      if (error.message?.includes('Network error') || error.message?.includes('Failed to fetch')) {
+        console.error('Network error - check API_BASE_URL configuration:', API_BASE_URL);
+        console.error('Make sure NEXT_PUBLIC_API_BASE_URL is set correctly in .env.local');
+      }
       // Don't show alert in dropdown, just log
     } finally {
       setLoading(false);
@@ -58,14 +67,24 @@ export default function NotificationPanel() {
   // Mark notification as read
   const markAsRead = async (notificationId: string) => {
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/notifications`, {
+      const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+      const response = await authenticatedFetch(`${baseUrl}/api/notifications`, {
         method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ notificationIds: [notificationId] }),
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to mark as read:', response.status, errorText);
+        throw new Error(`Failed to mark notification as read: ${response.status}`);
+      }
+
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (data.success) {
         // Update local state immediately for better UX
         setNotifications(prev =>
           prev.map(n =>
@@ -75,17 +94,23 @@ export default function NotificationPanel() {
           )
         );
         setUnreadCount(prev => Math.max(0, prev - 1));
+      } else {
+        console.error('API returned error:', data.error);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error marking notification as read:', error);
+      // Optionally show a toast notification here
     }
   };
 
   // Mark all as read
   const markAllAsRead = async () => {
     try {
-      const url = `${API_BASE_URL}/api/notifications`;
+      const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+      const url = `${baseUrl}/api/notifications`;
       console.log('Marking all notifications as read:', url);
+      console.log('API_BASE_URL:', API_BASE_URL);
+      console.log('Base URL used:', baseUrl);
       
       const response = await authenticatedFetch(url, {
         method: 'PATCH',
@@ -112,6 +137,10 @@ export default function NotificationPanel() {
       }
     } catch (error: any) {
       console.error('Error marking all as read:', error);
+      // Show user-friendly error message
+      if (error.message?.includes('Network error') || error.message?.includes('Failed to fetch')) {
+        console.error('Network error - check API_BASE_URL configuration:', API_BASE_URL);
+      }
       // Don't show alert in dropdown, just log
     }
   };
@@ -262,8 +291,11 @@ export default function NotificationPanel() {
                           </div>
                           {!notification.isRead && (
                             <button
-                              onClick={() => markAsRead(notification.id)}
-                              className="p-1 hover:bg-primary-accent rounded"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                markAsRead(notification.id);
+                              }}
+                              className="p-1 hover:bg-primary-accent rounded transition-colors"
                               title="Mark as read"
                             >
                               <Check className="h-3 w-3 text-primary-muted" />

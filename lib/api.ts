@@ -1,5 +1,20 @@
 // API Configuration
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+// The notifications API is on the main site (jaayvee-world), not the staff portal
+// For local development: If main API is running on localhost:3000, set NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+// For production: Uses talaash.thejaayveeworld.com or set NEXT_PUBLIC_API_BASE_URL
+function getApiBaseUrl(): string {
+  // If explicitly set in env, use it (highest priority)
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+    return process.env.NEXT_PUBLIC_API_BASE_URL;
+  }
+  
+  // Default to production API
+  // Note: For localhost development, you need to set NEXT_PUBLIC_API_BASE_URL in .env.local
+  // Example: NEXT_PUBLIC_API_BASE_URL=http://localhost:3000 (if main API runs there)
+  return 'https://talaash.thejaayveeworld.com';
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export const API_ENDPOINTS = {
   // Staff Auth (backend routes remain as staff)

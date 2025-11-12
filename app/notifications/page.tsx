@@ -27,7 +27,8 @@ export default function NotificationsPage() {
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/notifications?limit=100`);
+      const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+      const response = await authenticatedFetch(`${baseUrl}/api/notifications?limit=100`);
       const data = await response.json();
       
       if (data.success) {
@@ -43,7 +44,8 @@ export default function NotificationsPage() {
   // Mark notification as read
   const markAsRead = async (notificationId: string) => {
     try {
-      const url = `${API_BASE_URL}/api/notifications`;
+      const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+      const url = `${baseUrl}/api/notifications`;
       console.log('Marking notification as read:', url, notificationId);
       
       const response = await authenticatedFetch(url, {
@@ -84,7 +86,8 @@ export default function NotificationsPage() {
   // Mark all as read
   const markAllAsRead = async () => {
     try {
-      const url = `${API_BASE_URL}/api/notifications`;
+      const baseUrl = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+      const url = `${baseUrl}/api/notifications`;
       console.log('Marking all notifications as read:', url);
       
       const response = await authenticatedFetch(url, {
@@ -295,7 +298,11 @@ export default function NotificationsPage() {
                       </div>
                       {!notification.isRead && (
                         <button
-                          onClick={() => markAsRead(notification.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            markAsRead(notification.id);
+                          }}
                           className="p-2 hover:bg-primary-accent-light rounded-lg transition-colors flex-shrink-0"
                           title="Mark as read"
                         >
