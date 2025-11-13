@@ -125,6 +125,7 @@ export default function CouponGeneratorPage() {
     quantity: '1',
     prefix: 'EVT',
     codeLength: '8',
+    onlyForStudent: false,
   });
 
   const generateCouponCode = (prefix: string, length: string | number): string => {
@@ -159,7 +160,8 @@ export default function CouponGeneratorPage() {
         applicableTo: formData.applicableTo,
         eventId: formData.eventId || undefined,
         category: formData.category || undefined,
-      });
+        onlyForStudent: formData.onlyForStudent,
+      } as any);
     }
 
     // Save to database via API
@@ -472,6 +474,20 @@ export default function CouponGeneratorPage() {
               />
             </div>
 
+            {/* Only for Student Checkbox */}
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="onlyForStudent"
+                checked={formData.onlyForStudent}
+                onChange={(e) => setFormData({ ...formData, onlyForStudent: e.target.checked })}
+                className="w-5 h-5 border border-primary-border rounded focus:ring-2 focus:ring-primary-accent text-primary-accent"
+              />
+              <label htmlFor="onlyForStudent" className="text-sm font-medium text-primary-fg cursor-pointer">
+                Only for Student (requires student ID verification)
+              </label>
+            </div>
+
             {/* Generate Button */}
             <button
               onClick={handleGenerate}
@@ -487,3 +503,4 @@ export default function CouponGeneratorPage() {
     </div>
   );
 }
+

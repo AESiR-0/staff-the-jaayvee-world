@@ -124,3 +124,4 @@ export function EventTable({ events }: EventTableProps) {
     </div>
   );
 }
+

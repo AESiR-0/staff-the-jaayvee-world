@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Image as ImageIcon, Upload, Edit2, Trash2, X, Save, Loader2, Download } from "lucide-react";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 
 interface GalleryImage {
   id: string;
@@ -57,7 +57,7 @@ export default function GalleryPage() {
     isActive: true,
   });
 
-  const session = getStaffSession();
+  const session = getTeamSession();
 
   useEffect(() => {
     checkPermission();
@@ -67,7 +67,7 @@ export default function GalleryPage() {
   const checkPermission = async () => {
     try {
       // Check if user is admin first (admins can always upload)
-      const session = getStaffSession();
+      const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
       
@@ -688,4 +688,5 @@ export default function GalleryPage() {
     </div>
   );
 }
+
 

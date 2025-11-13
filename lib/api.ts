@@ -21,25 +21,25 @@ function getApiBaseUrl(): string {
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
 
 export const API_ENDPOINTS = {
-  // Staff Auth (backend routes remain as staff)
-  STAFF_AUTH_LOGIN: '/api/staff/auth/login',
-  STAFF_AUTH_REGISTER: '/api/staff/auth/register',
-  STAFF_AUTH_INITIATE: '/api/staff/auth/initiate',
-  STAFF_AUTH_VERIFY: '/api/staff/auth/verify',
+  // Team Auth
+  TEAM_AUTH_LOGIN: '/api/team/auth/login',
+  TEAM_AUTH_REGISTER: '/api/team/auth/register',
+  TEAM_AUTH_INITIATE: '/api/team/auth/initiate',
+  TEAM_AUTH_VERIFY: '/api/team/auth/verify',
   
   // QR Tools
-  QR_GENERATE: '/api/staff/qr/generate',
-  QR_ASSIGN_RANGE: '/api/staff/qr/assign-range',
-  QR_ASSIGNMENTS: '/api/staff/qr/assignments',
-  QR_HISTORY: '/api/staff/qr/history',
+  QR_GENERATE: '/api/team/qr/generate',
+  QR_ASSIGN_RANGE: '/api/team/qr/assign-range',
+  QR_ASSIGNMENTS: '/api/team/qr/assignments',
+  QR_HISTORY: '/api/team/qr/history',
   
   // Agents
   AGENTS: '/api/agents',
   SEED_AGENTS: '/api/seed/agents',
   
   // Affiliates
-  STAFF_AFFILIATE: '/api/staff/affiliate',
-  STAFF_AFFILIATES_STATS: '/api/staff/affiliates/stats',
+  TEAM_AFFILIATE: '/api/team/affiliate',
+  TEAM_AFFILIATES_STATS: '/api/team/affiliates/stats',
   
   // Events
   TALAASH_EVENTS_SUMMARY: '/api/talaash/events/summary',
@@ -49,7 +49,11 @@ export const API_ENDPOINTS = {
   COUPONS_VALIDATE: '/api/coupons/validate',
   
   // Sellers
-  CREATE_SELLER: '/api/staff/sellers/create',
+  CREATE_SELLER: '/api/team/sellers/create',
+  
+  // CSV Lists
+  CSV_LISTS: '/api/csv-lists',
+  CSV_LISTS_COMBINE: '/api/csv-lists/combine',
 };
 
 export const fetchAPI = async <T = any>(endpoint: string, options?: RequestInit): Promise<T> => {
@@ -84,22 +88,22 @@ export const fetchAPI = async <T = any>(endpoint: string, options?: RequestInit)
 // Alias for backward compatibility
 export const apiCall = fetchAPI;
 
-// Helper function for staff login (backend uses staff, frontend shows team)
-export const staffLogin = async (email: string, password: string) => {
-  return fetchAPI(API_ENDPOINTS.STAFF_AUTH_LOGIN, {
+// Helper function for team login
+export const teamLogin = async (email: string, password: string) => {
+  return fetchAPI(API_ENDPOINTS.TEAM_AUTH_LOGIN, {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
 };
 
-// Helper function for staff register (backend uses staff, frontend shows team)
-export const staffRegister = async (fullName: string, email: string, password: string, phone?: string) => {
-  return fetchAPI(API_ENDPOINTS.STAFF_AUTH_REGISTER, {
+// Helper function for team register
+export const teamRegister = async (fullName: string, email: string, password: string, phone?: string) => {
+  return fetchAPI(API_ENDPOINTS.TEAM_AUTH_REGISTER, {
     method: 'POST',
     body: JSON.stringify({ fullName, email, password, phone }),
   });
 };
 
-// Frontend aliases for team terminology (UI only)
-export const teamLogin = staffLogin;
-export const teamRegister = staffRegister;
+// Backward compatibility aliases
+export const staffLogin = teamLogin;
+export const staffRegister = teamRegister;

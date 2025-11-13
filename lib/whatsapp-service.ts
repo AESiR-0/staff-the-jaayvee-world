@@ -148,22 +148,38 @@ export async function sendBatch(request: SendBatchRequest): Promise<SendBatchRes
       throw new Error('WHATSAPP_SERVICE_URL is not configured');
     }
     
+    // Debug: Verify messageTemplate has newlines before sending
+    const newlineCount = (request.messageTemplate.match(/\n/g) || []).length;
+    console.log('📤 whatsapp-service - messageTemplate length:', request.messageTemplate.length);
+    console.log('📤 Contains newlines:', request.messageTemplate.includes('\n'));
+    console.log('📤 Newline count:', newlineCount);
+    
+    // Ensure newlines are preserved - JSON.stringify should handle this, but verify
+    const messageTemplateWithNewlines = request.messageTemplate;
+    
+    const requestBody = {
+      contacts: request.contacts,
+      messageTemplate: messageTemplateWithNewlines, // JSON.stringify will preserve \n as-is
+      batchSizeMin: request.batchSizeMin || 30,
+      batchSizeMax: request.batchSizeMax || 50,
+      delayBetweenMessagesMin: request.delayBetweenMessagesMin || 1000, // 1 second
+      delayBetweenMessagesMax: request.delayBetweenMessagesMax || 3000, // 3 seconds
+      delayBetweenBatchesMin: request.delayBetweenBatchesMin || 120000, // 2 minutes
+      delayBetweenBatchesMax: request.delayBetweenBatchesMax || 300000, // 5 minutes
+    };
+    
+    // Verify JSON stringify preserves newlines
+    const jsonString = JSON.stringify(requestBody);
+    const newlinesInJson = (jsonString.match(/\\n/g) || []).length;
+    console.log('📤 JSON stringified - newlines in JSON string:', newlinesInJson);
+    
     const response = await fetch(`${serviceUrl}/send/batch`, {
       method: 'POST',
       headers: {
         ...getHeaders(),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        contacts: request.contacts,
-        messageTemplate: request.messageTemplate,
-        batchSizeMin: request.batchSizeMin || 30,
-        batchSizeMax: request.batchSizeMax || 50,
-        delayBetweenMessagesMin: request.delayBetweenMessagesMin || 1000, // 1 second
-        delayBetweenMessagesMax: request.delayBetweenMessagesMax || 3000, // 3 seconds
-        delayBetweenBatchesMin: request.delayBetweenBatchesMin || 120000, // 2 minutes
-        delayBetweenBatchesMax: request.delayBetweenBatchesMax || 300000, // 5 minutes
-      }),
+      body: jsonString, // JSON.stringify preserves \n as \n in the string
     });
 
     if (!response.ok) {
@@ -263,4 +279,5 @@ export async function checkServiceHealth(): Promise<boolean> {
     return false;
   }
 }
+
 

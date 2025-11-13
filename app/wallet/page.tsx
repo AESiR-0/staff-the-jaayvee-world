@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Wallet, TrendingUp, DollarSign, History, Users } from "lucide-react";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 
 interface WalletData {
   wallet: {
@@ -46,7 +46,7 @@ export default function WalletPage() {
       setError(null);
       
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/wallet`);
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/wallet`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch wallet data');
@@ -252,4 +252,5 @@ export default function WalletPage() {
     </div>
   );
 }
+
 

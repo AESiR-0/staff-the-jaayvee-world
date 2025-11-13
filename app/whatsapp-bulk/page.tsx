@@ -1,9 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Upload, Send, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Upload, Send, Loader2, CheckCircle, XCircle, Plus, Filter, X } from 'lucide-react';
 import WhatsAppQRCode from '@/components/WhatsAppQRCode';
-import { parseCSV, type Contact } from '@/lib/csv-parser';
+import WhatsAppRichTextEditor from '@/components/WhatsAppRichTextEditor';
+import CSVUploadModal from '@/components/CSVUploadModal';
+import CSVListTable, { type CSVListItem } from '@/components/CSVListTable';
+import CSVPreviewTable, { type Contact } from '@/components/CSVPreviewTable';
+import { authenticatedFetch } from '@/lib/auth-utils';
+import { parseCSV } from '@/lib/csv-parser';
 
 interface JobStatus {
   jobId: string;
@@ -22,28 +27,76 @@ interface JobStatus {
 }
 
 export default function WhatsAppBulkPage() {
+  // Message and sending state
   const [messageTemplate, setMessageTemplate] = useState('');
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [contacts, setContacts] = useState<Contact[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [csvError, setCsvError] = useState<string | null>(null);
   const [serviceConfigured, setServiceConfigured] = useState<boolean | null>(null);
   const statusIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // CSV Database state
+  const [csvLists, setCsvLists] = useState<CSVListItem[]>([]);
+  const [selectedCsvIds, setSelectedCsvIds] = useState<string[]>([]);
+  const [combinedContacts, setCombinedContacts] = useState<Contact[]>([]);
+  const [loadingCsvLists, setLoadingCsvLists] = useState(false);
+  const [loadingCombined, setLoadingCombined] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [editingCsv, setEditingCsv] = useState<CSVListItem | null>(null);
+  const [previewingCsvId, setPreviewingCsvId] = useState<string | null>(null);
+
+  // Filtering and pagination
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'createdAt' | 'totalContacts'>('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [categories, setCategories] = useState<string[]>([]);
+
+  // Legacy CSV upload (fallback)
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [legacyContacts, setLegacyContacts] = useState<Contact[]>([]);
+  const [csvError, setCsvError] = useState<string | null>(null);
 
   useEffect(() => {
     checkServiceHealth();
     checkAuthStatus();
+    fetchCsvLists();
     return () => {
       if (statusIntervalRef.current) {
         clearInterval(statusIntervalRef.current);
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (jobId && sending) {
+      statusIntervalRef.current = setInterval(() => {
+        fetchJobStatus();
+      }, 2000);
+      return () => {
+        if (statusIntervalRef.current) {
+          clearInterval(statusIntervalRef.current);
+        }
+      };
+    }
+  }, [jobId, sending]);
+
+  useEffect(() => {
+    if (selectedCsvIds.length > 0) {
+      combineCsvLists();
+    } else {
+      setCombinedContacts([]);
+    }
+  }, [selectedCsvIds]);
+
+  useEffect(() => {
+    fetchCsvLists();
+  }, [categoryFilter, searchQuery, sortBy, sortOrder, currentPage]);
 
   const checkServiceHealth = async () => {
     try {
@@ -58,21 +111,6 @@ export default function WhatsAppBulkPage() {
     }
   };
 
-  useEffect(() => {
-    if (jobId && sending) {
-      // Poll for status updates
-      statusIntervalRef.current = setInterval(() => {
-        fetchJobStatus();
-      }, 2000); // Poll every 2 seconds
-
-      return () => {
-        if (statusIntervalRef.current) {
-          clearInterval(statusIntervalRef.current);
-        }
-      };
-    }
-  }, [jobId, sending]);
-
   const checkAuthStatus = async () => {
     try {
       const response = await fetch('/api/whatsapp/auth?action=status');
@@ -85,6 +123,183 @@ export default function WhatsAppBulkPage() {
     }
   };
 
+  const fetchCsvLists = async () => {
+    setLoadingCsvLists(true);
+    try {
+      const params = new URLSearchParams();
+      if (categoryFilter) params.append('category', categoryFilter);
+      if (searchQuery) params.append('search', searchQuery);
+      params.append('sortBy', sortBy);
+      params.append('sortOrder', sortOrder);
+      params.append('page', currentPage.toString());
+      params.append('limit', '20');
+
+      const response = await authenticatedFetch(`/api/csv-lists?${params.toString()}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setCsvLists(data.data.csvLists || []);
+        setTotalPages(data.data.pagination?.totalPages || 1);
+        setCategories(data.data.categories || []);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch CSV lists:', err);
+    } finally {
+      setLoadingCsvLists(false);
+    }
+  };
+
+  const combineCsvLists = async () => {
+    if (selectedCsvIds.length === 0) {
+      setCombinedContacts([]);
+      return;
+    }
+
+    setLoadingCombined(true);
+    try {
+      const response = await authenticatedFetch('/api/csv-lists/combine', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          csvIds: selectedCsvIds,
+          removeDuplicates: true,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCombinedContacts(data.data.contacts || []);
+      }
+    } catch (err: any) {
+      console.error('Failed to combine CSV lists:', err);
+      setError('Failed to combine selected CSV lists');
+    } finally {
+      setLoadingCombined(false);
+    }
+  };
+
+  const handleSelectCsv = (id: string) => {
+    setSelectedCsvIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      setSelectedCsvIds(csvLists.map((csv) => csv.id));
+    } else {
+      setSelectedCsvIds([]);
+    }
+  };
+
+  const handleEditCsv = async (csv: CSVListItem) => {
+    const newName = prompt('Enter new name:', csv.name);
+    if (!newName || newName.trim() === csv.name) return;
+
+    const newCategory = prompt('Enter new category:', csv.category);
+    if (!newCategory || newCategory.trim() === csv.category) return;
+
+    const newDescription = prompt('Enter new description (optional):', csv.description || '') || null;
+
+    try {
+      const response = await authenticatedFetch(`/api/csv-lists/${csv.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+          category: newCategory.trim(),
+          description: newDescription?.trim() || null,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchCsvLists();
+      } else {
+        alert('Failed to update CSV list');
+      }
+    } catch (err) {
+      console.error('Failed to update CSV:', err);
+      alert('Failed to update CSV list');
+    }
+  };
+
+  const handleDeleteCsv = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this CSV list?')) return;
+
+    try {
+      const response = await authenticatedFetch(`/api/csv-lists/${id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSelectedCsvIds((prev) => prev.filter((i) => i !== id));
+        fetchCsvLists();
+      } else {
+        alert('Failed to delete CSV list');
+      }
+    } catch (err) {
+      console.error('Failed to delete CSV:', err);
+      alert('Failed to delete CSV list');
+    }
+  };
+
+  const handlePreviewCsv = (id: string) => {
+    setPreviewingCsvId(id);
+  };
+
+  const handleEditContact = async (csvId: string, contactIndex: number, contact: Contact) => {
+    try {
+      const response = await authenticatedFetch(`/api/csv-lists/${csvId}/contacts/${contactIndex}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(contact),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Refresh combined contacts if this CSV is selected
+        if (selectedCsvIds.includes(csvId)) {
+          combineCsvLists();
+        }
+        // If previewing, refresh preview
+        if (previewingCsvId === csvId) {
+          // The preview will need to be refreshed separately
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update contact:', err);
+    }
+  };
+
+  const handleDeleteContact = async (csvId: string, contactIndex: number) => {
+    try {
+      const response = await authenticatedFetch(`/api/csv-lists/${csvId}/contacts/${contactIndex}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Refresh combined contacts if this CSV is selected
+        if (selectedCsvIds.includes(csvId)) {
+          combineCsvLists();
+        }
+        fetchCsvLists();
+      }
+    } catch (err) {
+      console.error('Failed to delete contact:', err);
+    }
+  };
+
+  // Legacy CSV upload handler
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -97,26 +312,25 @@ export default function WhatsAppBulkPage() {
     setCsvFile(file);
     setCsvError(null);
 
-    // Parse CSV immediately for preview
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const csvText = event.target?.result as string;
         const result = parseCSV(csvText);
-        
+
         if (result.contacts.length === 0) {
           setCsvError('No valid contacts found in CSV file');
-          setContacts([]);
+          setLegacyContacts([]);
           return;
         }
 
-        setContacts(result.contacts);
+        setLegacyContacts(result.contacts);
         if (result.errors.length > 0) {
           console.warn('CSV parsing errors:', result.errors);
         }
       } catch (err: any) {
         setCsvError(err.message || 'Failed to parse CSV file');
-        setContacts([]);
+        setLegacyContacts([]);
       }
     };
     reader.readAsText(file);
@@ -128,8 +342,11 @@ export default function WhatsAppBulkPage() {
       return;
     }
 
-    if (contacts.length === 0) {
-      setError('Please upload a CSV file with contacts');
+    // Use combined contacts from selected CSVs, or fallback to legacy contacts
+    const contactsToSend = combinedContacts.length > 0 ? combinedContacts : legacyContacts;
+
+    if (contactsToSend.length === 0) {
+      setError('Please select CSV lists or upload a CSV file with contacts');
       return;
     }
 
@@ -143,11 +360,15 @@ export default function WhatsAppBulkPage() {
     setSending(true);
 
     try {
+      // Create a temporary CSV file from contacts
+      const csvContent = contactsToSend.map(c => `${c.phone},${c.name || ''}`).join('\n');
+      const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+      const csvFileToSend = new File([csvBlob], 'contacts.csv', { type: 'text/csv' });
+
       const formData = new FormData();
-      if (csvFile) {
-        formData.append('csv', csvFile);
-      }
-      formData.append('message', messageTemplate);
+      formData.append('csv', csvFileToSend);
+      const messageWithNewlines = messageTemplate.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      formData.append('message', messageWithNewlines);
 
       const response = await fetch('/api/whatsapp/send', {
         method: 'POST',
@@ -192,7 +413,7 @@ export default function WhatsAppBulkPage() {
 
       if (data.success) {
         setJobStatus(data.data);
-        
+
         if (data.data.status === 'completed' || data.data.status === 'cancelled' || data.data.status === 'error') {
           setSending(false);
           if (statusIntervalRef.current) {
@@ -219,7 +440,6 @@ export default function WhatsAppBulkPage() {
         if (statusIntervalRef.current) {
           clearInterval(statusIntervalRef.current);
         }
-        // Update status to cancelled
         if (jobStatus) {
           setJobStatus({
             ...jobStatus,
@@ -237,11 +457,13 @@ export default function WhatsAppBulkPage() {
     return Math.round((jobStatus.progress.contactsProcessed / jobStatus.progress.totalContacts) * 100);
   };
 
+  const activeContacts = combinedContacts.length > 0 ? combinedContacts : legacyContacts;
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-primary-fg">WhatsApp Bulk Messaging</h1>
-        <p className="text-primary-muted mt-1">Send messages to multiple contacts in batches</p>
+        <p className="text-primary-muted mt-1">Send messages to multiple contacts using saved CSV lists or upload a new CSV</p>
       </div>
 
       {/* Service Configuration Warning */}
@@ -250,7 +472,6 @@ export default function WhatsAppBulkPage() {
           <p className="text-yellow-800 font-medium">⚠️ WhatsApp service not configured</p>
           <p className="text-yellow-700 text-sm mt-1">
             Please set <code className="bg-yellow-100 px-1 rounded">WHATSAPP_SERVICE_URL</code> in your Vercel environment variables.
-            See <code className="bg-yellow-100 px-1 rounded">WHATSAPP_SETUP_GUIDE.md</code> for instructions.
           </p>
         </div>
       )}
@@ -269,23 +490,188 @@ export default function WhatsAppBulkPage() {
             <label className="block text-sm font-medium text-primary-fg mb-2">
               Message Template
             </label>
-            <textarea
+            <WhatsAppRichTextEditor
               value={messageTemplate}
-              onChange={(e) => setMessageTemplate(e.target.value)}
+              onChange={setMessageTemplate}
               placeholder="Enter your message here. Use {name} as a placeholder for contact names."
-              className="w-full px-4 py-3 border border-primary-border rounded-lg focus:ring-2 focus:ring-primary-accent focus:border-primary-accent outline-none resize-none"
               rows={6}
             />
-            <p className="text-xs text-primary-muted mt-2">
-              Use {'{name}'} as a placeholder for contact names. Example: &quot;Hi {'{name}'}, welcome to our service!&quot;
-            </p>
           </div>
 
-          {/* CSV Upload */}
+          {/* CSV Library Section */}
           <div className="bg-white border border-primary-border rounded-lg p-6">
-            <label className="block text-sm font-medium text-primary-fg mb-2">
-              Upload CSV File
-            </label>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-primary-fg">CSV Library</h2>
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                <Plus size={16} />
+                Upload CSV
+              </button>
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-wrap gap-4 mb-4">
+              <div className="flex-1 min-w-[200px]">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search CSV lists..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="min-w-[150px]">
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => {
+                    setCategoryFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">All Categories</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-[150px]">
+                <select
+                  value={`${sortBy}-${sortOrder}`}
+                  onChange={(e) => {
+                    const [newSortBy, newSortOrder] = e.target.value.split('-') as [typeof sortBy, typeof sortOrder];
+                    setSortBy(newSortBy);
+                    setSortOrder(newSortOrder);
+                    setCurrentPage(1);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="createdAt-desc">Newest First</option>
+                  <option value="createdAt-asc">Oldest First</option>
+                  <option value="name-asc">Name A-Z</option>
+                  <option value="name-desc">Name Z-A</option>
+                  <option value="totalContacts-desc">Most Contacts</option>
+                  <option value="totalContacts-asc">Fewest Contacts</option>
+                </select>
+              </div>
+            </div>
+
+            {/* CSV List Table */}
+            <CSVListTable
+              csvLists={csvLists}
+              selectedIds={selectedCsvIds}
+              onSelect={handleSelectCsv}
+              onSelectAll={handleSelectAll}
+              onEdit={handleEditCsv}
+              onDelete={handleDeleteCsv}
+              onPreview={handlePreviewCsv}
+              loading={loadingCsvLists}
+            />
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-sm text-gray-700">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Preview Section */}
+          {activeContacts.length > 0 && (
+            <div className="bg-white border border-primary-border rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-primary-fg">
+                  Preview Contacts ({activeContacts.length.toLocaleString()} contacts)
+                  {selectedCsvIds.length > 0 && (
+                    <span className="ml-2 text-sm font-normal text-gray-600">
+                      from {selectedCsvIds.length} selected CSV{selectedCsvIds.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </h3>
+                {selectedCsvIds.length > 0 && (
+                  <button
+                    onClick={() => setSelectedCsvIds([])}
+                    className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
+                  >
+                    <X size={16} />
+                    Clear Selection
+                  </button>
+                )}
+              </div>
+              {combinedContacts.length > 0 ? (
+                <CSVPreviewTable
+                  contacts={combinedContacts}
+                  onEdit={(index, contact) => {
+                    // For combined contacts, we need to find which CSV it belongs to
+                    // This is a simplified version - in a real scenario, you'd track the source CSV
+                    console.warn('Editing combined contacts is not fully supported yet');
+                  }}
+                  onDelete={(index) => {
+                    console.warn('Deleting from combined contacts is not fully supported yet');
+                  }}
+                  loading={loadingCombined}
+                />
+              ) : (
+                <div className="text-sm text-gray-600">
+                  <p>Showing {legacyContacts.length} contacts from uploaded CSV file</p>
+                  <div className="mt-4 max-h-60 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-2 text-left">Phone</th>
+                          <th className="px-4 py-2 text-left">Name</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {legacyContacts.slice(0, 10).map((contact, index) => (
+                          <tr key={index} className="border-t">
+                            <td className="px-4 py-2">{contact.phone}</td>
+                            <td className="px-4 py-2">{contact.name || '(No name)'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {legacyContacts.length > 10 && (
+                      <p className="text-xs text-gray-500 mt-2 text-center">
+                        Showing first 10 of {legacyContacts.length} contacts
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Legacy CSV Upload (Fallback) */}
+          <div className="bg-white border border-primary-border rounded-lg p-6">
+            <h3 className="text-sm font-medium text-primary-fg mb-2">Or Upload CSV File Directly</h3>
             <div className="border-2 border-dashed border-primary-border rounded-lg p-6 text-center">
               <Upload className="h-8 w-8 text-primary-muted mx-auto mb-2" />
               <input
@@ -312,38 +698,6 @@ export default function WhatsAppBulkPage() {
             )}
           </div>
 
-          {/* Contacts Preview */}
-          {contacts.length > 0 && (
-            <div className="bg-white border border-primary-border rounded-lg p-6">
-              <h3 className="text-sm font-medium text-primary-fg mb-4">
-                Contacts Preview ({contacts.length} contacts)
-              </h3>
-              <div className="max-h-60 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-primary-fg">Phone</th>
-                      <th className="px-4 py-2 text-left text-primary-fg">Name</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contacts.slice(0, 10).map((contact, index) => (
-                      <tr key={index} className="border-t border-primary-border">
-                        <td className="px-4 py-2 text-primary-fg">{contact.phone}</td>
-                        <td className="px-4 py-2 text-primary-fg">{contact.name || '(No name)'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {contacts.length > 10 && (
-                  <p className="text-xs text-primary-muted mt-2 text-center">
-                    Showing first 10 of {contacts.length} contacts
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* Error Display */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
@@ -359,7 +713,7 @@ export default function WhatsAppBulkPage() {
           <div className="flex gap-4">
             <button
               onClick={handleSend}
-              disabled={loading || sending || contacts.length === 0 || !messageTemplate.trim()}
+              disabled={loading || sending || activeContacts.length === 0 || !messageTemplate.trim()}
               className="flex items-center gap-2 px-6 py-3 bg-primary-accent text-white rounded-lg hover:bg-primary-accent/90 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
               {loading ? (
@@ -370,7 +724,7 @@ export default function WhatsAppBulkPage() {
               ) : (
                 <>
                   <Send className="h-5 w-5" />
-                  Start Sending
+                  Send to {activeContacts.length.toLocaleString()} Contact{activeContacts.length !== 1 ? 's' : ''}
                 </>
               )}
             </button>
@@ -455,7 +809,15 @@ export default function WhatsAppBulkPage() {
           )}
         </>
       )}
+
+      {/* Upload Modal */}
+      <CSVUploadModal
+        isOpen={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onSuccess={() => {
+          fetchCsvLists();
+        }}
+      />
     </div>
   );
 }
-

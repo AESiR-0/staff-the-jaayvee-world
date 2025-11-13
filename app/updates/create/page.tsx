@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Send, AlertCircle, UserPlus, X } from "lucide-react";
-import { authenticatedFetch, getStaffSession, getAuthToken } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 
 // Allowed emails for creating updates
 const ALLOWED_EMAIL = [
@@ -406,3 +406,4 @@ export default function CreateUpdatePage() {
     </div>
   );
 }
+

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { QrCode, Users, MousePointer, TrendingUp, Copy, ExternalLink, Calendar } from "lucide-react";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
 import { EventReferralLink } from "@/components/EventReferralLink";
 
@@ -76,14 +76,14 @@ export default function ReferralsPage() {
   const fetchReferralData = async () => {
     try {
       setLoading(true);
-      const session = getStaffSession();
+      const session = getTeamSession();
       
       console.log('📊 Fetching referral data...');
       console.log('Session:', session);
 
       // Fetch affiliate stats
       if (session?.staffId) {
-        const url = `${API_BASE_URL}${API_ENDPOINTS.STAFF_AFFILIATE}`;
+        const url = `${API_BASE_URL}${API_ENDPOINTS.TEAM_AFFILIATE}`;
         console.log('🌐 Fetching from URL:', url);
         
         const affiliateRes = await authenticatedFetch(url);

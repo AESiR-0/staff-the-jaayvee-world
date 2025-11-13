@@ -1,4 +1,5 @@
 import { authenticatedFetch } from "@/lib/auth-utils";
+import { API_BASE_URL } from "@/lib/api";
 
 export interface Task {
   id: string;
@@ -18,8 +19,12 @@ export interface TaskReminder {
 
 export async function fetchTasksForReminders(): Promise<Task[]> {
   try {
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-    const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/tasks`);
+    // Tasks API is on the main site (jaayvee-world), same as notifications
+    // Use API_BASE_URL from lib/api.ts but fallback to main site (not talaash)
+    // For local dev: Set NEXT_PUBLIC_API_BASE_URL=http://localhost:3000 in .env.local
+    const baseUrl = API_BASE_URL || 'https://thejaayveeworld.com';
+    
+    const response = await authenticatedFetch(`${baseUrl}/api/team/tasks`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch tasks');
@@ -78,4 +83,5 @@ export function formatTimeRemaining(minutes: number): string {
   const remainingHours = hours % 24;
   return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days} day${days !== 1 ? 's' : ''}`;
 }
+
 

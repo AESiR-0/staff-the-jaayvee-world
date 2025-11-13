@@ -2,11 +2,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle, ArrowRight, Mail, Lock, Eye, EyeOff } from "lucide-react";
-import { staffLogin } from "@/lib/api";
+import { teamLogin } from "@/lib/api";
 
 type AuthStep = 'login' | 'success';
 
-export default function StaffAuthFlow() {
+export default function TeamAuthFlow() {
   const [step, setStep] = useState<AuthStep>('login');
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,7 +25,7 @@ export default function StaffAuthFlow() {
     setError(null);
 
     try {
-      const response = await staffLogin(email, password);
+      const response = await teamLogin(email, password);
       
       if (response.success && response.data.token) {
         // Store token
@@ -33,7 +33,8 @@ export default function StaffAuthFlow() {
         localStorage.setItem("userSession", JSON.stringify({
           displayName: response.data.user.name,
           email: response.data.user.email,
-          staffId: response.data.staffId,
+          teamId: response.data.teamId || response.data.staffId, // Backward compatibility
+          staffId: response.data.staffId, // Backward compatibility
           loginTime: new Date().toISOString(),
           affiliateCode: response.data.affiliateCode
         }));
@@ -62,7 +63,7 @@ export default function StaffAuthFlow() {
           <div className="w-16 h-16 bg-primary-accent rounded-2xl flex items-center justify-center mx-auto mb-4">
             <span className="text-white font-bold text-2xl">TJ</span>
           </div>
-          <h1 className="text-3xl font-bold text-primary-fg mb-2">Staff Authentication</h1>
+          <h1 className="text-3xl font-bold text-primary-fg mb-2">Team Authentication</h1>
           <p className="text-primary-muted">The Jaayvee World Portal</p>
         </div>
 
@@ -77,7 +78,7 @@ export default function StaffAuthFlow() {
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-primary-muted" size={20} />
                 <input
                   type="email"
-                  placeholder="staff@jaayvee.staff"
+                  placeholder="team@jaayvee.world"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
@@ -159,3 +160,4 @@ export default function StaffAuthFlow() {
     </div>
   );
 }
+

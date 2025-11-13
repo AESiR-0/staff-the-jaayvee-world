@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Layout, Upload, Edit2, Save, X, Loader2, Image as ImageIcon } from "lucide-react";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import RichTextEditor from "@/components/RichTextEditor";
 
 interface LayoutData {
@@ -61,7 +61,7 @@ export default function LayoutsPage() {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data?.users) {
-          const session = getStaffSession();
+          const session = getTeamSession();
           const userEmail = session?.email;
           
           if (userEmail) {
@@ -84,14 +84,14 @@ export default function LayoutsPage() {
       }
       
       // Fallback: check if user is admin
-      const session = getStaffSession();
+      const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
       setCanManage(isSuperAdmin(userEmail));
     } catch (err) {
       console.error('Error checking permissions:', err);
       // Fallback: check if user is admin
-      const session = getStaffSession();
+      const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
       setCanManage(isSuperAdmin(userEmail));
@@ -567,4 +567,5 @@ export default function LayoutsPage() {
     </div>
   );
 }
+
 

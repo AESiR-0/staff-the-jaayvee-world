@@ -33,7 +33,8 @@ export default function TeamAuthFlow() {
         localStorage.setItem("userSession", JSON.stringify({
           displayName: response.data.user.name,
           email: response.data.user.email,
-          staffId: response.data.staffId, // Backend uses staffId
+          teamId: response.data.teamId || response.data.staffId, // Backward compatibility
+          staffId: response.data.staffId, // Backward compatibility
           loginTime: new Date().toISOString(),
           affiliateCode: response.data.affiliateCode
         }));
@@ -55,7 +56,7 @@ export default function TeamAuthFlow() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[url('https://talaash.thejaayveeworld.com/Partners_patterns.webp')] text-primary-fg p-6">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-primary-bg text-primary-fg p-6">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
@@ -77,7 +78,7 @@ export default function TeamAuthFlow() {
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-primary-muted" size={20} />
                 <input
                   type="email"
-                  placeholder="team@jaayvee.team"
+                  placeholder="team@jaayvee.world"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
@@ -132,7 +133,14 @@ export default function TeamAuthFlow() {
               )}
             </button>
 
-          
+            <div className="text-center text-sm text-primary-muted">
+              <p>
+                Don&apos;t have an account?{" "}
+                <a href="/register" className="text-primary-accent hover:underline">
+                  Register here
+                </a>
+              </p>
+            </div>
           </div>
         </div>
 

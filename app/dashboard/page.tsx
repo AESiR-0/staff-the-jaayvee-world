@@ -10,7 +10,7 @@ import { Calendar, QrCode, Users, TrendingUp, Plus, Shield } from "lucide-react"
 import Link from "next/link";
 import { API_ENDPOINTS } from "@/lib/api";
 import { Event, AffiliateStats } from "@/lib/types";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 
 // Real data will be fetched from API
 
@@ -19,9 +19,9 @@ function DashboardContent() {
   const [canCreateUpdates, setCanCreateUpdates] = useState(false);
   const [canAccessRBAC, setCanAccessRBAC] = useState(false);
   
-  // Get staff session (backend uses staffId)
-  const session = typeof window !== 'undefined' ? getStaffSession() : null;
-  const staffId = session?.staffId;
+  // Get team session (backend uses teamId)
+  const session = typeof window !== 'undefined' ? getTeamSession() : null;
+  const teamId = session?.teamId || session?.staffId; // Backward compatibility
   
   // Fetch real data from API with error handling
   const [events, setEvents] = useState<Event[]>([]);
@@ -85,9 +85,9 @@ function DashboardContent() {
           setEvents(fetchedEvents);
         }
         
-        // Fetch affiliate stats - pass staffId in request body if available
-        if (staffId) {
-          const affiliateRes = await authenticatedFetch(`${API_BASE_URL}${API_ENDPOINTS.STAFF_AFFILIATE}`);
+        // Fetch affiliate stats - pass teamId in request body if available
+        if (teamId) {
+          const affiliateRes = await authenticatedFetch(`${API_BASE_URL}${API_ENDPOINTS.TEAM_AFFILIATE}`);
           if (affiliateRes.ok) {
             const affiliateData = await affiliateRes.json();
             setAffiliateStats({
@@ -108,7 +108,7 @@ function DashboardContent() {
     };
     
     fetchData();
-  }, [staffId]);
+  }, [teamId]);
 
   return (
     <div className="space-y-6">
@@ -233,4 +233,5 @@ function DashboardContent() {
 export default function DashboardPage() {
   return <DashboardContent />;
 }
+
 

@@ -62,7 +62,7 @@ This guide will help you test the WhatsApp bulk messaging feature on your local 
 
 3. **Keep this terminal open** - the server needs to keep running
 
-## Step 4: Configure Staff Portal for Local Testing
+## Step 4: Configure Team Portal for Local Testing
 
 1. **Navigate back to staff portal root:**
    ```bash
@@ -86,7 +86,7 @@ This guide will help you test the WhatsApp bulk messaging feature on your local 
    - Use `http://localhost:3001` (not https)
    - Use the same `API_KEY` as in Step 2
 
-## Step 5: Start Staff Portal Locally
+## Step 5: Start Team Portal Locally
 
 1. **Install dependencies (if not already done):**
    ```bash
@@ -104,7 +104,7 @@ This guide will help you test the WhatsApp bulk messaging feature on your local 
 
 ## Step 6: Test the Integration
 
-1. **Open Staff Portal:**
+1. **Open Team Portal:**
    - Go to: `http://localhost:3000/whatsapp-bulk`
    - Or navigate via sidebar: "WhatsApp Bulk"
 
@@ -143,7 +143,7 @@ This guide will help you test the WhatsApp bulk messaging feature on your local 
 - Make sure you ran `npm install` in `whatsapp-server` directory
 - Check that all dependencies are installed
 
-### Staff Portal Can't Connect to Server
+### Team Portal Can't Connect to Server
 
 **Error: Service not configured**
 - Check `.env.local` file exists in staff portal root
@@ -187,7 +187,7 @@ Once local testing is successful:
 
 1. **Deploy WhatsApp Server** to Railway/Render/Fly.io
 2. **Update Vercel Environment Variables** with production server URL
-3. **Deploy Staff Portal** to Vercel
+3. **Deploy Team Portal** to Vercel
 4. **Re-authenticate** WhatsApp (scan QR code again on production)
 
 ## Important Notes
@@ -205,7 +205,7 @@ cd whatsapp-server
 npm install
 npm start
 
-# Terminal 2: Start Staff Portal
+# Terminal 2: Start Team Portal
 cd ..
 npm run dev
 ```

@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { TrendingUp, BarChart3, RefreshCw, ExternalLink, Loader2, Filter } from "lucide-react";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { TrendingUp, BarChart3, RefreshCw, ExternalLink, Loader2, Filter, Info, ChevronDown, ChevronUp } from "lucide-react";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { isSuperAdmin } from "@/lib/rbac";
 import { API_BASE_URL } from "@/lib/api";
 
@@ -14,6 +14,35 @@ interface Event {
   endDate: string | null;
   status: string;
   published: boolean;
+}
+
+interface TicketTypeBreakdown {
+  id: string;
+  name: string;
+  price: number;
+  capacity: number;
+  sold: number;
+  available: number;
+  revenue: number;
+  revenuePercentage: number;
+}
+
+interface TicketTypeScenario {
+  scenarioName: string;
+  description: string;
+  ticketTypeBreakdown: Array<{
+    ticketTypeId: string;
+    ticketTypeName: string;
+    sold: number;
+    capacity: number;
+    price: number;
+    revenue: number;
+  }>;
+  totalCapacity: number;
+  totalSold: number;
+  expectedIncome: number;
+  expectedProfit: number;
+  profitMargin: number;
 }
 
 interface FinancialCalculations {
@@ -30,6 +59,7 @@ interface FinancialCalculations {
     sponsorIncome: number;
     otherIncome: number;
     totalIncome: number;
+    ticketTypeBreakdown?: TicketTypeBreakdown[];
   };
   profit: {
     totalExpenses: number;
@@ -45,6 +75,15 @@ interface FinancialCalculations {
       expectedProfit: number;
       profitMargin: number;
     }>;
+    ticketTypeScenarios?: TicketTypeScenario[];
+  };
+  subscriberLimitsBreakdown?: {
+    enabled: boolean;
+    premium: { limit: number; used: number };
+    diamond: { limit: number; used: number };
+    exclusiveBlack: { limit: number; used: number };
+    student: { limit: number; used: number };
+    total: { limit: number; used: number };
   };
 }
 
@@ -78,6 +117,9 @@ export default function EventScenariosPage() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
+  const [loadingCalculations, setLoadingCalculations] = useState<Set<string>>(new Set());
+  const [loadedCalculations, setLoadedCalculations] = useState<Set<string>>(new Set());
 
   const fetchEvents = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -94,13 +136,13 @@ export default function EventScenariosPage() {
 
       const eventsList: Event[] = eventsData.data || [];
 
-      // Fetch financial data and live metrics for each event
+      // Only fetch basic financials and live metrics (not calculations)
       const eventsWithData = await Promise.all(
         eventsList.map(async (event) => {
           const eventData: EventWithData = { ...event };
 
           try {
-            // Fetch financials
+            // Fetch financials (basic info only)
             const financialsRes = await authenticatedFetch(
               `${API_BASE_URL}/api/events/${event.id}/financials`
             );
@@ -108,17 +150,6 @@ export default function EventScenariosPage() {
               const financialsData = await financialsRes.json();
               if (financialsData.success && financialsData.data?.financials) {
                 eventData.financials = financialsData.data.financials;
-              }
-            }
-
-            // Fetch calculations
-            const calcRes = await authenticatedFetch(
-              `${API_BASE_URL}/api/events/${event.id}/financials/calculate`
-            );
-            if (calcRes.ok) {
-              const calcData = await calcRes.json();
-              if (calcData.success && calcData.data) {
-                eventData.calculations = calcData.data;
               }
             }
 
@@ -130,6 +161,19 @@ export default function EventScenariosPage() {
               const metricsData = await metricsRes.json();
               if (metricsData.success && metricsData.data) {
                 eventData.liveMetrics = metricsData.data;
+              }
+            }
+
+            // Only fetch calculations if already loaded before
+            if (loadedCalculations.has(event.id)) {
+              const calcRes = await authenticatedFetch(
+                `${API_BASE_URL}/api/events/${event.id}/financials/calculate`
+              );
+              if (calcRes.ok) {
+                const calcData = await calcRes.json();
+                if (calcData.success && calcData.data) {
+                  eventData.calculations = calcData.data;
+                }
               }
             }
           } catch (err) {
@@ -148,11 +192,62 @@ export default function EventScenariosPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [loadedCalculations]);
+
+  const fetchEventCalculations = useCallback(async (eventId: string) => {
+    // Don't fetch if already loading or already loaded
+    if (loadingCalculations.has(eventId) || loadedCalculations.has(eventId)) {
+      return;
+    }
+
+    setLoadingCalculations(prev => new Set(prev).add(eventId));
+
+    try {
+      const calcRes = await authenticatedFetch(
+        `${API_BASE_URL}/api/events/${eventId}/financials/calculate`
+      );
+      
+      if (calcRes.ok) {
+        const calcData = await calcRes.json();
+        if (calcData.success && calcData.data) {
+          setEvents(prev => prev.map(event => 
+            event.id === eventId 
+              ? { ...event, calculations: calcData.data }
+              : event
+          ));
+          setLoadedCalculations(prev => new Set(prev).add(eventId));
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching calculations for event ${eventId}:`, error);
+    } finally {
+      setLoadingCalculations(prev => {
+        const next = new Set(prev);
+        next.delete(eventId);
+        return next;
+      });
+    }
+  }, [loadingCalculations, loadedCalculations]);
+
+  const toggleEventExpanded = useCallback((eventId: string) => {
+    setExpandedEvents(prev => {
+      const next = new Set(prev);
+      if (next.has(eventId)) {
+        next.delete(eventId);
+      } else {
+        next.add(eventId);
+        // Fetch calculations when expanding
+        if (!loadedCalculations.has(eventId)) {
+          fetchEventCalculations(eventId);
+        }
+      }
+      return next;
+    });
+  }, [loadedCalculations, fetchEventCalculations]);
 
   useEffect(() => {
     const checkAuthorization = async () => {
-      const session = getStaffSession();
+      const session = getTeamSession();
       if (!session?.email) {
         router.push("/login");
         return;
@@ -274,35 +369,53 @@ export default function EventScenariosPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {filteredEvents.map((event) => (
-            <div key={event.id} className="card">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-primary-fg">{event.title}</h2>
-                  <div className="flex items-center gap-4 mt-2">
-                    <span className={`text-xs px-2 py-1 rounded ${getStatusColor(event.status)}`}>
-                      {event.status}
-                    </span>
-                    <span className="text-sm text-primary-muted">
-                      {new Date(event.startDate).toLocaleDateString()}
-                    </span>
-                    {!event.published && (
-                      <span className="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800">
-                        Draft
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={() => router.push(`/events/manage`)}
-                  className="btn-secondary flex items-center gap-2 text-sm"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Manage Event
-                </button>
-              </div>
+          {filteredEvents.map((event) => {
+            const isExpanded = expandedEvents.has(event.id);
+            const isLoadingCalc = loadingCalculations.has(event.id);
+            const hasCalculations = !!event.calculations;
 
-              {/* Live Metrics */}
+            return (
+              <div key={event.id} className="card">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleEventExpanded(event.id)}
+                        className="p-1 hover:bg-primary-bg rounded transition-colors"
+                        aria-label={isExpanded ? "Collapse" : "Expand"}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-primary-muted" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-primary-muted" />
+                        )}
+                      </button>
+                      <h2 className="text-xl font-semibold text-primary-fg">{event.title}</h2>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 ml-7">
+                      <span className={`text-xs px-2 py-1 rounded ${getStatusColor(event.status)}`}>
+                        {event.status}
+                      </span>
+                      <span className="text-sm text-primary-muted">
+                        {new Date(event.startDate).toLocaleDateString()}
+                      </span>
+                      {!event.published && (
+                        <span className="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800">
+                          Draft
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => router.push(`/events/manage`)}
+                    className="btn-secondary flex items-center gap-2 text-sm"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Manage Event
+                  </button>
+                </div>
+
+              {/* Live Metrics - Always visible */}
               {event.liveMetrics && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <div className="border border-primary-border rounded-lg p-4">
@@ -358,153 +471,415 @@ export default function EventScenariosPage() {
                 </div>
               )}
 
-              {/* Financial Scenarios */}
-              {event.calculations?.suggestions?.scenarios && event.calculations.suggestions.scenarios.length > 0 ? (
-                <div>
-                  <h3 className="text-lg font-semibold text-primary-fg mb-4">Top Scenarios</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-primary-border">
-                          <th className="text-left py-2 px-2 text-primary-muted">Price</th>
-                          <th className="text-left py-2 px-2 text-primary-muted">Capacity</th>
-                          <th className="text-right py-2 px-2 text-primary-muted">Income</th>
-                          <th className="text-right py-2 px-2 text-primary-muted">Profit</th>
-                          <th className="text-right py-2 px-2 text-primary-muted">Margin %</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {event.calculations.suggestions.scenarios.map((scenario, idx) => (
-                          <tr key={idx} className="border-b border-primary-border">
-                            <td className="py-2 px-2 text-primary-fg">
-                              {formatCurrency(scenario.price)}
-                            </td>
-                            <td className="py-2 px-2 text-primary-fg">{scenario.capacity}</td>
-                            <td className="py-2 px-2 text-right text-primary-fg">
-                              {formatCurrency(scenario.expectedIncome)}
-                            </td>
-                            <td
-                              className={`py-2 px-2 text-right ${
-                                scenario.expectedProfit >= 0 ? "text-green-600" : "text-red-600"
+              {/* Financial Calculations - Accordion Content */}
+              {isExpanded && (
+                <div className="mt-6 pt-6 border-t border-primary-border">
+                  {isLoadingCalc ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary-accent mr-3" />
+                      <span className="text-primary-muted">Loading financial calculations...</span>
+                    </div>
+                  ) : hasCalculations ? (
+                    <>
+                      {/* Summary Cards */}
+                      {event.calculations && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                          <div>
+                            <div className="text-sm text-primary-muted mb-1">Total Expenses</div>
+                            <div className="text-lg font-semibold text-primary-fg">
+                              {formatCurrency(event.calculations.expenses.totalExpenses)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-sm text-primary-muted mb-1 flex items-center gap-1">
+                              Total Income
+                              <div className="group relative">
+                                <Info className="h-3 w-3 cursor-help text-primary-muted" />
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+                                  <div className="bg-primary-fg text-primary-bg text-xs rounded-lg p-3 shadow-lg min-w-[200px]">
+                                    <div className="font-semibold mb-2">Income Breakdown:</div>
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between">
+                                        <span>Ticket Income:</span>
+                                        <span className="font-medium">{formatCurrency(event.calculations.income.ticketIncome)}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Sponsor Income:</span>
+                                        <span className="font-medium">{formatCurrency(event.calculations.income.sponsorIncome)}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Other Income:</span>
+                                        <span className="font-medium">{formatCurrency(event.calculations.income.otherIncome)}</span>
+                                      </div>
+                                      <div className="border-t border-primary-bg/20 pt-1 mt-1 flex justify-between font-semibold">
+                                        <span>Total:</span>
+                                        <span>{formatCurrency(event.calculations.income.totalIncome)}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-lg font-semibold text-primary-fg">
+                              {formatCurrency(event.calculations.income.totalIncome)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-sm text-primary-muted mb-1">Profit Margin</div>
+                            <div
+                              className={`text-lg font-semibold ${
+                                event.calculations.profit.profitMargin >= 0
+                                  ? "text-green-600"
+                                  : "text-red-600"
                               }`}
                             >
-                              {formatCurrency(scenario.expectedProfit)}
-                            </td>
-                            <td
-                              className={`py-2 px-2 text-right ${
+                              {event.calculations.profit.profitMargin.toFixed(2)}%
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Subscriber Limits Breakdown */}
+                      {event.calculations?.subscriberLimitsBreakdown && event.calculations.subscriberLimitsBreakdown.enabled && (
+                        <div className="mt-6 pt-6 border-t border-primary-border">
+                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Subscriber Free Tickets</h3>
+                          <div className="bg-primary-bg/50 rounded-lg p-4">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                              <div>
+                                <div className="text-xs text-primary-muted mb-1">Premium</div>
+                                <div className="text-sm font-semibold text-primary-fg">
+                                  {event.calculations.subscriberLimitsBreakdown.premium.used} / {event.calculations.subscriberLimitsBreakdown.premium.limit}
+                                </div>
+                                <div className="text-xs text-primary-muted mt-1">
+                                  {event.calculations.subscriberLimitsBreakdown.premium.limit > 0
+                                    ? `${Math.round((event.calculations.subscriberLimitsBreakdown.premium.used / event.calculations.subscriberLimitsBreakdown.premium.limit) * 100)}% used`
+                                    : 'Not set'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-primary-muted mb-1">Diamond</div>
+                                <div className="text-sm font-semibold text-primary-fg">
+                                  {event.calculations.subscriberLimitsBreakdown.diamond.used} / {event.calculations.subscriberLimitsBreakdown.diamond.limit}
+                                </div>
+                                <div className="text-xs text-primary-muted mt-1">
+                                  {event.calculations.subscriberLimitsBreakdown.diamond.limit > 0
+                                    ? `${Math.round((event.calculations.subscriberLimitsBreakdown.diamond.used / event.calculations.subscriberLimitsBreakdown.diamond.limit) * 100)}% used`
+                                    : 'Not set'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-primary-muted mb-1">Exclusive Black</div>
+                                <div className="text-sm font-semibold text-primary-fg">
+                                  {event.calculations.subscriberLimitsBreakdown.exclusiveBlack.used} / {event.calculations.subscriberLimitsBreakdown.exclusiveBlack.limit}
+                                </div>
+                                <div className="text-xs text-primary-muted mt-1">
+                                  {event.calculations.subscriberLimitsBreakdown.exclusiveBlack.limit > 0
+                                    ? `${Math.round((event.calculations.subscriberLimitsBreakdown.exclusiveBlack.used / event.calculations.subscriberLimitsBreakdown.exclusiveBlack.limit) * 100)}% used`
+                                    : 'Not set'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-primary-muted mb-1">Student</div>
+                                <div className="text-sm font-semibold text-primary-fg">
+                                  {event.calculations.subscriberLimitsBreakdown.student.used} / {event.calculations.subscriberLimitsBreakdown.student.limit}
+                                </div>
+                                <div className="text-xs text-primary-muted mt-1">
+                                  {event.calculations.subscriberLimitsBreakdown.student.limit > 0
+                                    ? `${Math.round((event.calculations.subscriberLimitsBreakdown.student.used / event.calculations.subscriberLimitsBreakdown.student.limit) * 100)}% used`
+                                    : 'Not set'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-primary-muted mb-1">Total Free</div>
+                                <div className="text-sm font-semibold text-primary-fg">
+                                  {event.calculations.subscriberLimitsBreakdown.total.used} / {event.calculations.subscriberLimitsBreakdown.total.limit}
+                                </div>
+                                <div className="text-xs text-primary-muted mt-1">
+                                  {event.calculations.subscriberLimitsBreakdown.total.limit > 0
+                                    ? `${Math.round((event.calculations.subscriberLimitsBreakdown.total.used / event.calculations.subscriberLimitsBreakdown.total.limit) * 100)}% used`
+                                    : 'Not set'}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-xs text-primary-muted pt-3 border-t border-primary-border">
+                              <p>
+                                <strong>{event.calculations.subscriberLimitsBreakdown.total.used} of {event.calculations.subscriberLimitsBreakdown.total.limit}</strong> free tickets have been claimed. 
+                                These free tickets are excluded from paid capacity calculations, 
+                                reducing expected ticket income by approximately {formatCurrency(
+                                  event.calculations.subscriberLimitsBreakdown.total.limit * 
+                                  (event.calculations.income.ticketIncome / 
+                                   Math.max(1, (event.financials?.capacity || 0) - event.calculations.subscriberLimitsBreakdown.total.limit))
+                                )} (estimated based on average ticket price).
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ticket Type Based Scenarios */}
+                      {event.calculations?.suggestions?.ticketTypeScenarios && event.calculations.suggestions.ticketTypeScenarios.length > 0 ? (
+                        <div>
+                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Ticket Type Scenarios</h3>
+                          <div className="space-y-4">
+                            {event.calculations.suggestions.ticketTypeScenarios.map((scenario, idx) => (
+                      <div key={idx} className="border border-primary-border rounded-lg p-4">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h4 className="font-semibold text-primary-fg">{scenario.scenarioName}</h4>
+                            <p className="text-sm text-primary-muted mt-1">{scenario.description}</p>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-primary-muted mb-1">Profit Margin</div>
+                            <div
+                              className={`text-lg font-bold ${
                                 scenario.profitMargin >= 0 ? "text-green-600" : "text-red-600"
                               }`}
                             >
                               {scenario.profitMargin.toFixed(2)}%
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-primary-muted">
-                  <p>No financial scenarios available. Configure financial planning for this event.</p>
-                </div>
-              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                          <div>
+                            <div className="text-xs text-primary-muted mb-1">Total Sold</div>
+                            <div className="text-sm font-semibold text-primary-fg">
+                              {scenario.totalSold} / {scenario.totalCapacity}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-primary-muted mb-1">Expected Income</div>
+                            <div className="text-sm font-semibold text-primary-fg">
+                              {formatCurrency(scenario.expectedIncome)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-primary-muted mb-1">Expected Profit</div>
+                            <div
+                              className={`text-sm font-semibold ${
+                                scenario.expectedProfit >= 0 ? "text-green-600" : "text-red-600"
+                              }`}
+                            >
+                              {formatCurrency(scenario.expectedProfit)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-primary-muted mb-1">Utilization</div>
+                            <div className="text-sm font-semibold text-primary-fg">
+                              {scenario.totalCapacity > 0
+                                ? ((scenario.totalSold / scenario.totalCapacity) * 100).toFixed(1)
+                                : 0}%
+                            </div>
+                          </div>
+                        </div>
 
-              {/* Expenses Breakdown */}
-              {event.calculations && event.calculations.expenses && (
-                <div className="mt-6 pt-6 border-t border-primary-border">
-                  <h3 className="text-lg font-semibold text-primary-fg mb-4">Expenses Breakdown</h3>
-                  <div className="space-y-3">
-                    {event.calculations.expenses.breakdown && (
-                      <>
-                        {event.calculations.expenses.breakdown.fixed && event.calculations.expenses.breakdown.fixed.length > 0 && (
-                          <div>
-                            <div className="text-sm font-medium text-primary-muted mb-2">Fixed Expenses</div>
-                            <div className="space-y-1">
-                              {event.calculations.expenses.breakdown.fixed.map((expense: any, idx: number) => (
-                                <div key={idx} className="flex justify-between text-sm">
-                                  <span className="text-primary-fg">{expense.name}</span>
-                                  <span className="text-primary-fg font-medium">{formatCurrency(expense.amount)}</span>
+                        <div className="mt-3 pt-3 border-t border-primary-border">
+                          <div className="text-xs text-primary-muted mb-2">Ticket Type Breakdown:</div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                            {scenario.ticketTypeBreakdown.map((tt, ttIdx) => (
+                              <div key={ttIdx} className="bg-primary-bg/50 p-2 rounded">
+                                <div className="font-medium text-primary-fg">{tt.ticketTypeName}</div>
+                                <div className="text-primary-muted">
+                                  {tt.sold}/{tt.capacity} sold
                                 </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {event.calculations.expenses.breakdown.perPerson && event.calculations.expenses.breakdown.perPerson.length > 0 && (
-                          <div>
-                            <div className="text-sm font-medium text-primary-muted mb-2">Per-Person Expenses</div>
-                            <div className="space-y-1">
-                              {event.calculations.expenses.breakdown.perPerson.map((expense: any, idx: number) => (
-                                <div key={idx} className="flex justify-between text-sm">
-                                  <span className="text-primary-fg">{expense.name} ({expense.invitees} invitees)</span>
-                                  <span className="text-primary-fg font-medium">{formatCurrency(expense.amount)}</span>
+                                <div className="text-primary-fg font-semibold">
+                                  {formatCurrency(tt.revenue)}
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            ))}
                           </div>
-                        )}
-                        {event.calculations.expenses.breakdown.percentage && event.calculations.expenses.breakdown.percentage.length > 0 && (
-                          <div>
-                            <div className="text-sm font-medium text-primary-muted mb-2">Percentage Expenses</div>
-                            <div className="space-y-1">
-                              {event.calculations.expenses.breakdown.percentage.map((expense: any, idx: number) => (
-                                <div key={idx} className="flex justify-between text-sm">
-                                  <span className="text-primary-fg">{expense.name} ({expense.percentage}%)</span>
-                                  <span className="text-primary-fg font-medium">{formatCurrency(expense.amount)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                    <div className="pt-3 border-t border-primary-border">
-                      <div className="flex justify-between">
-                        <span className="text-sm font-semibold text-primary-fg">Total Expenses</span>
-                        <span className="text-sm font-semibold text-primary-fg">
-                          {formatCurrency(event.calculations.expenses.totalExpenses)}
-                        </span>
+                        </div>
                       </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
-              )}
+                      ) : null}
 
-              {/* Financial Summary */}
-              {event.calculations && (
-                <div className="mt-6 pt-6 border-t border-primary-border">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <div className="text-sm text-primary-muted mb-1">Total Expenses</div>
-                      <div className="text-lg font-semibold text-primary-fg">
-                        {formatCurrency(event.calculations.expenses.totalExpenses)}
-                      </div>
+                      {/* Traditional Price/Capacity Scenarios */}
+                      {event.calculations?.suggestions?.scenarios && event.calculations.suggestions.scenarios.length > 0 ? (
+                        <div className={event.calculations?.suggestions?.ticketTypeScenarios ? "mt-6 pt-6 border-t border-primary-border" : ""}>
+                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Price & Capacity Scenarios</h3>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-primary-border">
+                                  <th className="text-left py-2 px-2 text-primary-muted">Price</th>
+                                  <th className="text-left py-2 px-2 text-primary-muted">Capacity</th>
+                                  <th className="text-right py-2 px-2 text-primary-muted">Income</th>
+                                  <th className="text-right py-2 px-2 text-primary-muted">Profit</th>
+                                  <th className="text-right py-2 px-2 text-primary-muted">Margin %</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {event.calculations.suggestions.scenarios.map((scenario, idx) => (
+                                  <tr key={idx} className="border-b border-primary-border">
+                                    <td className="py-2 px-2 text-primary-fg">
+                                      {formatCurrency(scenario.price)}
+                                    </td>
+                                    <td className="py-2 px-2 text-primary-fg">{scenario.capacity}</td>
+                                    <td className="py-2 px-2 text-right text-primary-fg">
+                                      {formatCurrency(scenario.expectedIncome)}
+                                    </td>
+                                    <td
+                                      className={`py-2 px-2 text-right ${
+                                        scenario.expectedProfit >= 0 ? "text-green-600" : "text-red-600"
+                                      }`}
+                                    >
+                                      {formatCurrency(scenario.expectedProfit)}
+                                    </td>
+                                    <td
+                                      className={`py-2 px-2 text-right ${
+                                        scenario.profitMargin >= 0 ? "text-green-600" : "text-red-600"
+                                      }`}
+                                    >
+                                      {scenario.profitMargin.toFixed(2)}%
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ) : (
+                        !event.calculations?.suggestions?.ticketTypeScenarios && (
+                          <div className="text-center py-8 text-primary-muted">
+                            <p>No financial scenarios available. Configure financial planning for this event.</p>
+                          </div>
+                        )
+                      )}
+
+                      {/* Expenses Breakdown */}
+                      {event.calculations && event.calculations.expenses && (
+                        <div className="mt-6 pt-6 border-t border-primary-border">
+                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Expenses Breakdown</h3>
+                          <div className="space-y-3">
+                            {event.calculations.expenses.breakdown && (
+                              <>
+                                {event.calculations.expenses.breakdown.fixed && event.calculations.expenses.breakdown.fixed.length > 0 && (
+                                  <div>
+                                    <div className="text-sm font-medium text-primary-muted mb-2">Fixed Expenses</div>
+                                    <div className="space-y-1">
+                                      {event.calculations.expenses.breakdown.fixed.map((expense: any, idx: number) => (
+                                        <div key={idx} className="flex justify-between text-sm">
+                                          <span className="text-primary-fg">{expense.name}</span>
+                                          <span className="text-primary-fg font-medium">{formatCurrency(expense.amount)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {event.calculations.expenses.breakdown.perPerson && event.calculations.expenses.breakdown.perPerson.length > 0 && (
+                                  <div>
+                                    <div className="text-sm font-medium text-primary-muted mb-2">Per-Person Expenses</div>
+                                    <div className="space-y-1">
+                                      {event.calculations.expenses.breakdown.perPerson.map((expense: any, idx: number) => (
+                                        <div key={idx} className="flex justify-between text-sm">
+                                          <span className="text-primary-fg">{expense.name} ({expense.invitees} invitees)</span>
+                                          <span className="text-primary-fg font-medium">{formatCurrency(expense.amount)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {event.calculations.expenses.breakdown.percentage && event.calculations.expenses.breakdown.percentage.length > 0 && (
+                                  <div>
+                                    <div className="text-sm font-medium text-primary-muted mb-2">Percentage Expenses</div>
+                                    <div className="space-y-1">
+                                      {event.calculations.expenses.breakdown.percentage.map((expense: any, idx: number) => (
+                                        <div key={idx} className="flex justify-between text-sm">
+                                          <span className="text-primary-fg">{expense.name} ({expense.percentage}%)</span>
+                                          <span className="text-primary-fg font-medium">{formatCurrency(expense.amount)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                            <div className="pt-3 border-t border-primary-border">
+                              <div className="flex justify-between">
+                                <span className="text-sm font-semibold text-primary-fg">Total Expenses</span>
+                                <span className="text-sm font-semibold text-primary-fg">
+                                  {formatCurrency(event.calculations.expenses.totalExpenses)}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Ticket Types Breakdown */}
+                      {event.calculations?.income?.ticketTypeBreakdown && event.calculations.income.ticketTypeBreakdown.length > 0 && (
+                        <div className="mt-6 pt-6 border-t border-primary-border">
+                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Ticket Types Breakdown</h3>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-primary-border">
+                                  <th className="text-left py-2 px-2 text-primary-muted">Ticket Type</th>
+                                  <th className="text-right py-2 px-2 text-primary-muted">Price</th>
+                                  <th className="text-right py-2 px-2 text-primary-muted">Capacity</th>
+                                  <th className="text-right py-2 px-2 text-primary-muted">Sold</th>
+                                  <th className="text-right py-2 px-2 text-primary-muted">Available</th>
+                                  <th className="text-right py-2 px-2 text-primary-muted">Revenue</th>
+                                  <th className="text-right py-2 px-2 text-primary-muted">% of Total</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {event.calculations.income.ticketTypeBreakdown.map((ticketType) => (
+                                  <tr key={ticketType.id} className="border-b border-primary-border">
+                                    <td className="py-2 px-2 text-primary-fg font-medium">{ticketType.name}</td>
+                                    <td className="py-2 px-2 text-right text-primary-fg">
+                                      {formatCurrency(ticketType.price)}
+                                    </td>
+                                    <td className="py-2 px-2 text-right text-primary-fg">{ticketType.capacity}</td>
+                                    <td className="py-2 px-2 text-right text-primary-fg">{ticketType.sold}</td>
+                                    <td className="py-2 px-2 text-right text-primary-fg">{ticketType.available}</td>
+                                    <td className="py-2 px-2 text-right text-primary-fg font-semibold">
+                                      {formatCurrency(ticketType.revenue)}
+                                    </td>
+                                    <td className="py-2 px-2 text-right text-primary-muted">
+                                      {ticketType.revenuePercentage.toFixed(1)}%
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="border-t-2 border-primary-border font-semibold">
+                                  <td className="py-2 px-2 text-primary-fg">Total</td>
+                                  <td className="py-2 px-2 text-right text-primary-fg">-</td>
+                                  <td className="py-2 px-2 text-right text-primary-fg">
+                                    {event.calculations.income.ticketTypeBreakdown.reduce((sum, tt) => sum + tt.capacity, 0)}
+                                  </td>
+                                  <td className="py-2 px-2 text-right text-primary-fg">
+                                    {event.calculations.income.ticketTypeBreakdown.reduce((sum, tt) => sum + tt.sold, 0)}
+                                  </td>
+                                  <td className="py-2 px-2 text-right text-primary-fg">
+                                    {event.calculations.income.ticketTypeBreakdown.reduce((sum, tt) => sum + tt.available, 0)}
+                                  </td>
+                                  <td className="py-2 px-2 text-right text-primary-fg">
+                                    {formatCurrency(event.calculations.income.ticketIncome)}
+                                  </td>
+                                  <td className="py-2 px-2 text-right text-primary-fg">100%</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8 text-primary-muted">
+                      <p>Click to expand and load financial calculations.</p>
                     </div>
-                    <div>
-                      <div className="text-sm text-primary-muted mb-1">Total Income</div>
-                      <div className="text-lg font-semibold text-primary-fg">
-                        {formatCurrency(event.calculations.income.totalIncome)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-primary-muted mb-1">Profit Margin</div>
-                      <div
-                        className={`text-lg font-semibold ${
-                          event.calculations.profit.profitMargin >= 0
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {event.calculations.profit.profitMargin.toFixed(2)}%
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
-

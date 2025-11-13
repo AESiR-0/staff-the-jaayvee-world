@@ -152,3 +152,4 @@ export default function RichTextEditor({ value, onChange, placeholder = "Enter t
   );
 }
 
+

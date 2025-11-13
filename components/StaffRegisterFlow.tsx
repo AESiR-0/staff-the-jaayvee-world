@@ -2,11 +2,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle, ArrowRight, Mail, Lock, Eye, EyeOff, User, Phone } from "lucide-react";
-import { staffRegister } from "@/lib/api";
+import { teamRegister } from "@/lib/api";
 
 type AuthStep = 'register' | 'success';
 
-export default function StaffRegisterFlow() {
+export default function TeamRegisterFlow() {
   const [step, setStep] = useState<AuthStep>('register');
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -27,7 +27,7 @@ export default function StaffRegisterFlow() {
     setError(null);
 
     try {
-      const response = await staffRegister(fullName, email, password, phone);
+      const response = await teamRegister(fullName, email, password, phone);
       
       if (response.success) {
         console.log('✅ Registration successful');
@@ -54,7 +54,7 @@ export default function StaffRegisterFlow() {
           <div className="w-16 h-16 bg-primary-accent rounded-2xl flex items-center justify-center mx-auto mb-4">
             <span className="text-white font-bold text-2xl">TJ</span>
           </div>
-          <h1 className="text-3xl font-bold text-primary-fg mb-2">Staff Registration</h1>
+          <h1 className="text-3xl font-bold text-primary-fg mb-2">Team Registration</h1>
           <p className="text-primary-muted">Join The Jaayvee World Portal</p>
         </div>
 
@@ -86,7 +86,7 @@ export default function StaffRegisterFlow() {
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-primary-muted" size={20} />
                 <input
                   type="email"
-                  placeholder="staff@jaayvee.staff"
+                  placeholder="team@jaayvee.world"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
@@ -184,4 +184,5 @@ export default function StaffRegisterFlow() {
     </div>
   );
 }
+
 

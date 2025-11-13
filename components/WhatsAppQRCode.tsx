@@ -124,3 +124,4 @@ export default function WhatsAppQRCode({ onAuthenticated }: WhatsAppQRCodeProps)
   );
 }
 
+

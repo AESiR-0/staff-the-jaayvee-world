@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bell, AlertCircle, Info, AlertTriangle, Share2, MessageCircle, Linkedin, Facebook, Copy, Check, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 
 interface Update {
   id: string;
@@ -40,7 +40,7 @@ export function UpdatesPanel({ audience, apiBaseUrl = "https://talaash.thejaayve
         const backendAudience = audience === "team" ? "staff" : audience;
         
         // Get user email for individual recipient filtering
-        const session = getStaffSession();
+        const session = getTeamSession();
         const userEmail = session?.email;
         
         // Build URL with userEmail if available
@@ -341,3 +341,4 @@ export function UpdatesPanel({ audience, apiBaseUrl = "https://talaash.thejaayve
     </div>
   );
 }
+

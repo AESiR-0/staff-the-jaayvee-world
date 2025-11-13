@@ -49,3 +49,4 @@ export function ReferralCard({ data }: ReferralCardProps) {
     </div>
   );
 }
+

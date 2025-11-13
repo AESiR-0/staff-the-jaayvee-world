@@ -4,3 +4,4 @@ export default function RegisterPage() {
   return <TeamRegisterFlow />;
 }
 
+

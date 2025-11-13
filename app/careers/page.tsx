@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Briefcase, Plus, Edit2, Save, X, Loader2, Trash2 } from "lucide-react";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 
 interface CareerData {
   id: string;
@@ -52,7 +52,7 @@ export default function CareersPage() {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data?.users) {
-          const session = getStaffSession();
+          const session = getTeamSession();
           const userEmail = session?.email;
           
           if (userEmail) {
@@ -75,14 +75,14 @@ export default function CareersPage() {
       }
       
       // Fallback: check if user is admin
-      const session = getStaffSession();
+      const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
       setCanManage(isSuperAdmin(userEmail));
     } catch (err) {
       console.error('Error checking permissions:', err);
       // Fallback: check if user is admin
-      const session = getStaffSession();
+      const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
       setCanManage(isSuperAdmin(userEmail));
@@ -605,4 +605,5 @@ export default function CareersPage() {
     </div>
   );
 }
+
 

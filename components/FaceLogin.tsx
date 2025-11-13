@@ -205,3 +205,4 @@ export default function FaceLogin({ onCapture, onError, isVerifying = false }: F
     </div>
   );
 }
+

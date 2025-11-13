@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { CheckCircle, UserPlus, Phone, User, Key, Users, Sparkles, Store, UserCheck, Shield, Eye, EyeOff, RefreshCw, Building2, Globe, Instagram, Youtube, Copy, Check } from "lucide-react";
 import { fetchAPI, API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 
 type RoleType = 'affiliate' | 'agent' | 'seller' | 'influencer' | 'staff';
 
@@ -196,7 +196,7 @@ export default function CreateUserPage() {
 
   // Get current user info and referral code
   useEffect(() => {
-    const session = getStaffSession();
+    const session = getTeamSession();
     if (session?.email) {
       setCurrentUserEmail(session.email);
       
@@ -1022,3 +1022,4 @@ export default function CreateUserPage() {
     </div>
   );
 }
+

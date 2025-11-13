@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import ConditionalLayout from '@/components/ConditionalLayout'
-import FaceModelLoader from '@/components/FaceModelLoader'
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt'
 
 export const metadata: Metadata = {
@@ -12,15 +11,15 @@ export const metadata: Metadata = {
   },
   description: "Internal team portal for Jaayvee operations. Handle KYC, payouts, campaign checks, and internal validation tasks with our comprehensive team dashboard.",
   icons: {
-    icon: "/static/logos/staff/staff_icon_192.png",
-    shortcut: "/static/logos/staff/staff_icon_192.png",
-    apple: "/static/logos/staff/staff_icon_192.png",
+    icon: "/static/logos/team/team_icon_192.png",
+    shortcut: "/static/logos/team/team_icon_192.png",
+    apple: "/static/logos/team/team_icon_192.png",
   },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Jaayvee Staff",
+    title: "Jaayvee Team",
   },
 };
 
@@ -40,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="apple-touch-icon" href="/static/logos/staff/staff_icon_192.png" />
+        <link rel="apple-touch-icon" href="/static/logos/team/team_icon_192.png" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -85,7 +84,6 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <FaceModelLoader />
         <ConditionalLayout>
           {children}
         </ConditionalLayout>
@@ -94,3 +92,4 @@ export default function RootLayout({
     </html>
   )
 }
+

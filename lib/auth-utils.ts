@@ -7,10 +7,9 @@ export function getAuthToken(): string | null {
 }
 
 /**
- * Get staff session data from localStorage
- * (Backend uses staff, but frontend UI shows team)
+ * Get team session data from localStorage
  */
-export function getStaffSession() {
+export function getTeamSession() {
   if (typeof window === 'undefined') return null;
   const session = localStorage.getItem('userSession');
   if (!session) return null;
@@ -21,8 +20,8 @@ export function getStaffSession() {
   }
 }
 
-// Frontend alias for team terminology (UI only)
-export const getTeamSession = getStaffSession;
+// Backward compatibility alias
+export const getStaffSession = getTeamSession;
 
 /**
  * Check if user is authenticated
@@ -137,4 +136,5 @@ export async function authenticatedFetch(url: string, options?: RequestInit): Pr
     throw new Error(`Network error: ${errorMessage}. URL: ${url}. Check CORS and network connectivity.`);
   }
 }
+
 

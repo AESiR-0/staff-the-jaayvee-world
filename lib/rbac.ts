@@ -1,4 +1,4 @@
-// Simple mail-based RBAC for staff dashboard tabs
+// Simple mail-based RBAC for team dashboard tabs
 
 export type TabKey = 'dashboard' | 'wallet' | 'qr' | 'referrals' | 'events' | 'coupons' | 'sellers' | 'downline' | 'tasks' | 'gallery' | 'layouts' | 'careers';
 
@@ -15,8 +15,8 @@ let userPermissionsCache: Permission[] | null = null;
 let permissionsCacheTime: number = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Staff Permissions - List of all available permissions for staff
-export const STAFF_PERMISSIONS = {
+// Team Permissions - List of all available permissions for team
+export const TEAM_PERMISSIONS = {
   dashboard: {
     action: 'access',
     resource: 'dashboard',
@@ -116,7 +116,7 @@ export const STAFF_PERMISSIONS = {
 } as const;
 
 // Array of all permission keys for easy iteration
-export const STAFF_PERMISSION_LIST = Object.values(STAFF_PERMISSIONS).map(perm => ({
+export const TEAM_PERMISSION_LIST = Object.values(TEAM_PERMISSIONS).map(perm => ({
   action: perm.action,
   resource: perm.resource,
   description: perm.description,
@@ -167,8 +167,8 @@ const ensureSuperAdminInDB = async () => {
   if (superAdminEnsured || typeof window === 'undefined') return;
   
   try {
-    const { getStaffSession } = await import('@/lib/auth-utils');
-    const session = getStaffSession();
+    const { getTeamSession } = await import('@/lib/auth-utils');
+    const session = getTeamSession();
     const userEmail = session?.email?.toLowerCase();
     
     if (userEmail === 'thejaayveeworldofficial@gmail.com' && !superAdminEnsured) {
@@ -226,8 +226,8 @@ export async function fetchUserPermissions(): Promise<Permission[]> {
       const data = await response.json();
       if (data.success && data.data?.users) {
         // Get current user's email
-        const { getStaffSession } = await import('@/lib/auth-utils');
-        const session = getStaffSession();
+        const { getTeamSession } = await import('@/lib/auth-utils');
+        const session = getTeamSession();
         const userEmail = session?.email;
         
         if (userEmail) {
@@ -318,12 +318,13 @@ export async function canAccessRBAC(tab: TabKey): Promise<boolean> {
   
   // Fallback to email-based check
   if (typeof window !== 'undefined') {
-    const { getStaffSession } = require('@/lib/auth-utils');
-    const session = getStaffSession();
+    const { getTeamSession } = require('@/lib/auth-utils');
+    const session = getTeamSession();
     return canAccess(tab, session?.email);
   }
   
   return false;
 }
+
 
 

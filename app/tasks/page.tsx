@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { CheckSquare, Plus, Clock, PlayCircle, X, User, Calendar, Edit2, Trash2, GripVertical, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { format, differenceInHours, differenceInDays, differenceInMinutes } from "date-fns";
 
 interface Task {
@@ -23,7 +23,7 @@ interface Task {
   completedAt: string | null;
 }
 
-interface StaffUser {
+interface TeamUser {
   id: string;
   email: string;
   fullName: string;
@@ -31,7 +31,7 @@ interface StaffUser {
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [teamUsers, setStaffUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -54,16 +54,16 @@ export default function TasksPage() {
     deadline: '',
   });
 
-  const session = getStaffSession();
-  const currentUserId = session?.userId || session?.staffId;
+  const session = getTeamSession();
+  const currentUserId = session?.userId || session?.teamId || session?.staffId; // Backward compatibility
 
   useEffect(() => {
     fetchTasks();
-    fetchStaffUsers();
+    fetchTeamUsers();
     checkCreatePermission();
     
     // Check if user is admin
-    const session = getStaffSession();
+    const session = getTeamSession();
     const userEmail = session?.email;
     const { isSuperAdmin } = require('@/lib/rbac');
     setIsAdmin(isSuperAdmin(userEmail));
@@ -72,7 +72,7 @@ export default function TasksPage() {
   const checkCreatePermission = async () => {
     try {
       // Check if user is admin first (admins can always create tasks)
-      const session = getStaffSession();
+      const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
       const isAdmin = isSuperAdmin(userEmail);
@@ -125,7 +125,7 @@ export default function TasksPage() {
     }
   };
 
-  const fetchStaffUsers = async () => {
+  const fetchTeamUsers = async () => {
     try {
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
       // Get staff list from RBAC API
@@ -539,7 +539,7 @@ export default function TasksPage() {
                 className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
               >
                 <option value="">All Assignees</option>
-                {staffUsers.map((user) => (
+                {teamUsers.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.fullName} ({user.email})
                   </option>
@@ -603,7 +603,7 @@ export default function TasksPage() {
           <p className="text-sm text-primary-muted">
             Found {filteredTasks.length} task{filteredTasks.length !== 1 ? 's' : ''}
             {searchQuery && ` matching "${searchQuery}"`}
-            {isAdmin && filterAssignee && ` assigned to ${staffUsers.find(u => u.id === filterAssignee)?.fullName || 'selected user'}`}
+            {isAdmin && filterAssignee && ` assigned to ${teamUsers.find(u => u.id === filterAssignee)?.fullName || 'selected user'}`}
           </p>
         )}
       </div>
@@ -766,7 +766,7 @@ export default function TasksPage() {
                   className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg"
                 >
                   <option value="">Unassigned</option>
-                  {staffUsers.map((user) => (
+                  {teamUsers.map((user) => (
                     <option key={user.id} value={user.id}>
                       {user.fullName} ({user.email})
                     </option>
@@ -987,4 +987,5 @@ function TaskCard({
     </div>
   );
 }
+
 

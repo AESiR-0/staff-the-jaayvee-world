@@ -9,7 +9,17 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const csvFile = formData.get('csv') as File;
-    const messageTemplate = formData.get('message') as string;
+    let messageTemplate = formData.get('message') as string;
+    
+    // CRITICAL: FormData.get() for text fields should preserve newlines
+    // But let's verify by checking the raw value
+    console.log('🔍 DEBUG FormData.get("message"):');
+    console.log('🔍 Type:', typeof messageTemplate);
+    console.log('🔍 Value (first 200 chars):', messageTemplate?.substring(0, 200));
+    console.log('🔍 Has \\n:', messageTemplate?.includes('\n') || false);
+    console.log('🔍 Has \\r\\n:', messageTemplate?.includes('\r\n') || false);
+    console.log('🔍 Has \\r:', messageTemplate?.includes('\r') || false);
+    console.log('🔍 Char codes (first 50):', messageTemplate?.substring(0, 50).split('').map(c => c.charCodeAt(0)).join(','));
 
     if (!csvFile) {
       return NextResponse.json(
@@ -23,6 +33,36 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Message template is required' },
         { status: 400 }
       );
+    }
+
+    // CRITICAL: FormData.get() returns the raw string value
+    // Newlines should be preserved, but let's verify and normalize
+    console.log('📥 Raw FormData message type:', typeof messageTemplate);
+    console.log('📥 Raw FormData message length:', messageTemplate?.length || 0);
+    
+    // Check for different newline formats
+    const hasCRLF = messageTemplate.includes('\r\n');
+    const hasLF = messageTemplate.includes('\n');
+    const hasCR = messageTemplate.includes('\r');
+    console.log('📥 Has \\r\\n:', hasCRLF, '| Has \\n:', hasLF, '| Has \\r:', hasCR);
+    
+    // Normalize all newline formats to \n
+    if (hasCRLF || hasCR) {
+      messageTemplate = messageTemplate.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      console.log('📥 Normalized newlines to \\n');
+    }
+    
+    // Final verification
+    const newlineCount = (messageTemplate.match(/\n/g) || []).length;
+    console.log('📝 API Route - Final message length:', messageTemplate.length, '| Newlines:', newlineCount);
+    if (newlineCount > 0) {
+      const firstNewlineIndex = messageTemplate.indexOf('\n');
+      console.log('📝 First newline at position:', firstNewlineIndex);
+      const preview = messageTemplate.substring(0, Math.min(300, messageTemplate.length)).replace(/\n/g, '\\n');
+      console.log('📝 Preview with \\n visible:', preview);
+    } else {
+      console.error('❌ WARNING: No newlines found in messageTemplate after normalization!');
+      console.error('❌ Raw message (first 200 chars):', messageTemplate.substring(0, 200));
     }
 
     // Validate file size
@@ -52,9 +92,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Send batch request to WhatsApp service
+    // DO NOT TRIM - preserve all newlines including at start/end
+    // WhatsApp needs the exact message with all newlines intact
+    console.log('📤 Sending to WhatsApp service:');
+    console.log('📤 Message length:', messageTemplate.length);
+    console.log('📤 Newline count:', newlineCount);
+    console.log('📤 Preview (first 300 with \\n):', messageTemplate.substring(0, 300).replace(/\n/g, '\\n'));
+    
     const batchResponse = await sendBatch({
       contacts: parseResult.contacts,
-      messageTemplate: messageTemplate.trim(),
+      messageTemplate: messageTemplate, // Send exactly as received, no trimming
     });
 
     return NextResponse.json({
@@ -77,4 +124,5 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
 

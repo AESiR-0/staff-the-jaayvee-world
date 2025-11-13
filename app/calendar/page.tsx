@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Calendar as CalendarIcon, Plus, Edit, Trash2, Save, X, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/lib/api";
 
@@ -549,4 +549,5 @@ export default function CalendarPage() {
     </div>
   );
 }
+
 

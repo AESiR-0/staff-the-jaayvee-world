@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Users, Shield, Settings, Plus, X, Edit, Trash2, Save, Check, X as XIcon } from "lucide-react";
-import { authenticatedFetch, getStaffSession } from "@/lib/auth-utils";
-import { STAFF_PERMISSIONS } from "@/lib/rbac";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
+import { TEAM_PERMISSIONS } from "@/lib/rbac";
 
 // Only allow thejaayveeworldofficial@gmail.com
 const ALLOWED_EMAIL = "thejaayveeworldofficial@gmail.com";
@@ -55,7 +55,7 @@ export default function RBACPage() {
   useEffect(() => {
     const checkAuthorization = async () => {
       try {
-        const session = await getStaffSession();
+        const session = await getTeamSession();
         if (!session || !session.email) {
           router.push("/login");
           return;
@@ -436,7 +436,7 @@ export default function RBACPage() {
                                   key={permission.id}
                                   className="px-2 py-1 bg-primary-accent-light text-primary-fg rounded text-sm flex items-center gap-1"
                                 >
-                                  {STAFF_PERMISSIONS[permission.resource as keyof typeof STAFF_PERMISSIONS]?.description || `${permission.action}:${permission.resource}`}
+                                  {TEAM_PERMISSIONS[permission.resource as keyof typeof TEAM_PERMISSIONS]?.description || `${permission.action}:${permission.resource}`}
                                   <button
                                     onClick={() => handleRemovePermissionFromUser(user.id, permission.id)}
                                     className="hover:text-red-500"
@@ -468,7 +468,7 @@ export default function RBACPage() {
                               {permissions
                                 .filter(permission => !userPermissionIds.has(permission.id))
                                 .map((permission) => {
-                                  const permInfo = STAFF_PERMISSIONS[permission.resource as keyof typeof STAFF_PERMISSIONS];
+                                  const permInfo = TEAM_PERMISSIONS[permission.resource as keyof typeof TEAM_PERMISSIONS];
                                   return (
                                     <option key={permission.id} value={permission.id}>
                                       {permInfo?.description || `${permission.action}:${permission.resource}`}
@@ -638,7 +638,7 @@ export default function RBACPage() {
                               {permissions
                                 .filter((permission) => !group.permissions?.some((p) => p.id === permission.id))
                                 .map((permission) => {
-                                  const permInfo = STAFF_PERMISSIONS[permission.resource as keyof typeof STAFF_PERMISSIONS];
+                                  const permInfo = TEAM_PERMISSIONS[permission.resource as keyof typeof TEAM_PERMISSIONS];
                                   return (
                                     <option key={permission.id} value={permission.id}>
                                       {permInfo?.description || `${permission.action}:${permission.resource}`}
@@ -658,7 +658,7 @@ export default function RBACPage() {
                         <div className="space-y-1">
                           {group.permissions && group.permissions.length > 0 ? (
                             group.permissions.map((permission) => {
-                              const permInfo = STAFF_PERMISSIONS[permission.resource as keyof typeof STAFF_PERMISSIONS];
+                              const permInfo = TEAM_PERMISSIONS[permission.resource as keyof typeof TEAM_PERMISSIONS];
                               return (
                                 <div
                                   key={permission.id}
@@ -693,4 +693,5 @@ export default function RBACPage() {
     </div>
   );
 }
+
 

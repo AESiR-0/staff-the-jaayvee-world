@@ -27,7 +27,7 @@ If you see the error: **"Please set WHATSAPP_SERVICE_URL in your Vercel environm
 2. **Create New Project**
    - Click "New Project"
    - Select "Deploy from GitHub repo"
-   - Choose your `staff-the-jaayvee-world` repository
+   - Choose your `team-the-jaayvee-world` repository
    - Set **Root Directory** to: `whatsapp-server`
 
 3. **Configure Environment Variables**
@@ -113,7 +113,7 @@ If you see the error: **"Please set WHATSAPP_SERVICE_URL in your Vercel environm
 
 1. **Go to Vercel Dashboard**
    - Navigate to [vercel.com](https://vercel.com)
-   - Sign in and go to your `staff-the-jaayvee-world` project
+   - Sign in and go to your `team-the-jaayvee-world` project
    - Click on **Settings** → **Environment Variables**
 
 2. **Add Environment Variables**
@@ -145,14 +145,14 @@ If you see the error: **"Please set WHATSAPP_SERVICE_URL in your Vercel environm
    - Wait for deployment to complete
 
 4. **Verify Configuration**
-   - After redeploy, go to your staff portal
+   - After redeploy, go to your team portal
    - Navigate to the WhatsApp Bulk page
    - The warning message should disappear if configured correctly
 
 ## Step 3: First-Time Authentication
 
 1. **Access WhatsApp Bulk Page**
-   - Go to your staff portal: `https://staff.thejaayveeworld.com`
+   - Go to your team portal: `https://staff.thejaayveeworld.com`
    - Navigate to "WhatsApp Bulk" in the sidebar
    - Or go directly to: `https://staff.thejaayveeworld.com/whatsapp-bulk`
 

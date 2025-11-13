@@ -21,11 +21,12 @@ import {
   ArrowRight,
   UserCircle,
   ChevronDown,
-  TrendingUp
+  TrendingUp,
+  FileText
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { getStaffSession } from "@/lib/auth-utils";
+import { getTeamSession } from "@/lib/auth-utils";
 import { canAccess, routeToTabKey, canAccessRBAC, fetchUserPermissions, Permission, isSuperAdmin } from "@/lib/rbac";
 
 const navigation = [
@@ -34,19 +35,22 @@ const navigation = [
   { name: "QR Tools", href: "/qr", icon: QrCode },
   { name: "Referrals", href: "/referrals", icon: Users },
   { name: "Downline", href: "/downline", icon: GitBranch },
+  { name: "Users", href: "/users", icon: Users },
   // { name: "Events", href: "/events", icon: Calendar },
   { name: "Manage Events", href: "/events/manage", icon: Calendar },
   { name: "Event Share Messages", href: "/events/share-messages", icon: MessageSquare },
   { name: "Calendar", href: "/calendar", icon: Calendar },
-  { name: "Event Scenarios", href: "/events/scenarios", icon: TrendingUp },
+  { name: "Financial Forecast (Paiso aa)", href: "/events/scenarios", icon: TrendingUp },
   { name: "Coupons", href: "/coupons", icon: Ticket },
   { name: "Tasks", href: "/tasks", icon: CheckSquare },
+  { name: "Notes", href: "/notes", icon: FileText },
   { name: "Gallery", href: "/gallery", icon: ImageIcon },
   { name: "Layouts", href: "/layouts", icon: Layout },
   { name: "Careers", href: "/careers", icon: Briefcase },
   { name: "Create User", href: "/sellers/create", icon: Users },
   { name: "Updates", href: "/updates/create", icon: Bell },
   { name: "WhatsApp Bulk", href: "/whatsapp-bulk", icon: MessageSquare },
+  { name: "Sales", href: "/sales", icon: FileText },
   { name: "RBAC", href: "/rbac", icon: Shield },
 ];
 
@@ -57,12 +61,12 @@ export default function Sidebar() {
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
-  const email = typeof window !== 'undefined' ? getStaffSession()?.email : undefined;
+  const email = typeof window !== 'undefined' ? getTeamSession()?.email : undefined;
 
   // Role switcher configuration
   const roles = [
     {
-      name: 'Staff Portal',
+      name: 'Team Portal',
       url: typeof window !== 'undefined' ? window.location.origin : '',
       icon: Shield,
       current: true
@@ -221,6 +225,10 @@ export default function Sidebar() {
                 if (item.href === "/rbac") {
                   return email?.toLowerCase() === "thejaayveeworldofficial@gmail.com";
                 }
+                // Users page - admin only
+                if (item.href === "/users") {
+                  return isSuperAdmin(email);
+                }
                 // Check RBAC permissions first if loaded
                 const tabKey = routeToTabKey[item.href as keyof typeof routeToTabKey];
                 if (permissionsLoaded && permissions.length > 0 && tabKey) {
@@ -244,6 +252,7 @@ export default function Sidebar() {
                 (item.href === "/events/scenarios" && pathname.startsWith("/events/scenarios")) ||
                 (item.href === "/calendar" && pathname.startsWith("/calendar")) ||
                 (item.href === "/downline" && pathname.startsWith("/downline")) ||
+                (item.href === "/users" && pathname.startsWith("/users")) ||
                 (item.href === "/tasks" && pathname.startsWith("/tasks")) ||
                 (item.href === "/gallery" && pathname.startsWith("/gallery")) ||
                 (item.href === "/layouts" && pathname.startsWith("/layouts")) ||
@@ -331,3 +340,4 @@ export default function Sidebar() {
     </>
   );
 }
+

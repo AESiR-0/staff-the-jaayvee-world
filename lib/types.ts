@@ -27,7 +27,8 @@ export interface AuthInitiateResponse {
   success: boolean;
   message: string;
   token?: string;
-  staffId?: string; // Backend uses staffId
+  teamId?: string; // Backend uses teamId (backward compatible with staffId)
+  staffId?: string; // Backward compatibility alias
   userId?: string;
   displayName?: string;
   email?: string;
@@ -45,7 +46,12 @@ export interface AuthVerifyResponse {
   success: boolean;
   message: string;
   token?: string;
-  staff?: {
+  team?: {
+    id: string;
+    displayName: string;
+    affiliateCode: string;
+  };
+  staff?: { // Backward compatibility alias
     id: string;
     displayName: string;
     affiliateCode: string;
@@ -56,3 +62,4 @@ export interface FaceVerificationError {
   code: 'NO_FACE_DETECTED' | 'MULTIPLE_FACES' | 'POOR_QUALITY' | 'LIGHTING_ISSUES' | 'ANGLE_ISSUES';
   message: string;
 }
+

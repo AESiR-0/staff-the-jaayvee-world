@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter, ChevronDown, ChevronUp } from "lucide-react";
-import { authenticatedFetch, getStaffSession, getAuthToken } from "@/lib/auth-utils";
+import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter, ChevronDown, ChevronUp, FileText, Download } from "lucide-react";
+import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 import EventFinancialPlanning from "@/components/EventFinancialPlanning";
 
 // Only allow md and thejaayveeworldofficial
@@ -78,7 +78,15 @@ export default function ManageEventsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Event>>({});
   const [editTicketTypes, setEditTicketTypes] = useState<Array<{ id?: string; name: string; price: number; quantity: number; description?: string }>>([]);
+  const [originalTicketTypes, setOriginalTicketTypes] = useState<Array<{ id: string; name: string; price: number; quantity: number; description?: string }>>([]);
   const [loadingTicketTypes, setLoadingTicketTypes] = useState(false);
+  const [editSubscriberLimitsEnabled, setEditSubscriberLimitsEnabled] = useState(false);
+  const [editSubscriberLimits, setEditSubscriberLimits] = useState({
+    premium: 0,
+    diamond: 0,
+    exclusiveBlack: 0,
+    student: 0,
+  });
   const [originalBanner, setOriginalBanner] = useState<string | null>(null); // Track original banner URL for deletion
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -93,7 +101,14 @@ export default function ManageEventsPage() {
     slug: "",
     published: false,
     status: "upcoming",
-    ticketTypes: [] as Array<{ name: string; price: number; quantity: number; description?: string }>
+    ticketTypes: [] as Array<{ name: string; price: number; quantity: number; description?: string }>,
+    subscriberLimitsEnabled: false,
+    subscriberLimits: {
+      premium: 0,
+      diamond: 0,
+      exclusiveBlack: 0,
+      student: 0,
+    }
   });
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -111,6 +126,7 @@ export default function ManageEventsPage() {
   const [showFinancialPlanning, setShowFinancialPlanning] = useState<{ [key: string]: boolean }>({}); // Track which events have financial planning expanded
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://thejaayveeworld.com";
 
@@ -243,8 +259,23 @@ export default function ManageEventsPage() {
 
       setUploadProgress('Creating event...');
 
+      // Prepare attributes with subscriber limits if enabled
+      const attributes: any = {};
+      attributes.subscriberLimitsEnabled = createForm.subscriberLimitsEnabled;
+      if (createForm.subscriberLimitsEnabled) {
+        attributes.subscriberLimits = {
+          premium: createForm.subscriberLimits.premium || 0,
+          diamond: createForm.subscriberLimits.diamond || 0,
+          exclusiveBlack: createForm.subscriberLimits.exclusiveBlack || 0,
+          student: createForm.subscriberLimits.student || 0,
+        };
+      }
+
       const response = await authenticatedFetch(`${API_BASE_URL}/api/events`, {
         method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           title: createForm.title,
           description: createForm.description || null,
@@ -258,6 +289,7 @@ export default function ManageEventsPage() {
           published: createForm.published,
           status: createForm.status,
           ticketTypes: createForm.ticketTypes.length > 0 ? createForm.ticketTypes : undefined,
+          attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
           // ventureId will be auto-detected from Talaash venture
         }),
       });
@@ -287,7 +319,14 @@ export default function ManageEventsPage() {
         slug: "",
         published: false,
         status: "upcoming",
-        ticketTypes: []
+        ticketTypes: [],
+        subscriberLimitsEnabled: false,
+        subscriberLimits: {
+          premium: 0,
+          diamond: 0,
+          exclusiveBlack: 0,
+          student: 0,
+        }
       });
       setSelectedFile(null);
       setPreviewUrl(null);
@@ -372,11 +411,27 @@ export default function ManageEventsPage() {
 
       setUploadProgress('Updating event...');
 
+      // Prepare attributes with subscriber limits if enabled
+      const attributes: any = {};
+      attributes.subscriberLimitsEnabled = editSubscriberLimitsEnabled;
+      if (editSubscriberLimitsEnabled) {
+        attributes.subscriberLimits = {
+          premium: editSubscriberLimits.premium || 0,
+          diamond: editSubscriberLimits.diamond || 0,
+          exclusiveBlack: editSubscriberLimits.exclusiveBlack || 0,
+          student: editSubscriberLimits.student || 0,
+        };
+      }
+
       const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${id}`, {
         method: "PUT",
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           ...editForm,
           banner: bannerUrl,
+          attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
         }),
       });
 
@@ -386,11 +441,57 @@ export default function ManageEventsPage() {
         throw new Error(data.error || "Failed to update event");
       }
 
-      // Update ticket types if they were modified
-      if (editTicketTypes.length > 0) {
-        setUploadProgress('Updating ticket types...');
-        try {
-          const ticketTypesData = editTicketTypes.map(tt => ({
+      // Update ticket types - handle create, update, and delete
+      setUploadProgress('Updating ticket types...');
+      try {
+        // Find ticket types that were deleted (in original but not in current)
+        const deletedTicketTypes = originalTicketTypes.filter(
+          original => !editTicketTypes.some(current => current.id === original.id)
+        );
+
+        // Delete removed ticket types
+        for (const deletedType of deletedTicketTypes) {
+          try {
+            const deleteRes = await authenticatedFetch(`${API_BASE_URL}/api/ticket-types/${deletedType.id}`, {
+              method: "DELETE",
+            });
+            if (!deleteRes.ok) {
+              console.warn(`Failed to delete ticket type ${deletedType.id}`);
+            }
+          } catch (deleteErr) {
+            console.error(`Error deleting ticket type ${deletedType.id}:`, deleteErr);
+          }
+        }
+
+        // Separate new and existing ticket types
+        const newTicketTypes = editTicketTypes.filter(tt => !tt.id);
+        const existingTicketTypes = editTicketTypes.filter(tt => tt.id);
+
+        // Update existing ticket types (PATCH)
+        for (const ticketType of existingTicketTypes) {
+          try {
+            const patchRes = await authenticatedFetch(`${API_BASE_URL}/api/ticket-types/${ticketType.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: ticketType.name,
+                price: ticketType.price,
+                capacity: ticketType.quantity,
+                admissionCount: 1,
+                attributes: ticketType.description ? { description: ticketType.description } : null
+              }),
+            });
+            if (!patchRes.ok) {
+              console.warn(`Failed to update ticket type ${ticketType.id}`);
+            }
+          } catch (patchErr) {
+            console.error(`Error updating ticket type ${ticketType.id}:`, patchErr);
+          }
+        }
+
+        // Create new ticket types (POST)
+        if (newTicketTypes.length > 0) {
+          const newTicketTypesData = newTicketTypes.map(tt => ({
             name: tt.name,
             price: tt.price,
             capacity: tt.quantity,
@@ -398,21 +499,22 @@ export default function ManageEventsPage() {
             attributes: tt.description ? { description: tt.description } : null
           }));
 
-          const ticketsRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${id}/tickets`, {
+          const createRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${id}/tickets`, {
             method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              ticketTypes: ticketTypesData,
+              ticketTypes: newTicketTypesData,
               generateTickets: false
             }),
           });
 
-          if (!ticketsRes.ok) {
-            console.warn("Failed to update ticket types, but event was updated");
+          if (!createRes.ok) {
+            console.warn("Failed to create new ticket types");
           }
-        } catch (ticketErr) {
-          console.error("Error updating ticket types:", ticketErr);
-          // Don't fail the whole update if ticket types fail
         }
+      } catch (ticketErr) {
+        console.error("Error updating ticket types:", ticketErr);
+        // Don't fail the whole update if ticket types fail
       }
 
       setSuccess("Event updated successfully!");
@@ -425,6 +527,7 @@ export default function ManageEventsPage() {
       setEditingId(null);
       setEditForm({});
       setEditTicketTypes([]);
+      setOriginalTicketTypes([]);
       setOriginalBanner(null);
       setSelectedEditFile(null);
       setPreviewEditUrl(null);
@@ -498,6 +601,28 @@ export default function ManageEventsPage() {
       status: event.status
     });
 
+    // Load subscriber limits from event attributes
+    const eventWithAttrs = event as any;
+    if (eventWithAttrs.attributes?.subscriberLimits) {
+      const limits = eventWithAttrs.attributes.subscriberLimits;
+      // If subscriberLimits exists, it means limits are enabled
+      setEditSubscriberLimitsEnabled(true);
+      setEditSubscriberLimits({
+        premium: limits.premium || 0,
+        diamond: limits.diamond || 0,
+        exclusiveBlack: limits.exclusiveBlack || 0,
+        student: limits.student || 0,
+      });
+    } else {
+      setEditSubscriberLimitsEnabled(false);
+      setEditSubscriberLimits({
+        premium: 0,
+        diamond: 0,
+        exclusiveBlack: 0,
+        student: 0,
+      });
+    }
+
     // Fetch existing ticket types
     setLoadingTicketTypes(true);
     try {
@@ -513,8 +638,11 @@ export default function ManageEventsPage() {
             description: tt.attributes?.description || ""
           }));
           setEditTicketTypes(ticketTypes);
+          // Store original ticket types for comparison
+          setOriginalTicketTypes(ticketTypes.map((tt: any) => ({ ...tt })));
         } else {
           setEditTicketTypes([]);
+          setOriginalTicketTypes([]);
         }
       } else {
         setEditTicketTypes([]);
@@ -583,6 +711,186 @@ export default function ManageEventsPage() {
     }
 
     return data.data.url;
+  };
+
+  // Generate demo CSV file (horizontal format with multiple ticket types as columns)
+  const generateDemoCSV = () => {
+    // Support up to 5 ticket types per event
+    const csvContent = `Title,Description,Start Date,End Date,Venue,City,State,Slug,Published,Status,Banner,Ticket Type 1 Name,Ticket Type 1 Price,Ticket Type 1 Quantity,Ticket Type 1 Description,Ticket Type 2 Name,Ticket Type 2 Price,Ticket Type 2 Quantity,Ticket Type 2 Description,Ticket Type 3 Name,Ticket Type 3 Price,Ticket Type 3 Quantity,Ticket Type 3 Description,Ticket Type 4 Name,Ticket Type 4 Price,Ticket Type 4 Quantity,Ticket Type 4 Description,Ticket Type 5 Name,Ticket Type 5 Price,Ticket Type 5 Quantity,Ticket Type 5 Description
+Summer Music Festival,Join us for an amazing summer music festival with top artists,2024-06-15T18:00,2024-06-15T23:00,Central Park,New York,New York,summer-music-festival-2024,true,upcoming,https://example.com/banner.jpg,VIP,5000,100,Includes front row seats and backstage access,General Admission,2000,500,Standard entry ticket,Early Bird,1500,200,Discounted price for early buyers,,,,
+Tech Conference 2024,Annual technology conference with industry leaders,2024-07-20T09:00,2024-07-20T17:00,Convention Center,San Francisco,California,tech-conference-2024,true,upcoming,https://example.com/tech-banner.jpg,Full Pass,3000,300,Full conference access with lunch,Student Pass,1000,100,Discounted student ticket,Day Pass,1500,50,Single day access only,,,`;
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'event-template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    setSuccess('CSV template downloaded! Fill in your event details and upload it.');
+    setTimeout(() => setSuccess(null), 3000);
+  };
+
+  // Parse CSV and populate form (horizontal format)
+  const handleCSVUpload = async (file: File) => {
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      
+      if (lines.length < 2) {
+        setError('CSV file must have at least a header row and one data row');
+        return;
+      }
+
+      // Parse header row
+      const headers = parseCSVLine(lines[0]);
+      const headerMap: { [key: string]: number } = {};
+      headers.forEach((header, index) => {
+        const normalized = header.toLowerCase().trim();
+        headerMap[normalized] = index;
+      });
+
+      // Find first event data row (skip header)
+      if (lines.length < 2) {
+        setError('CSV file must have at least one event data row');
+        return;
+      }
+
+      // Parse first event row (we'll use the first event for now, but could support multiple)
+      const eventValues = parseCSVLine(lines[1]);
+      
+      if (!eventValues || eventValues.length < 3) {
+        setError('Could not find valid event data in CSV');
+        return;
+      }
+
+      // Helper to get value by header name (case-insensitive, handles variations)
+      const getValue = (headerVariations: string[]): string => {
+        for (const variation of headerVariations) {
+          const normalized = variation.toLowerCase().trim();
+          const index = headerMap[normalized];
+          if (index !== undefined && eventValues[index]) {
+            return eventValues[index].trim();
+          }
+        }
+        return '';
+      };
+
+      // Parse event data
+      const title = getValue(['title', 'event title', 'name']);
+      const description = getValue(['description', 'desc']);
+      const startDate = getValue(['start date', 'startdate', 'start']);
+      const endDate = getValue(['end date', 'enddate', 'end']);
+      const venue = getValue(['venue', 'location']);
+      const city = getValue(['city']);
+      const state = getValue(['state']);
+      const slug = getValue(['slug']);
+      const published = getValue(['published', 'publish']);
+      const status = getValue(['status']);
+      const banner = getValue(['banner', 'banner url', 'bannerurl', 'image']);
+
+      // Parse ticket types (horizontal format: Ticket Type 1 Name, Ticket Type 1 Price, etc.)
+      const ticketTypes: Array<{ name: string; price: number; quantity: number; description?: string }> = [];
+      
+      // Support up to 10 ticket types
+      for (let i = 1; i <= 10; i++) {
+        const name = getValue([`ticket type ${i} name`, `ticket ${i} name`, `tickettype${i}name`]);
+        const priceStr = getValue([`ticket type ${i} price`, `ticket ${i} price`, `tickettype${i}price`]);
+        const quantityStr = getValue([`ticket type ${i} quantity`, `ticket ${i} quantity`, `tickettype${i}quantity`]);
+        const description = getValue([`ticket type ${i} description`, `ticket ${i} description`, `tickettype${i}description`]);
+
+        if (name && name.trim()) {
+          const price = parseFloat(priceStr) || 0;
+          const quantity = parseInt(quantityStr) || 0;
+          
+          if (name.trim()) {
+            ticketTypes.push({
+              name: name.trim(),
+              price,
+              quantity,
+              description: description.trim() || ''
+            });
+          }
+        }
+      }
+
+      // Convert date format if needed
+      let formattedStartDate = startDate;
+      let formattedEndDate = endDate;
+      
+      if (startDate && !startDate.includes('T')) {
+        if (startDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          formattedStartDate = startDate + 'T00:00';
+        } else if (startDate.match(/^\d{2}\/\d{2}\/\d{4}/)) {
+          const parts = startDate.split('/');
+          formattedStartDate = `${parts[2]}-${parts[0]}-${parts[1]}T00:00`;
+        }
+      }
+      if (endDate && !endDate.includes('T')) {
+        if (endDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          formattedEndDate = endDate + 'T00:00';
+        } else if (endDate.match(/^\d{2}\/\d{2}\/\d{4}/)) {
+          const parts = endDate.split('/');
+          formattedEndDate = `${parts[2]}-${parts[0]}-${parts[1]}T00:00`;
+        }
+      }
+
+      setCreateForm({
+        title: title || '',
+        description: description || '',
+        startDate: formattedStartDate,
+        endDate: formattedEndDate || '',
+        banner: banner || '',
+        venue: venue || '',
+        city: city || '',
+        state: state || '',
+        slug: slug || '',
+        published: published.toLowerCase() === 'true' || published === '1' || false,
+        status: status || 'upcoming',
+        ticketTypes: ticketTypes.filter(tt => tt.name && tt.name.trim()),
+        subscriberLimitsEnabled: false,
+        subscriberLimits: {
+          premium: 0,
+          diamond: 0,
+          exclusiveBlack: 0,
+          student: 0,
+        }
+      });
+
+      const eventCount = lines.length - 1; // Subtract header row
+      setSuccess(`CSV imported successfully! Loaded first event with ${ticketTypes.length} ticket type(s). ${eventCount > 1 ? `(${eventCount} events found in CSV - only first event loaded)` : ''}`);
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      console.error('CSV parsing error:', err);
+      setError(err.message || 'Failed to parse CSV file');
+    }
+  };
+
+  // Helper function to parse CSV line (handles quoted values)
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    result.push(current.trim());
+    return result;
   };
 
   if (loading) {
@@ -664,7 +972,45 @@ export default function ManageEventsPage() {
         {/* Create Form */}
         {creating && (
           <div className="card mb-6">
-            <h2 className="text-xl font-semibold text-primary-fg mb-4">Create New Event</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-primary-fg">Create New Event</h2>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={generateDemoCSV}
+                  className="btn-secondary flex items-center gap-2 text-sm"
+                  title="Download CSV template"
+                >
+                  <Download className="h-4 w-4" />
+                  Download CSV Template
+                </button>
+                <button
+                  type="button"
+                  onClick={() => csvInputRef.current?.click()}
+                  className="btn-secondary flex items-center gap-2 text-sm"
+                  title="Upload CSV file"
+                >
+                  <FileText className="h-4 w-4" />
+                  Upload CSV
+                </button>
+                <input
+                  ref={csvInputRef}
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleCSVUpload(file);
+                    }
+                    // Reset input
+                    if (csvInputRef.current) {
+                      csvInputRef.current.value = '';
+                    }
+                  }}
+                />
+              </div>
+            </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -956,6 +1302,123 @@ export default function ManageEventsPage() {
                 )}
               </div>
 
+              {/* Subscriber Limits Section */}
+              <div className="border-t border-primary-border pt-4">
+                <div className="flex items-center gap-3 p-4 bg-primary-accent-light rounded-lg border border-primary-border mb-4">
+                  <input
+                    type="checkbox"
+                    id="subscriberLimitsEnabled"
+                    disabled={submitting}
+                    checked={createForm.subscriberLimitsEnabled}
+                    onChange={(e) => setCreateForm({ ...createForm, subscriberLimitsEnabled: e.target.checked })}
+                    className="w-5 h-5 text-primary-accent border-primary-border rounded focus:ring-primary-accent disabled:opacity-50 disabled:cursor-not-allowed"
+                  />
+                  <label htmlFor="subscriberLimitsEnabled" className="text-sm font-medium text-primary-fg cursor-pointer">
+                    Enable Subscriber Limits (Free Access for Subscribers)
+                  </label>
+                </div>
+
+                {createForm.subscriberLimitsEnabled && (
+                  <div className="space-y-4">
+                    <p className="text-sm text-primary-muted mb-4">
+                      Set the maximum number of free tickets available for each subscriber tier. These tickets will be free and included in financial calculations.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-primary-fg mb-1">
+                          Premium Subscribers
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={submitting}
+                          value={createForm.subscriberLimits.premium || ""}
+                          onChange={(e) => setCreateForm({
+                            ...createForm,
+                            subscriberLimits: {
+                              ...createForm.subscriberLimits,
+                              premium: parseInt(e.target.value) || 0
+                            }
+                          })}
+                          className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-primary-fg mb-1">
+                          Diamond Subscribers
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={submitting}
+                          value={createForm.subscriberLimits.diamond || ""}
+                          onChange={(e) => setCreateForm({
+                            ...createForm,
+                            subscriberLimits: {
+                              ...createForm.subscriberLimits,
+                              diamond: parseInt(e.target.value) || 0
+                            }
+                          })}
+                          className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-primary-fg mb-1">
+                          Exclusive Black Subscribers
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={submitting}
+                          value={createForm.subscriberLimits.exclusiveBlack || ""}
+                          onChange={(e) => setCreateForm({
+                            ...createForm,
+                            subscriberLimits: {
+                              ...createForm.subscriberLimits,
+                              exclusiveBlack: parseInt(e.target.value) || 0
+                            }
+                          })}
+                          className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-primary-fg mb-1">
+                          Student Subscribers
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          disabled={submitting}
+                          value={createForm.subscriberLimits.student || ""}
+                          onChange={(e) => setCreateForm({
+                            ...createForm,
+                            subscriberLimits: {
+                              ...createForm.subscriberLimits,
+                              student: parseInt(e.target.value) || 0
+                            }
+                          })}
+                          className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-xs text-blue-800">
+                        <strong>Total Free Subscriber Tickets:</strong> {
+                          createForm.subscriberLimits.premium +
+                          createForm.subscriberLimits.diamond +
+                          createForm.subscriberLimits.exclusiveBlack +
+                          createForm.subscriberLimits.student
+                        }
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-primary-fg mb-2">Description</label>
                 <textarea
@@ -989,20 +1452,27 @@ export default function ManageEventsPage() {
                       URL.revokeObjectURL(previewUrl);
                     }
                     setCreating(false);
-      setCreateForm({
-        title: "",
-        description: "",
-        startDate: "",
-        endDate: "",
-        banner: "",
-        venue: "",
-        city: "",
-        state: "",
-        slug: "",
-        published: false,
-        status: "upcoming",
-        ticketTypes: []
-      });
+                    setCreateForm({
+                      title: "",
+                      description: "",
+                      startDate: "",
+                      endDate: "",
+                      banner: "",
+                      venue: "",
+                      city: "",
+                      state: "",
+                      slug: "",
+                      published: false,
+                      status: "upcoming",
+                      ticketTypes: [],
+                      subscriberLimitsEnabled: false,
+                      subscriberLimits: {
+                        premium: 0,
+                        diamond: 0,
+                        exclusiveBlack: 0,
+                        student: 0,
+                      }
+                    });
       setSelectedFile(null);
       setPreviewUrl(null);
                   }}
@@ -1420,6 +1890,107 @@ export default function ManageEventsPage() {
                                   </div>
                                 )}
                               </div>
+
+                              {/* Subscriber Limits Section for Edit */}
+                              <div className="border-t border-primary-border pt-4">
+                                <div className="flex items-center gap-3 p-4 bg-primary-accent-light rounded-lg border border-primary-border mb-4">
+                                  <input
+                                    type="checkbox"
+                                    id="editSubscriberLimitsEnabled"
+                                    checked={editSubscriberLimitsEnabled}
+                                    onChange={(e) => setEditSubscriberLimitsEnabled(e.target.checked)}
+                                    className="w-5 h-5 text-primary-accent border-primary-border rounded focus:ring-primary-accent"
+                                  />
+                                  <label htmlFor="editSubscriberLimitsEnabled" className="text-sm font-medium text-primary-fg cursor-pointer">
+                                    Enable Subscriber Limits (Free Access for Subscribers)
+                                  </label>
+                                </div>
+
+                                {editSubscriberLimitsEnabled && (
+                                  <div className="space-y-4">
+                                    <p className="text-sm text-primary-muted mb-4">
+                                      Set the maximum number of free tickets available for each subscriber tier. These tickets will be free and included in financial calculations.
+                                    </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div>
+                                        <label className="block text-xs font-medium text-primary-fg mb-1">
+                                          Premium Subscribers
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={editSubscriberLimits.premium || ""}
+                                          onChange={(e) => setEditSubscriberLimits({
+                                            ...editSubscriberLimits,
+                                            premium: parseInt(e.target.value) || 0
+                                          })}
+                                          className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                          placeholder="0"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-primary-fg mb-1">
+                                          Diamond Subscribers
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={editSubscriberLimits.diamond || ""}
+                                          onChange={(e) => setEditSubscriberLimits({
+                                            ...editSubscriberLimits,
+                                            diamond: parseInt(e.target.value) || 0
+                                          })}
+                                          className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                          placeholder="0"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-primary-fg mb-1">
+                                          Exclusive Black Subscribers
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={editSubscriberLimits.exclusiveBlack || ""}
+                                          onChange={(e) => setEditSubscriberLimits({
+                                            ...editSubscriberLimits,
+                                            exclusiveBlack: parseInt(e.target.value) || 0
+                                          })}
+                                          className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                          placeholder="0"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium text-primary-fg mb-1">
+                                          Student Subscribers
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          value={editSubscriberLimits.student || ""}
+                                          onChange={(e) => setEditSubscriberLimits({
+                                            ...editSubscriberLimits,
+                                            student: parseInt(e.target.value) || 0
+                                          })}
+                                          className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                          placeholder="0"
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                      <p className="text-xs text-blue-800">
+                                        <strong>Total Free Subscriber Tickets:</strong> {
+                                          editSubscriberLimits.premium +
+                                          editSubscriberLimits.diamond +
+                                          editSubscriberLimits.exclusiveBlack +
+                                          editSubscriberLimits.student
+                                        }
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                   <input
@@ -1443,6 +2014,7 @@ export default function ManageEventsPage() {
                                       setEditingId(null);
                                       setEditForm({});
                                       setEditTicketTypes([]);
+                                      setOriginalTicketTypes([]);
                                       setOriginalBanner(null);
                                       setSelectedEditFile(null);
                                       setPreviewEditUrl(null);
@@ -1543,4 +2115,5 @@ export default function ManageEventsPage() {
     </div>
   );
 }
+
 
