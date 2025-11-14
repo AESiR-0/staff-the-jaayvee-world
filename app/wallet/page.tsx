@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Wallet, TrendingUp, DollarSign, History, Users } from "lucide-react";
+import { Wallet, TrendingUp, DollarSign, History, Users, ShoppingCart } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 
 interface WalletData {
@@ -13,6 +13,7 @@ interface WalletData {
     commissionEarned: string;
     totalSignups: number;
     totalClicks: number;
+    checkoutReferred: number;
   };
   transactions: Array<{
     id: string;
@@ -151,7 +152,7 @@ export default function WalletPage() {
       </div>
 
       {/* Earnings Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-primary-fg">Commission Earned</h3>
@@ -186,6 +187,17 @@ export default function WalletPage() {
             {walletData.earnings.totalClicks.toLocaleString()}
           </p>
           <p className="text-sm text-primary-muted mt-2">Link clicks tracked</p>
+        </div>
+
+        <div className="card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-primary-fg">Checkout Referred</h3>
+            <ShoppingCart className="h-6 w-6 text-purple-500" />
+          </div>
+          <p className="text-3xl font-bold text-primary-fg">
+            {(walletData.earnings.checkoutReferred || 0).toLocaleString()}
+          </p>
+          <p className="text-sm text-primary-muted mt-2">Checkouts by referred users</p>
         </div>
       </div>
 

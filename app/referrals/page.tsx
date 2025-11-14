@@ -10,8 +10,6 @@ interface ReferralStats {
   totalClicks: number;
   totalSignups: number;
   conversionRate: number;
-  recentClicks: number;
-  recentSignups: number;
 }
 
 interface Event {
@@ -27,8 +25,6 @@ export default function ReferralsPage() {
     totalClicks: 0,
     totalSignups: 0,
     conversionRate: 0,
-    recentClicks: 0,
-    recentSignups: 0,
   });
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,8 +99,6 @@ export default function ReferralsPage() {
             conversionRate: affiliateData?.totalClicks > 0
               ? (affiliateData.totalSignups / affiliateData.totalClicks) * 100
               : 0,
-            recentClicks: 0, // Not tracked yet
-            recentSignups: 0, // Not tracked yet
           });
         } else {
           const errorText = await affiliateRes.text();
@@ -126,7 +120,7 @@ export default function ReferralsPage() {
   };
 
   const shareReferralLink = () => {
-    const link = `https://thejaayveeworld.com/ease?ref=${stats.referralCode}`;
+    const link = `https://talaash.thejaayveeworld.com/auth/register?ref=${stats.referralCode}`;
     navigator.clipboard.writeText(link);
     // You could add a toast notification here
   };
@@ -163,6 +157,29 @@ export default function ReferralsPage() {
             </div>
           </div>
 
+          <div className="card">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary-accent-light rounded-xl flex items-center justify-center">
+                <MousePointer className="text-primary-accent" size={20} />
+              </div>
+              <div>
+                <p className="text-sm text-primary-muted">Total Clicks</p>
+                <p className="text-2xl font-bold text-primary-fg">{stats.totalClicks.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary-accent-light rounded-xl flex items-center justify-center">
+                <Users className="text-primary-accent" size={20} />
+              </div>
+              <div>
+                <p className="text-sm text-primary-muted">Total Signups</p>
+                <p className="text-2xl font-bold text-primary-fg">{stats.totalSignups.toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
 
           <div className="card">
             <div className="flex items-center gap-3">
@@ -213,26 +230,6 @@ export default function ReferralsPage() {
           </div>
         </div>
 
-        {/* Recent Activity */}
-        {/* <div className="card">
-          <h2 className="text-lg font-semibold text-primary-fg mb-4">Recent Activity</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-primary-fg">Recent Clicks (24h)</p>
-                <p className="text-xs text-primary-muted">Last 24 hours</p>
-              </div>
-              <p className="text-lg font-semibold text-primary-accent">{stats.recentClicks}</p>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-primary-fg">Recent Signups (24h)</p>
-                <p className="text-xs text-primary-muted">Last 24 hours</p>
-              </div>
-              <p className="text-lg font-semibold text-primary-accent">{stats.recentSignups}</p>
-            </div>
-          </div>
-        </div> */}
 
         {/* Event Referral Links */}
         {!eventsLoading && events.length > 0 && (
