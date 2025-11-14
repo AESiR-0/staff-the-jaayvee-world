@@ -22,7 +22,8 @@ import {
   UserCircle,
   ChevronDown,
   TrendingUp,
-  FileText
+  FileText,
+  GraduationCap
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -36,6 +37,7 @@ const navigation = [
   { name: "Referrals", href: "/referrals", icon: Users },
   { name: "Downline", href: "/downline", icon: GitBranch },
   { name: "Users", href: "/users", icon: Users },
+  { name: "Students", href: "/students", icon: GraduationCap },
   // { name: "Events", href: "/events", icon: Calendar },
   { name: "Manage Events", href: "/events/manage", icon: Calendar },
   { name: "Event Share Messages", href: "/events/share-messages", icon: MessageSquare },
@@ -229,6 +231,10 @@ export default function Sidebar() {
                 if (item.href === "/users") {
                   return isSuperAdmin(email);
                 }
+                // Students page - admin only
+                if (item.href === "/students") {
+                  return isSuperAdmin(email);
+                }
                 // Check RBAC permissions first if loaded
                 const tabKey = routeToTabKey[item.href as keyof typeof routeToTabKey];
                 if (permissionsLoaded && permissions.length > 0 && tabKey) {
@@ -253,6 +259,7 @@ export default function Sidebar() {
                 (item.href === "/calendar" && pathname.startsWith("/calendar")) ||
                 (item.href === "/downline" && pathname.startsWith("/downline")) ||
                 (item.href === "/users" && pathname.startsWith("/users")) ||
+                (item.href === "/students" && pathname.startsWith("/students")) ||
                 (item.href === "/tasks" && pathname.startsWith("/tasks")) ||
                 (item.href === "/gallery" && pathname.startsWith("/gallery")) ||
                 (item.href === "/layouts" && pathname.startsWith("/layouts")) ||

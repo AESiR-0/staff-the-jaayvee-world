@@ -118,6 +118,8 @@ export default function EventScenariosPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set());
+  const [expandedMetrics, setExpandedMetrics] = useState<Set<string>>(new Set());
+  const [expandedSections, setExpandedSections] = useState<Map<string, Set<string>>>(new Map()); // eventId -> Set of section keys
   const [loadingCalculations, setLoadingCalculations] = useState<Set<string>>(new Set());
   const [loadedCalculations, setLoadedCalculations] = useState<Set<string>>(new Set());
 
@@ -244,6 +246,39 @@ export default function EventScenariosPage() {
       return next;
     });
   }, [loadedCalculations, fetchEventCalculations]);
+
+  const toggleMetricsExpanded = useCallback((eventId: string) => {
+    setExpandedMetrics(prev => {
+      const next = new Set(prev);
+      if (next.has(eventId)) {
+        next.delete(eventId);
+      } else {
+        next.add(eventId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSectionExpanded = useCallback((eventId: string, sectionKey: string) => {
+    setExpandedSections(prev => {
+      const next = new Map(prev);
+      const sections = next.get(eventId) || new Set<string>();
+      const newSections = new Set(sections);
+      
+      if (newSections.has(sectionKey)) {
+        newSections.delete(sectionKey);
+      } else {
+        newSections.add(sectionKey);
+      }
+      
+      next.set(eventId, newSections);
+      return next;
+    });
+  }, []);
+
+  const isSectionExpanded = useCallback((eventId: string, sectionKey: string) => {
+    return expandedSections.get(eventId)?.has(sectionKey) || false;
+  }, [expandedSections]);
 
   useEffect(() => {
     const checkAuthorization = async () => {
@@ -380,7 +415,12 @@ export default function EventScenariosPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => toggleEventExpanded(event.id)}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleEventExpanded(event.id);
+                        }}
                         className="p-1 hover:bg-primary-bg rounded transition-colors"
                         aria-label={isExpanded ? "Collapse" : "Expand"}
                       >
@@ -415,59 +455,88 @@ export default function EventScenariosPage() {
                   </button>
                 </div>
 
-              {/* Live Metrics - Always visible */}
+              {/* Live Metrics - Accordion */}
               {event.liveMetrics && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <div className="border border-primary-border rounded-lg p-4">
-                    <div className="text-sm text-primary-muted mb-1">Tickets Sold</div>
-                    <div className="text-2xl font-bold text-primary-fg">
-                      {event.liveMetrics.ticketsSold} / {event.liveMetrics.totalCapacity}
+                <div className="mb-6">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleMetricsExpanded(event.id);
+                    }}
+                    className="w-full flex items-center justify-between p-4 bg-primary-bg/50 hover:bg-primary-bg rounded-lg border border-primary-border transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <TrendingUp className="h-5 w-5 text-primary-accent" />
+                      <div className="text-left">
+                        <div className="font-semibold text-primary-fg">Live Financial Metrics</div>
+                        <div className="text-xs text-primary-muted mt-0.5">
+                          {event.liveMetrics.ticketsSold} tickets sold • {formatCurrency(event.liveMetrics.actualRevenue)} revenue
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xs text-primary-muted mt-1">
-                      {event.liveMetrics.capacityUtilization.toFixed(1)}% capacity
+                    {expandedMetrics.has(event.id) ? (
+                      <ChevronUp className="h-5 w-5 text-primary-muted" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-primary-muted" />
+                    )}
+                  </button>
+                  
+                  {expandedMetrics.has(event.id) && (
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="border border-primary-border rounded-lg p-4">
+                        <div className="text-sm text-primary-muted mb-1">Tickets Sold</div>
+                        <div className="text-2xl font-bold text-primary-fg">
+                          {event.liveMetrics.ticketsSold} / {event.liveMetrics.totalCapacity}
+                        </div>
+                        <div className="text-xs text-primary-muted mt-1">
+                          {event.liveMetrics.capacityUtilization.toFixed(1)}% capacity
+                        </div>
+                      </div>
+                      <div className="border border-primary-border rounded-lg p-4">
+                        <div className="text-sm text-primary-muted mb-1">Revenue</div>
+                        <div className="text-2xl font-bold text-primary-fg">
+                          {formatCurrency(event.liveMetrics.actualRevenue)}
+                        </div>
+                        <div className="text-xs text-primary-muted mt-1">
+                          Projected: {formatCurrency(event.liveMetrics.projectedRevenue)}
+                        </div>
+                      </div>
+                      <div className="border border-primary-border rounded-lg p-4">
+                        <div className="text-sm text-primary-muted mb-1">Profit</div>
+                        <div
+                          className={`text-2xl font-bold ${
+                            event.liveMetrics.actualProfit >= 0 ? "text-green-600" : "text-red-600"
+                          }`}
+                        >
+                          {formatCurrency(event.liveMetrics.actualProfit)}
+                        </div>
+                        <div className="text-xs text-primary-muted mt-1">
+                          Projected: {formatCurrency(event.liveMetrics.projectedProfit)}
+                        </div>
+                      </div>
+                      <div className="border border-primary-border rounded-lg p-4">
+                        <div className="text-sm text-primary-muted mb-1">Performance</div>
+                        <div
+                          className={`text-2xl font-bold ${
+                            event.liveMetrics.actualRevenue >= event.liveMetrics.projectedRevenue
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {event.liveMetrics.projectedRevenue > 0
+                            ? (
+                                (event.liveMetrics.actualRevenue / event.liveMetrics.projectedRevenue) *
+                                100
+                              ).toFixed(1)
+                            : 0}
+                          %
+                        </div>
+                        <div className="text-xs text-primary-muted mt-1">vs Projection</div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="border border-primary-border rounded-lg p-4">
-                    <div className="text-sm text-primary-muted mb-1">Revenue</div>
-                    <div className="text-2xl font-bold text-primary-fg">
-                      {formatCurrency(event.liveMetrics.actualRevenue)}
-                    </div>
-                    <div className="text-xs text-primary-muted mt-1">
-                      Projected: {formatCurrency(event.liveMetrics.projectedRevenue)}
-                    </div>
-                  </div>
-                  <div className="border border-primary-border rounded-lg p-4">
-                    <div className="text-sm text-primary-muted mb-1">Profit</div>
-                    <div
-                      className={`text-2xl font-bold ${
-                        event.liveMetrics.actualProfit >= 0 ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {formatCurrency(event.liveMetrics.actualProfit)}
-                    </div>
-                    <div className="text-xs text-primary-muted mt-1">
-                      Projected: {formatCurrency(event.liveMetrics.projectedProfit)}
-                    </div>
-                  </div>
-                  <div className="border border-primary-border rounded-lg p-4">
-                    <div className="text-sm text-primary-muted mb-1">Performance</div>
-                    <div
-                      className={`text-2xl font-bold ${
-                        event.liveMetrics.actualRevenue >= event.liveMetrics.projectedRevenue
-                          ? "text-green-600"
-                          : "text-red-600"
-                      }`}
-                    >
-                      {event.liveMetrics.projectedRevenue > 0
-                        ? (
-                            (event.liveMetrics.actualRevenue / event.liveMetrics.projectedRevenue) *
-                            100
-                          ).toFixed(1)
-                        : 0}
-                      %
-                    </div>
-                    <div className="text-xs text-primary-muted mt-1">vs Projection</div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -539,10 +608,27 @@ export default function EventScenariosPage() {
                         </div>
                       )}
 
-                      {/* Subscriber Limits Breakdown */}
+                      {/* Subscriber Limits Breakdown - Accordion */}
                       {event.calculations?.subscriberLimitsBreakdown && event.calculations.subscriberLimitsBreakdown.enabled && (
                         <div className="mt-6 pt-6 border-t border-primary-border">
-                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Subscriber Free Tickets</h3>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleSectionExpanded(event.id, 'subscriber-limits');
+                            }}
+                            className="w-full flex items-center justify-between p-4 bg-primary-bg/50 hover:bg-primary-bg rounded-lg border border-primary-border transition-colors mb-4"
+                          >
+                            <h3 className="text-lg font-semibold text-primary-fg">Subscriber Free Tickets</h3>
+                            {isSectionExpanded(event.id, 'subscriber-limits') ? (
+                              <ChevronUp className="h-5 w-5 text-primary-muted" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5 text-primary-muted" />
+                            )}
+                          </button>
+                          
+                          {isSectionExpanded(event.id, 'subscriber-limits') && (
                           <div className="bg-primary-bg/50 rounded-lg p-4">
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                               <div>
@@ -613,13 +699,31 @@ export default function EventScenariosPage() {
                               </p>
                             </div>
                           </div>
+                          )}
                         </div>
                       )}
 
-                      {/* Ticket Type Based Scenarios */}
+                      {/* Ticket Type Based Scenarios - Accordion */}
                       {event.calculations?.suggestions?.ticketTypeScenarios && event.calculations.suggestions.ticketTypeScenarios.length > 0 ? (
-                        <div>
-                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Ticket Type Scenarios</h3>
+                        <div className={event.calculations?.subscriberLimitsBreakdown && event.calculations.subscriberLimitsBreakdown.enabled ? "mt-6 pt-6 border-t border-primary-border" : ""}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleSectionExpanded(event.id, 'ticket-type-scenarios');
+                            }}
+                            className="w-full flex items-center justify-between p-4 bg-primary-bg/50 hover:bg-primary-bg rounded-lg border border-primary-border transition-colors mb-4"
+                          >
+                            <h3 className="text-lg font-semibold text-primary-fg">Ticket Type Scenarios</h3>
+                            {isSectionExpanded(event.id, 'ticket-type-scenarios') ? (
+                              <ChevronUp className="h-5 w-5 text-primary-muted" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5 text-primary-muted" />
+                            )}
+                          </button>
+                          
+                          {isSectionExpanded(event.id, 'ticket-type-scenarios') && (
                           <div className="space-y-4">
                             {event.calculations.suggestions.ticketTypeScenarios.map((scenario, idx) => (
                       <div key={idx} className="border border-primary-border rounded-lg p-4">
@@ -692,13 +796,31 @@ export default function EventScenariosPage() {
                       </div>
                     ))}
                   </div>
-                </div>
+                          )}
+                        </div>
                       ) : null}
 
-                      {/* Traditional Price/Capacity Scenarios */}
+                      {/* Traditional Price/Capacity Scenarios - Accordion */}
                       {event.calculations?.suggestions?.scenarios && event.calculations.suggestions.scenarios.length > 0 ? (
                         <div className={event.calculations?.suggestions?.ticketTypeScenarios ? "mt-6 pt-6 border-t border-primary-border" : ""}>
-                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Price & Capacity Scenarios</h3>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleSectionExpanded(event.id, 'price-capacity-scenarios');
+                            }}
+                            className="w-full flex items-center justify-between p-4 bg-primary-bg/50 hover:bg-primary-bg rounded-lg border border-primary-border transition-colors mb-4"
+                          >
+                            <h3 className="text-lg font-semibold text-primary-fg">Price & Capacity Scenarios</h3>
+                            {isSectionExpanded(event.id, 'price-capacity-scenarios') ? (
+                              <ChevronUp className="h-5 w-5 text-primary-muted" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5 text-primary-muted" />
+                            )}
+                          </button>
+                          
+                          {isSectionExpanded(event.id, 'price-capacity-scenarios') && (
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                               <thead>
@@ -739,6 +861,7 @@ export default function EventScenariosPage() {
                               </tbody>
                             </table>
                           </div>
+                          )}
                         </div>
                       ) : (
                         !event.calculations?.suggestions?.ticketTypeScenarios && (
@@ -748,10 +871,27 @@ export default function EventScenariosPage() {
                         )
                       )}
 
-                      {/* Expenses Breakdown */}
+                      {/* Expenses Breakdown - Accordion */}
                       {event.calculations && event.calculations.expenses && (
                         <div className="mt-6 pt-6 border-t border-primary-border">
-                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Expenses Breakdown</h3>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleSectionExpanded(event.id, 'expenses');
+                            }}
+                            className="w-full flex items-center justify-between p-4 bg-primary-bg/50 hover:bg-primary-bg rounded-lg border border-primary-border transition-colors mb-4"
+                          >
+                            <h3 className="text-lg font-semibold text-primary-fg">Expenses Breakdown</h3>
+                            {isSectionExpanded(event.id, 'expenses') ? (
+                              <ChevronUp className="h-5 w-5 text-primary-muted" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5 text-primary-muted" />
+                            )}
+                          </button>
+                          
+                          {isSectionExpanded(event.id, 'expenses') && (
                           <div className="space-y-3">
                             {event.calculations.expenses.breakdown && (
                               <>
@@ -805,13 +945,31 @@ export default function EventScenariosPage() {
                               </div>
                             </div>
                           </div>
+                          )}
                         </div>
                       )}
 
-                      {/* Ticket Types Breakdown */}
+                      {/* Ticket Types Breakdown - Accordion */}
                       {event.calculations?.income?.ticketTypeBreakdown && event.calculations.income.ticketTypeBreakdown.length > 0 && (
                         <div className="mt-6 pt-6 border-t border-primary-border">
-                          <h3 className="text-lg font-semibold text-primary-fg mb-4">Ticket Types Breakdown</h3>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleSectionExpanded(event.id, 'ticket-types');
+                            }}
+                            className="w-full flex items-center justify-between p-4 bg-primary-bg/50 hover:bg-primary-bg rounded-lg border border-primary-border transition-colors mb-4"
+                          >
+                            <h3 className="text-lg font-semibold text-primary-fg">Ticket Types Breakdown</h3>
+                            {isSectionExpanded(event.id, 'ticket-types') ? (
+                              <ChevronUp className="h-5 w-5 text-primary-muted" />
+                            ) : (
+                              <ChevronDown className="h-5 w-5 text-primary-muted" />
+                            )}
+                          </button>
+                          
+                          {isSectionExpanded(event.id, 'ticket-types') && (
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                               <thead>
@@ -865,6 +1023,7 @@ export default function EventScenariosPage() {
                               </tfoot>
                             </table>
                           </div>
+                          )}
                         </div>
                       )}
                     </>
