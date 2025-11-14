@@ -142,26 +142,12 @@ export default function TasksPage() {
             fullName: u.fullName || u.email,
           })));
         }
+      } else {
+        console.warn('RBAC API returned non-OK status:', response.status);
       }
     } catch (err) {
-      console.error('Error fetching staff users:', err);
-      // Fallback: if RBAC fails, try to get from staff list endpoint
-      try {
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-        const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/list`);
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.data) {
-            setTeamUsers(result.data.map((u: any) => ({
-              id: u.id,
-              email: u.email,
-              fullName: u.fullName || u.email,
-            })));
-          }
-        }
-      } catch (fallbackErr) {
-        console.error('Fallback staff list fetch also failed:', fallbackErr);
-      }
+      console.error('Error fetching staff users from RBAC API:', err);
+      // Continue without team users - page will still function, just without assignee dropdown
     }
   };
 
