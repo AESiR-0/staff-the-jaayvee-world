@@ -81,6 +81,7 @@ export default function Sidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [permissionsLoaded, setPermissionsLoaded] = useState(false);
+  const [loadingPermissions, setLoadingPermissions] = useState(true);
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [sidebarData, setSidebarData] = useState<SidebarData | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -149,12 +150,15 @@ export default function Sidebar() {
   useEffect(() => {
     const loadPermissions = async () => {
       try {
+        setLoadingPermissions(true);
         const perms = await fetchUserPermissions();
         setPermissions(perms);
         setPermissionsLoaded(true);
       } catch (err) {
         console.error('Error loading permissions:', err);
         setPermissionsLoaded(true); // Still mark as loaded to avoid infinite loading
+      } finally {
+        setLoadingPermissions(false);
       }
     };
     loadPermissions();
@@ -325,9 +329,15 @@ export default function Sidebar() {
 
         {/* Navigation - Scrollable */}
         <nav className="flex-1 overflow-y-auto px-6 py-4">
-          {loadingSidebar ? (
-            <div className="flex items-center justify-center py-8">
+          {loadingSidebar || loadingPermissions ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
               <div className="w-6 h-6 border-2 border-primary-accent border-t-transparent rounded-full animate-spin"></div>
+              {loadingSidebar && (
+                <p className="text-xs text-primary-muted">Loading navigation...</p>
+              )}
+              {loadingPermissions && !loadingSidebar && (
+                <p className="text-xs text-primary-muted">Loading permissions...</p>
+              )}
             </div>
           ) : sidebarData ? (
             <div className="space-y-1">

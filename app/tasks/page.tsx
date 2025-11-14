@@ -37,7 +37,10 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [viewingTask, setViewingTask] = useState<Task | null>(null);
   const [canCreate, setCanCreate] = useState(false);
+  const [loadingPermissions, setLoadingPermissions] = useState(true);
+  const [creatingTask, setCreatingTask] = useState(false);
   const [draggedTask, setDraggedTask] = useState<Task | null>(null);
   const [apiQueue, setApiQueue] = useState<Array<{ taskId: string; status: 'not_started' | 'in_progress' | 'completed'; timestamp: number }>>([]);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
@@ -71,6 +74,7 @@ export default function TasksPage() {
 
   const checkCreatePermission = async () => {
     try {
+      setLoadingPermissions(true);
       // Check if user is admin first (admins can always create tasks)
       const session = getTeamSession();
       const userEmail = session?.email;
@@ -78,6 +82,7 @@ export default function TasksPage() {
       
       if (isAdmin) {
         setCanCreate(true);
+        setLoadingPermissions(false);
         return;
       }
 
@@ -96,6 +101,8 @@ export default function TasksPage() {
       }
     } catch (err) {
       console.error('Error checking permissions:', err);
+    } finally {
+      setLoadingPermissions(false);
     }
   };
 
@@ -152,12 +159,15 @@ export default function TasksPage() {
   };
 
   const handleCreateTask = async () => {
+    if (creatingTask) return; // Prevent multiple clicks
+    
     if (!formData.title.trim()) {
       setError('Task title is required');
       return;
     }
 
     try {
+      setCreatingTask(true);
       setError(null);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
       const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks`, {
@@ -187,6 +197,8 @@ export default function TasksPage() {
     } catch (err: any) {
       console.error('Error creating task:', err);
       setError(err.message || 'Failed to create task');
+    } finally {
+      setCreatingTask(false);
     }
   };
 
@@ -381,9 +393,14 @@ export default function TasksPage() {
     });
   };
 
+  const openViewModal = (task: Task) => {
+    setViewingTask(task);
+  };
+
   const closeModal = () => {
     setShowCreateModal(false);
     setEditingTask(null);
+    setViewingTask(null);
     setFormData({ title: '', description: '', assignedTo: '', deadline: '' });
   };
 
@@ -471,7 +488,15 @@ export default function TasksPage() {
           <CheckSquare className="h-6 w-6 text-primary-accent" />
           <h1 className="text-2xl font-bold text-primary-fg">Tasks</h1>
         </div>
-        {canCreate && (
+        {loadingPermissions ? (
+          <button
+            disabled
+            className="flex items-center gap-2 px-4 py-2 bg-primary-accent/50 text-white rounded-lg cursor-not-allowed"
+          >
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            Checking permissions...
+          </button>
+        ) : canCreate ? (
           <button
             onClick={() => setShowCreateModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors"
@@ -479,7 +504,7 @@ export default function TasksPage() {
             <Plus className="h-4 w-4" />
             Create Task
           </button>
-        )}
+        ) : null}
       </div>
 
       {error && (
@@ -552,35 +577,22 @@ export default function TasksPage() {
               </select>
             </div>
 
-            {/* Sort Order */}
+            {/* Sort Order Toggle */}
             <div>
               <label className="block text-sm font-medium text-primary-fg mb-2">
                 Order
               </label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSortOrder('desc')}
-                  className={`flex-1 px-3 py-2 border rounded-lg transition-colors flex items-center justify-center gap-1 ${
-                    sortOrder === 'desc'
-                      ? 'bg-primary-accent text-white border-primary-accent'
-                      : 'bg-primary-bg text-primary-fg border-primary-border hover:bg-primary-accent-light'
-                  }`}
-                >
-                  <ArrowDown className="h-4 w-4" />
-                  Descending
-                </button>
-                <button
-                  onClick={() => setSortOrder('asc')}
-                  className={`flex-1 px-3 py-2 border rounded-lg transition-colors flex items-center justify-center gap-1 ${
-                    sortOrder === 'asc'
-                      ? 'bg-primary-accent text-white border-primary-accent'
-                      : 'bg-primary-bg text-primary-fg border-primary-border hover:bg-primary-accent-light'
-                  }`}
-                >
-                  <ArrowUp className="h-4 w-4" />
-                  Ascending
-                </button>
-              </div>
+              <button
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                className="w-full px-3 py-2 border border-primary-border rounded-lg transition-colors flex items-center justify-center bg-primary-bg text-primary-fg hover:bg-primary-accent-light hover:border-primary-accent"
+                title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
+              >
+                {sortOrder === 'asc' ? (
+                  <ArrowUp className="h-5 w-5" />
+                ) : (
+                  <ArrowDown className="h-5 w-5" />
+                )}
+              </button>
             </div>
           </div>
         )}
@@ -618,6 +630,7 @@ export default function TasksPage() {
                 onStatusChange={handleUpdateStatus}
                 onEdit={openEditModal}
                 onDelete={handleDeleteTask}
+                onView={openViewModal}
                 isCreator={isCreator(task)}
                 onDragStart={handleDragStart}
                 getTimeTaken={getTimeTaken}
@@ -652,6 +665,7 @@ export default function TasksPage() {
                 onStatusChange={handleUpdateStatus}
                 onEdit={openEditModal}
                 onDelete={handleDeleteTask}
+                onView={openViewModal}
                 isCreator={isCreator(task)}
                 onDragStart={handleDragStart}
                 getTimeTaken={getTimeTaken}
@@ -686,6 +700,7 @@ export default function TasksPage() {
                 onStatusChange={handleUpdateStatus}
                 onEdit={openEditModal}
                 onDelete={handleDeleteTask}
+                onView={openViewModal}
                 isCreator={isCreator(task)}
                 onDragStart={handleDragStart}
                 getTimeTaken={getTimeTaken}
@@ -699,6 +714,151 @@ export default function TasksPage() {
           </div>
         </div>
       </div>
+
+      {/* View Task Modal */}
+      {viewingTask && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-primary-bg rounded-lg border border-primary-border p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-primary-fg">Task Details</h2>
+              <button
+                onClick={closeModal}
+                className="p-1 hover:bg-primary-accent-light rounded transition-colors"
+              >
+                <X className="h-5 w-5 text-primary-fg" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-primary-muted mb-1">
+                  Title
+                </label>
+                <p className="text-lg font-semibold text-primary-fg">{viewingTask.title}</p>
+              </div>
+
+              {viewingTask.description && (
+                <div>
+                  <label className="block text-sm font-medium text-primary-muted mb-1">
+                    Description
+                  </label>
+                  <p className="text-primary-fg whitespace-pre-wrap">{viewingTask.description}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-primary-muted mb-1">
+                    Status
+                  </label>
+                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
+                    viewingTask.status === 'completed' 
+                      ? 'bg-green-100 text-green-700' 
+                      : viewingTask.status === 'in_progress'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {viewingTask.status === 'completed' ? 'Completed' : 
+                     viewingTask.status === 'in_progress' ? 'In Progress' : 'Not Started'}
+                  </span>
+                </div>
+
+                {viewingTask.assignedToName && (
+                  <div>
+                    <label className="block text-sm font-medium text-primary-muted mb-1">
+                      Assigned To
+                    </label>
+                    <p className="text-primary-fg">{viewingTask.assignedToName}</p>
+                    {viewingTask.assignedToEmail && (
+                      <p className="text-sm text-primary-muted">{viewingTask.assignedToEmail}</p>
+                    )}
+                    {viewingTask.assignedAt && (
+                      <p className="text-xs text-primary-muted mt-1">
+                        Assigned: {format(new Date(viewingTask.assignedAt), "MMM dd, yyyy HH:mm")}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {viewingTask.deadline && (
+                <div>
+                  <label className="block text-sm font-medium text-primary-muted mb-1">
+                    Deadline
+                  </label>
+                  <p className={`text-primary-fg ${
+                    new Date(viewingTask.deadline) < new Date() && viewingTask.status !== 'completed' 
+                      ? 'text-red-500 font-medium' 
+                      : ''
+                  }`}>
+                    {format(new Date(viewingTask.deadline), "MMM dd, yyyy 'at' HH:mm")}
+                    {new Date(viewingTask.deadline) < new Date() && viewingTask.status !== 'completed' && (
+                      <span className="ml-2 text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Overdue</span>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-primary-border">
+                <div>
+                  <label className="block text-sm font-medium text-primary-muted mb-1">
+                    Created
+                  </label>
+                  <p className="text-sm text-primary-fg">
+                    {format(new Date(viewingTask.createdAt), "MMM dd, yyyy 'at' HH:mm")}
+                  </p>
+                  {viewingTask.createdByName && (
+                    <p className="text-xs text-primary-muted mt-1">
+                      By: {viewingTask.createdByName}
+                      {viewingTask.createdByEmail && ` (${viewingTask.createdByEmail})`}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-primary-muted mb-1">
+                    Last Updated
+                  </label>
+                  <p className="text-sm text-primary-fg">
+                    {format(new Date(viewingTask.updatedAt), "MMM dd, yyyy 'at' HH:mm")}
+                  </p>
+                </div>
+              </div>
+
+              {viewingTask.status === 'completed' && viewingTask.completedAt && (
+                <div>
+                  <label className="block text-sm font-medium text-primary-muted mb-1">
+                    Completed
+                  </label>
+                  <p className="text-sm text-green-600 font-medium">
+                    {format(new Date(viewingTask.completedAt), "MMM dd, yyyy 'at' HH:mm")}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-4 border-t border-primary-border">
+                <button
+                  onClick={closeModal}
+                  className="flex-1 px-4 py-2 border border-primary-border text-primary-fg rounded-lg hover:bg-primary-accent-light transition-colors"
+                >
+                  Close
+                </button>
+                {isCreator(viewingTask) && (
+                  <button
+                    onClick={() => {
+                      setViewingTask(null);
+                      openEditModal(viewingTask);
+                    }}
+                    className="flex-1 px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors"
+                  >
+                    Edit Task
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create/Edit Modal */}
       {(showCreateModal || editingTask) && (
@@ -777,13 +937,22 @@ export default function TasksPage() {
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={editingTask ? handleEditTask : handleCreateTask}
-                  className="flex-1 px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors"
+                  disabled={creatingTask}
+                  className="flex-1 px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {editingTask ? 'Update' : 'Create'}
+                  {creatingTask ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      {editingTask ? 'Updating...' : 'Creating...'}
+                    </>
+                  ) : (
+                    editingTask ? 'Update' : 'Create'
+                  )}
                 </button>
                 <button
                   onClick={closeModal}
-                  className="px-4 py-2 border border-primary-border text-primary-fg rounded-lg hover:bg-primary-accent-light transition-colors"
+                  disabled={creatingTask}
+                  className="px-4 py-2 border border-primary-border text-primary-fg rounded-lg hover:bg-primary-accent-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
@@ -802,6 +971,7 @@ function TaskCard({
   onStatusChange,
   onEdit,
   onDelete,
+  onView,
   isCreator,
   onDragStart,
   getTimeTaken,
@@ -812,6 +982,7 @@ function TaskCard({
   onStatusChange: (taskId: string, status: 'not_started' | 'in_progress' | 'completed') => void;
   onEdit: (task: Task) => void;
   onDelete: (taskId: string) => void;
+  onView: (task: Task) => void;
   isCreator: boolean;
   onDragStart: (e: React.DragEvent, task: Task) => void;
   getTimeTaken: (task: Task) => string | null;
@@ -856,7 +1027,15 @@ function TaskCard({
     <div 
       draggable
       onDragStart={(e) => onDragStart(e, task)}
-      className={`border-2 rounded-lg p-3 bg-white hover:shadow-lg transition-all cursor-move select-none ${
+      onClick={(e) => {
+        // Don't open view modal if clicking on buttons or drag handle
+        const target = e.target as HTMLElement;
+        if (target.closest('button') || target.closest('.cursor-move')) {
+          return;
+        }
+        onView(task);
+      }}
+      className={`border-2 rounded-lg p-3 bg-white hover:shadow-lg transition-all cursor-pointer select-none ${
         overdue 
           ? 'border-red-500 bg-red-50' 
           : 'border-primary-border hover:border-primary-accent'

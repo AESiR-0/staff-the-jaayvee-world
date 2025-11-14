@@ -110,18 +110,15 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
     }
   }, []);
 
-  // Fetch and process notifications (only unpopped ones)
-  const fetchNotifications = useCallback(async () => {
+  // Fetch initial notifications on mount (one-time, not polling)
+  const fetchInitialNotifications = useCallback(async () => {
     try {
-      // Use API_BASE_URL from lib/api.ts - notifications API is on the main site
-      // For local dev: Set NEXT_PUBLIC_API_BASE_URL=http://localhost:3000 in .env.local
       const baseUrl = API_BASE_URL || 'https://thejaayveeworld.com';  
-      console.log('📡 Fetching unpopped notifications from:', `${baseUrl}/api/notifications`);
-      // Only fetch notifications that haven't been popped yet
+      console.log('📡 Fetching initial unpopped notifications from:', `${baseUrl}/api/notifications`);
       const response = await authenticatedFetch(`${baseUrl}/api/notifications?limit=10&excludePopped=true`);
       
       if (!response.ok) {
-        console.log('❌ Failed to fetch notifications:', response.status);
+        console.log('❌ Failed to fetch initial notifications:', response.status);
         return;
       }
 
@@ -131,21 +128,15 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
       const notifications = data.data as Notification[];
       const unreadNotifications = notifications.filter(n => !n.isRead);
 
-      // Filter out notifications that are already active
-      const newNotifications = unreadNotifications.filter(n => {
-        const isActive = activeNotifications.some(active => active.id === n.id);
-        return !isActive;
-      });
-
-      if (newNotifications.length > 0) {
-        console.log('✨ Found', newNotifications.length, 'new unpopped notifications');
+      if (unreadNotifications.length > 0) {
+        console.log('✨ Found', unreadNotifications.length, 'initial unpopped notifications');
         
         // Mark as popped in database immediately
-        const notificationIds = newNotifications.map(n => n.id);
+        const notificationIds = unreadNotifications.map(n => n.id);
         await markAsPopped(notificationIds);
 
         // Also mark in localStorage as backup
-        newNotifications.forEach(n => {
+        unreadNotifications.forEach(n => {
           shownIdsRef.current.add(n.id);
         });
         saveShownIds();
@@ -153,19 +144,19 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
         // Add to active notifications
         setActiveNotifications(prev => {
           const existingIds = new Set(prev.map(n => n.id));
-          const toAdd = newNotifications.filter(n => !existingIds.has(n.id));
+          const toAdd = unreadNotifications.filter(n => !existingIds.has(n.id));
           return [...prev, ...toAdd];
         });
 
         // Play sound for each new notification
-        newNotifications.forEach(() => playNotificationSound());
+        unreadNotifications.forEach(() => playNotificationSound());
       }
     } catch (error) {
-      console.error('❌ Error fetching notifications:', error);
+      console.error('❌ Error fetching initial notifications:', error);
     }
-  }, [activeNotifications, saveShownIds, markAsPopped]);
+  }, [saveShownIds, markAsPopped]);
 
-  // Check for task reminders
+  // Check for task reminders (one-time on mount, not polling)
   const checkTaskReminders = useCallback(async () => {
     try {
       const tasks = await fetchTasksForReminders();
@@ -262,32 +253,19 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
     
     if (!userId) {
       console.warn('⚠️ No userId found in session, cannot set up Realtime subscription');
-      // Fallback to polling if no userId
-      fetchNotifications();
-      checkTaskReminders();
-      const pollInterval = setInterval(() => {
-        fetchNotifications();
-        checkTaskReminders();
-      }, 30000);
-      return () => clearInterval(pollInterval);
+      return;
     }
 
     // Check if Supabase is configured
     if (!isSupabaseConfigured || !supabase) {
-      console.warn('⚠️ Supabase not configured, falling back to polling');
-      fetchNotifications();
-      checkTaskReminders();
-      const pollInterval = setInterval(() => {
-        fetchNotifications();
-        checkTaskReminders();
-      }, 30000);
-      return () => clearInterval(pollInterval);
+      console.warn('⚠️ Supabase not configured. Realtime notifications require Supabase.');
+      return;
     }
 
     console.log('🔌 Setting up Supabase Realtime subscription for user:', userId);
 
-    // Fetch initial notifications
-    fetchNotifications();
+    // Fetch initial notifications once on mount
+    fetchInitialNotifications();
     checkTaskReminders();
 
     // Set up Realtime subscription
@@ -379,18 +357,12 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
 
     subscriptionRef.current = channel;
 
-    // Set up task reminders polling (these are client-side only)
-    const taskReminderInterval = setInterval(() => {
-      checkTaskReminders();
-    }, 60000); // Check every minute
-
     return () => {
       console.log('🔌 Cleaning up Realtime subscription');
       if (subscriptionRef.current && supabase) {
         supabase.removeChannel(subscriptionRef.current);
         subscriptionRef.current = null;
       }
-      clearInterval(taskReminderInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInitializedRef.current]);
