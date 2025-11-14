@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import NotificationPopup from "./NotificationPopup";
 import { playNotificationSound } from "@/lib/sound-utils";
-import { authenticatedFetch } from "@/lib/auth-utils";
+import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { API_BASE_URL } from "@/lib/api";
 import { fetchTasksForReminders, getTaskReminders, formatTimeRemaining, TaskReminder } from "@/lib/task-reminder";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 interface Notification {
   id: string;
@@ -33,6 +34,7 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
   const shownIdsRef = useRef<Set<string>>(new Set());
   const dismissedRemindersRef = useRef<Set<string>>(new Set());
   const isInitializedRef = useRef(false);
+  const subscriptionRef = useRef<any>(null);
 
   // Load persisted data from localStorage
   const loadPersistedData = useCallback(() => {
@@ -87,14 +89,36 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
     }
   }, [loadPersistedData]);
 
-  // Fetch and process notifications
+  // Mark notifications as popped in database
+  const markAsPopped = useCallback(async (notificationIds: string[]) => {
+    try {
+      const baseUrl = API_BASE_URL || 'https://thejaayveeworld.com';
+      const response = await authenticatedFetch(`${baseUrl}/api/notifications/pop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationIds }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          console.log('✅ Marked', notificationIds.length, 'notifications as popped in DB');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error marking notifications as popped:', error);
+    }
+  }, []);
+
+  // Fetch and process notifications (only unpopped ones)
   const fetchNotifications = useCallback(async () => {
     try {
       // Use API_BASE_URL from lib/api.ts - notifications API is on the main site
       // For local dev: Set NEXT_PUBLIC_API_BASE_URL=http://localhost:3000 in .env.local
       const baseUrl = API_BASE_URL || 'https://thejaayveeworld.com';  
-      console.log('📡 Fetching notifications from:', `${baseUrl}/api/notifications`);
-      const response = await authenticatedFetch(`${baseUrl}/api/notifications?limit=10`);
+      console.log('📡 Fetching unpopped notifications from:', `${baseUrl}/api/notifications`);
+      // Only fetch notifications that haven't been popped yet
+      const response = await authenticatedFetch(`${baseUrl}/api/notifications?limit=10&excludePopped=true`);
       
       if (!response.ok) {
         console.log('❌ Failed to fetch notifications:', response.status);
@@ -107,17 +131,20 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
       const notifications = data.data as Notification[];
       const unreadNotifications = notifications.filter(n => !n.isRead);
 
-      // Filter out notifications that have already been shown
+      // Filter out notifications that are already active
       const newNotifications = unreadNotifications.filter(n => {
-        const wasShown = shownIdsRef.current.has(n.id);
         const isActive = activeNotifications.some(active => active.id === n.id);
-        return !wasShown && !isActive;
+        return !isActive;
       });
 
       if (newNotifications.length > 0) {
-        console.log('✨ Found', newNotifications.length, 'new notifications');
+        console.log('✨ Found', newNotifications.length, 'new unpopped notifications');
         
-        // Mark as shown immediately
+        // Mark as popped in database immediately
+        const notificationIds = newNotifications.map(n => n.id);
+        await markAsPopped(notificationIds);
+
+        // Also mark in localStorage as backup
         newNotifications.forEach(n => {
           shownIdsRef.current.add(n.id);
         });
@@ -136,7 +163,7 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
     } catch (error) {
       console.error('❌ Error fetching notifications:', error);
     }
-  }, [activeNotifications, saveShownIds]);
+  }, [activeNotifications, saveShownIds, markAsPopped]);
 
   // Check for task reminders
   const checkTaskReminders = useCallback(async () => {
@@ -226,21 +253,147 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
     removeNotification(id);
   }, [removeNotification, onMarkAsRead, saveShownIds]);
 
-  // Fetch only on page load/refresh (no polling, no event listeners)
+  // Set up Supabase Realtime subscription for notifications
   useEffect(() => {
     if (!isInitializedRef.current) return;
 
-    // Fetch once after a short delay to allow page to load
-    const timeout = setTimeout(() => {
-      console.log('🔄 Fetching notifications on page load');
+    const session = getTeamSession();
+    const userId = session?.userId || session?.teamId || session?.staffId;
+    
+    if (!userId) {
+      console.warn('⚠️ No userId found in session, cannot set up Realtime subscription');
+      // Fallback to polling if no userId
+      fetchNotifications();
       checkTaskReminders();
-    }, 1000);
+      const pollInterval = setInterval(() => {
+        fetchNotifications();
+        checkTaskReminders();
+      }, 30000);
+      return () => clearInterval(pollInterval);
+    }
+
+    // Check if Supabase is configured
+    if (!isSupabaseConfigured || !supabase) {
+      console.warn('⚠️ Supabase not configured, falling back to polling');
+      fetchNotifications();
+      checkTaskReminders();
+      const pollInterval = setInterval(() => {
+        fetchNotifications();
+        checkTaskReminders();
+      }, 30000);
+      return () => clearInterval(pollInterval);
+    }
+
+    console.log('🔌 Setting up Supabase Realtime subscription for user:', userId);
+
+    // Fetch initial notifications
+    fetchNotifications();
+    checkTaskReminders();
+
+    // Set up Realtime subscription
+    // Filter: userId matches AND poppedAt IS NULL AND isRead = false
+    const channel = supabase
+      .channel('notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        async (payload) => {
+          const newNotification = payload.new as any;
+          
+          // Only process if not popped and not read
+          if (newNotification.popped_at === null && !newNotification.is_read) {
+            console.log('✨ New notification received via Realtime:', newNotification);
+            
+            const notification: Notification = {
+              id: newNotification.id,
+              type: newNotification.type,
+              title: newNotification.title,
+              message: newNotification.message,
+              isRead: newNotification.is_read,
+              metadata: newNotification.metadata,
+              createdAt: newNotification.created_at,
+              readAt: newNotification.read_at,
+            };
+
+            // Check if already shown
+            if (shownIdsRef.current.has(notification.id)) {
+              console.log('⏭️ Notification already shown, skipping:', notification.id);
+              return;
+            }
+
+            // Check if already active
+            setActiveNotifications(prev => {
+              const isActive = prev.some(n => n.id === notification.id);
+              if (isActive) {
+                console.log('⏭️ Notification already active, skipping:', notification.id);
+                return prev;
+              }
+
+              // Mark as popped in database
+              markAsPopped([notification.id]);
+
+              // Mark in localStorage
+              shownIdsRef.current.add(notification.id);
+              saveShownIds();
+
+              // Play sound
+              playNotificationSound();
+
+              return [...prev, notification];
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          const updatedNotification = payload.new as any;
+          
+          // If notification was marked as read or popped, remove from active
+          if (updatedNotification.is_read || updatedNotification.popped_at !== null) {
+            setActiveNotifications(prev => 
+              prev.filter(n => n.id !== updatedNotification.id)
+            );
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to notifications');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Realtime channel error');
+        }
+      });
+
+    subscriptionRef.current = channel;
+
+    // Set up task reminders polling (these are client-side only)
+    const taskReminderInterval = setInterval(() => {
+      checkTaskReminders();
+    }, 60000); // Check every minute
 
     return () => {
-      clearTimeout(timeout);
+      console.log('🔌 Cleaning up Realtime subscription');
+      if (subscriptionRef.current && supabase) {
+        supabase.removeChannel(subscriptionRef.current);
+        subscriptionRef.current = null;
+      }
+      clearInterval(taskReminderInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInitializedRef.current]); // Only run once when initialized
+  }, [isInitializedRef.current]);
 
   return (
     <>

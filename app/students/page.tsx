@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Search, GraduationCap, Mail, Calendar, User, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock, Eye, FileText } from "lucide-react";
 import { authenticatedFetch } from "@/lib/auth-utils";
-import { API_BASE_URL } from "@/lib/api";
 import { format } from "date-fns";
 
 interface StudentVerification {
@@ -51,6 +50,8 @@ export default function StudentsPage() {
         params.append("status", statusFilter);
       }
 
+      // Student API is on the main site (jaayvee-world), not talaash
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com';
       const response = await authenticatedFetch(`${API_BASE_URL}/api/student/list?${params.toString()}`);
       const data = await response.json();
 
@@ -110,6 +111,8 @@ export default function StudentsPage() {
         body.rejectionReason = rejectionReason.trim();
       }
 
+      // Student API is on the main site (jaayvee-world), not talaash
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com';
       const response = await authenticatedFetch(`${API_BASE_URL}/api/student/${verificationId}/status`, {
         method: 'PUT',
         headers: {

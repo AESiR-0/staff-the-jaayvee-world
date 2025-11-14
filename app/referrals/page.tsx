@@ -216,7 +216,7 @@ export default function ReferralsPage() {
               <div className="flex-1">
                 <p className="text-sm text-primary-muted mb-1">Referral Link</p>
                 <p className="text-primary-fg font-mono text-sm">
-                  https://thejaayveeworld.com/ease?ref={stats.referralCode || "YOUR_CODE"}
+                  https://talaash.thejaayveeworld.com/auth/register?ref={stats.referralCode || "YOUR_CODE"}
                 </p>
               </div>
               <button

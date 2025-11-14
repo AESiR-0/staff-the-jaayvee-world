@@ -10,6 +10,7 @@
     "download-face-models": "node scripts/download-face-models.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.81.1",
     "date-fns": "^4.1.0",
     "encoding": "^0.1.13",
     "face-api.js": "^0.22.2",
