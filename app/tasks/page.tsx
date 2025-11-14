@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { CheckSquare, Plus, Clock, PlayCircle, X, User, Calendar, Edit2, Trash2, GripVertical, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { format, differenceInHours, differenceInDays, differenceInMinutes } from "date-fns";
+import { isSuperAdmin } from "@/lib/rbac";
 
 interface Task {
   id: string;
@@ -31,7 +32,7 @@ interface TeamUser {
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [teamUsers, setStaffUsers] = useState<any[]>([]);
+  const [teamUsers, setTeamUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -65,7 +66,6 @@ export default function TasksPage() {
     // Check if user is admin
     const session = getTeamSession();
     const userEmail = session?.email;
-    const { isSuperAdmin } = require('@/lib/rbac');
     setIsAdmin(isSuperAdmin(userEmail));
   }, []);
 
@@ -74,7 +74,6 @@ export default function TasksPage() {
       // Check if user is admin first (admins can always create tasks)
       const session = getTeamSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = require('@/lib/rbac');
       const isAdmin = isSuperAdmin(userEmail);
       
       if (isAdmin) {
@@ -105,10 +104,12 @@ export default function TasksPage() {
       setLoading(true);
       setError(null);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/tasks`);
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks`);
 
       if (!response.ok) {
-        throw new Error('Failed to fetch tasks');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || `Failed to fetch tasks (${response.status} ${response.statusText})`;
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
@@ -135,7 +136,7 @@ export default function TasksPage() {
         const data = await response.json();
         if (data.success && data.data?.users) {
           const staffList = data.data.users;
-          setStaffUsers(staffList.map((u: any) => ({
+          setTeamUsers(staffList.map((u: any) => ({
             id: u.id,
             email: u.email,
             fullName: u.fullName || u.email,
@@ -151,7 +152,7 @@ export default function TasksPage() {
         if (response.ok) {
           const result = await response.json();
           if (result.success && result.data) {
-            setStaffUsers(result.data.map((u: any) => ({
+            setTeamUsers(result.data.map((u: any) => ({
               id: u.id,
               email: u.email,
               fullName: u.fullName || u.email,
@@ -173,7 +174,7 @@ export default function TasksPage() {
     try {
       setError(null);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/tasks`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -239,8 +240,8 @@ export default function TasksPage() {
       for (let i = 0; i < queueToProcess.length; i++) {
         const item = queueToProcess[i];
         try {
-          const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-          const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/tasks/${item.taskId}`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks/${item.taskId}`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
@@ -332,7 +333,7 @@ export default function TasksPage() {
     try {
       setError(null);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/tasks/${taskId}`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks/${taskId}`, {
         method: 'DELETE',
       });
 
@@ -357,7 +358,7 @@ export default function TasksPage() {
     try {
       setError(null);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/tasks/${editingTask.id}`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks/${editingTask.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
