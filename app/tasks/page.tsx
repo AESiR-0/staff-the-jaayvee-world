@@ -158,6 +158,30 @@ export default function TasksPage() {
     }
   };
 
+  // Helper function to convert datetime-local to ISO string with timezone
+  const convertToISO = (datetimeLocal: string): string => {
+    if (!datetimeLocal) return '';
+    // datetime-local format: "YYYY-MM-DDTHH:mm"
+    // Create a date object in local timezone
+    const localDate = new Date(datetimeLocal);
+    // Return ISO string which includes timezone info
+    return localDate.toISOString();
+  };
+
+  // Helper function to convert UTC ISO string back to datetime-local format
+  const convertFromISO = (isoString: string): string => {
+    if (!isoString) return '';
+    // Parse the UTC ISO string and convert to local time
+    const date = new Date(isoString);
+    // Format as datetime-local (YYYY-MM-DDTHH:mm) in local timezone
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   const handleCreateTask = async () => {
     if (creatingTask) return; // Prevent multiple clicks
     
@@ -179,7 +203,7 @@ export default function TasksPage() {
           title: formData.title.trim(),
           description: formData.description.trim() || null,
           assignedTo: formData.assignedTo || null,
-          deadline: formData.deadline || null,
+          deadline: formData.deadline ? convertToISO(formData.deadline) : null,
         }),
       });
 
@@ -365,7 +389,7 @@ export default function TasksPage() {
           title: formData.title.trim(),
           description: formData.description.trim() || null,
           assignedTo: formData.assignedTo || null,
-          deadline: formData.deadline || null,
+          deadline: formData.deadline ? convertToISO(formData.deadline) : null,
         }),
       });
 
@@ -389,7 +413,7 @@ export default function TasksPage() {
       title: task.title,
       description: task.description || '',
       assignedTo: task.assignedTo || '',
-      deadline: task.deadline ? format(new Date(task.deadline), "yyyy-MM-dd'T'HH:mm") : '',
+      deadline: task.deadline ? convertFromISO(task.deadline) : '',
     });
   };
 
