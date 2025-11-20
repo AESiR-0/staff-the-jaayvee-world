@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter, ChevronDown, ChevronUp, FileText, Download } from "lucide-react";
 import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 import EventFinancialPlanning from "@/components/EventFinancialPlanning";
+import { utcToDateTimeLocal } from "@/lib/utils/timezone";
 
 // Only allow md and thejaayveeworldofficial
 const ALLOWED_EMAIL = [
@@ -590,8 +591,8 @@ export default function ManageEventsPage() {
     setEditForm({
       title: event.title,
       description: event.description || "",
-      startDate: event.startDate ? new Date(event.startDate).toISOString().slice(0, 16) : "",
-      endDate: event.endDate ? new Date(event.endDate).toISOString().slice(0, 16) : "",
+      startDate: utcToDateTimeLocal(event.startDate),
+      endDate: utcToDateTimeLocal(event.endDate),
       banner: event.banner || "",
       venue: event.venue || "",
       city: event.city || "",
