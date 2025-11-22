@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Users, Mail, Phone, Calendar, TrendingUp, Search, ChevronDown, ChevronUp, Filter, X, Wallet, ShoppingCart, UserPlus, DollarSign } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Users, Mail, Phone, Calendar, TrendingUp, Search, ChevronDown, ChevronUp, Filter, X, Wallet, ShoppingCart, UserPlus, DollarSign, CheckCircle2 } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { format } from "date-fns";
 
@@ -36,16 +37,23 @@ interface UniversalDownlineData {
 }
 
 export default function UniversalDownlinePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<UniversalDownlineData | null>(null);
   
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("");
-  const [partnerCodeFilter, setPartnerCodeFilter] = useState<string>("");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
+  // Filter states - initialize from URL params
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || "");
+  const [roleFilter, setRoleFilter] = useState<string>(searchParams.get('role') || "");
+  const [partnerCodeFilter, setPartnerCodeFilter] = useState<string>(searchParams.get('partnerCode') || "");
+  const [dateFrom, setDateFrom] = useState<string>(searchParams.get('dateFrom') || "");
+  const [dateTo, setDateTo] = useState<string>(searchParams.get('dateTo') || "");
+  const [minCheckouts, setMinCheckouts] = useState<string>(searchParams.get('minCheckouts') || "");
+  const [maxCheckouts, setMaxCheckouts] = useState<string>(searchParams.get('maxCheckouts') || "");
+  const [minEarnings, setMinEarnings] = useState<string>(searchParams.get('minEarnings') || "");
+  const [maxEarnings, setMaxEarnings] = useState<string>(searchParams.get('maxEarnings') || "");
   const [showFilters, setShowFilters] = useState(false);
   
   // Accordion state for categories
@@ -75,9 +83,26 @@ export default function UniversalDownlinePage() {
     }
   };
 
+  // Update URL params when filters change
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('search', searchQuery);
+    if (roleFilter) params.set('role', roleFilter);
+    if (partnerCodeFilter) params.set('partnerCode', partnerCodeFilter);
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateTo) params.set('dateTo', dateTo);
+    if (minCheckouts) params.set('minCheckouts', minCheckouts);
+    if (maxCheckouts) params.set('maxCheckouts', maxCheckouts);
+    if (minEarnings) params.set('minEarnings', minEarnings);
+    if (maxEarnings) params.set('maxEarnings', maxEarnings);
+    
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    router.replace(newUrl, { scroll: false });
+  }, [searchQuery, roleFilter, partnerCodeFilter, dateFrom, dateTo, minCheckouts, maxCheckouts, minEarnings, maxEarnings, router]);
+
   useEffect(() => {
     fetchUniversalDownline();
-  }, [roleFilter, partnerCodeFilter, searchQuery, dateFrom, dateTo]);
+  }, [roleFilter, partnerCodeFilter, searchQuery, dateFrom, dateTo, minCheckouts, maxCheckouts, minEarnings, maxEarnings]);
 
   const fetchUniversalDownline = async () => {
     try {
@@ -92,6 +117,10 @@ export default function UniversalDownlinePage() {
       if (searchQuery) params.append('search', searchQuery);
       if (dateFrom) params.append('dateFrom', dateFrom);
       if (dateTo) params.append('dateTo', dateTo);
+      if (minCheckouts) params.append('minCheckouts', minCheckouts);
+      if (maxCheckouts) params.append('maxCheckouts', maxCheckouts);
+      if (minEarnings) params.append('minEarnings', minEarnings);
+      if (maxEarnings) params.append('maxEarnings', maxEarnings);
 
       const url = `${API_BASE_URL}/api/team/universal-downline?${params.toString()}`;
       const response = await authenticatedFetch(url);
@@ -126,9 +155,13 @@ export default function UniversalDownlinePage() {
     setPartnerCodeFilter("");
     setDateFrom("");
     setDateTo("");
+    setMinCheckouts("");
+    setMaxCheckouts("");
+    setMinEarnings("");
+    setMaxEarnings("");
   };
 
-  const hasActiveFilters = searchQuery || roleFilter || partnerCodeFilter || dateFrom || dateTo;
+  const hasActiveFilters = searchQuery || roleFilter || partnerCodeFilter || dateFrom || dateTo || minCheckouts || maxCheckouts || minEarnings || maxEarnings;
 
   // Get unique roles from data
   const availableRoles = useMemo(() => {
@@ -198,7 +231,7 @@ export default function UniversalDownlinePage() {
               Filters
               {hasActiveFilters && (
                 <span className="px-2 py-0.5 bg-primary-accent text-white rounded-full text-xs">
-                  {[searchQuery, roleFilter, partnerCodeFilter, dateFrom, dateTo].filter(Boolean).length}
+                  {[searchQuery, roleFilter, partnerCodeFilter, dateFrom, dateTo, minCheckouts, maxCheckouts, minEarnings, maxEarnings].filter(Boolean).length}
                 </span>
               )}
             </button>
@@ -234,7 +267,7 @@ export default function UniversalDownlinePage() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-primary-muted" />
                   <input
                     type="text"
-                    placeholder="Search by name, email, or phone..."
+                    placeholder="Search by name, email, phone, or referral code..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
@@ -294,6 +327,60 @@ export default function UniversalDownlinePage() {
                   type="date"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
+                  className="w-full px-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                />
+              </div>
+
+              {/* Min Checkouts */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">Min Checkouts</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={minCheckouts}
+                  onChange={(e) => setMinCheckouts(e.target.value)}
+                  className="w-full px-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                />
+              </div>
+
+              {/* Max Checkouts */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">Max Checkouts</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="Any"
+                  value={maxCheckouts}
+                  onChange={(e) => setMaxCheckouts(e.target.value)}
+                  className="w-full px-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                />
+              </div>
+
+              {/* Min Earnings */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">Min Earnings (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={minEarnings}
+                  onChange={(e) => setMinEarnings(e.target.value)}
+                  className="w-full px-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                />
+              </div>
+
+              {/* Max Earnings */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">Max Earnings (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="Any"
+                  value={maxEarnings}
+                  onChange={(e) => setMaxEarnings(e.target.value)}
                   className="w-full px-4 py-2 border border-primary-border rounded-lg bg-white text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
                 />
               </div>
