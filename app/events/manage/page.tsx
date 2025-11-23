@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter, ChevronDown, ChevronUp, FileText, Download } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter, ChevronDown, ChevronUp, FileText, Download, Loader2 } from "lucide-react";
 import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
-import EventFinancialPlanning from "@/components/EventFinancialPlanning";
 import { utcToDateTimeLocal } from "@/lib/utils/timezone";
 
 // Only allow md and thejaayveeworldofficial
@@ -117,19 +116,29 @@ export default function ManageEventsPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [updatingTicketTypes, setUpdatingTicketTypes] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for create form
   const [selectedEditFile, setSelectedEditFile] = useState<File | null>(null); // Store selected file for edit form
   const [previewUrl, setPreviewUrl] = useState<string | null>(null); // Preview URL for create form
   const [previewEditUrl, setPreviewEditUrl] = useState<string | null>(null); // Preview URL for edit form
+  const [shareMessages, setShareMessages] = useState<Record<string, { id?: string; message: string; platform: string | null }>>({
+    general: { message: '', platform: null },
+    whatsapp: { message: '', platform: 'whatsapp' },
+    facebook: { message: '', platform: 'facebook' },
+    linkedin: { message: '', platform: 'linkedin' },
+  });
+  const [loadingShareMessages, setLoadingShareMessages] = useState(false);
+  const [savingShareMessages, setSavingShareMessages] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>(""); // Search query
   const [filterStatus, setFilterStatus] = useState<string>("all"); // Filter by status
   const [filterPublished, setFilterPublished] = useState<string>("all"); // Filter by published status
-  const [showFinancialPlanning, setShowFinancialPlanning] = useState<{ [key: string]: boolean }>({}); // Track which events have financial planning expanded
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://thejaayveeworld.com";
+  // Use relative path for same-origin requests, or API_BASE_URL if set
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
   // Cleanup preview URLs on unmount
   useEffect(() => {
@@ -371,6 +380,7 @@ export default function ManageEventsPage() {
   const handleUpdate = async (id: string) => {
     setError(null);
     setSuccess(null);
+    setUpdatingId(id);
     setUploadingImage(true);
     setUploadProgress('Processing...');
 
@@ -424,7 +434,9 @@ export default function ManageEventsPage() {
         };
       }
 
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${id}`, {
+      // Use relative path to hit proxy route (avoids CORS issues)
+      const eventUpdateUrl = API_BASE_URL ? `${API_BASE_URL}/api/events/${id}` : `/api/events/${id}`;
+      const response = await authenticatedFetch(eventUpdateUrl, {
         method: "PUT",
         headers: {
           'Content-Type': 'application/json',
@@ -443,6 +455,7 @@ export default function ManageEventsPage() {
       }
 
       // Update ticket types - handle create, update, and delete
+      setUpdatingTicketTypes(id);
       setUploadProgress('Updating ticket types...');
       try {
         // Find ticket types that were deleted (in original but not in current)
@@ -468,50 +481,122 @@ export default function ManageEventsPage() {
         const newTicketTypes = editTicketTypes.filter(tt => !tt.id);
         const existingTicketTypes = editTicketTypes.filter(tt => tt.id);
 
-        // Update existing ticket types (PATCH)
-        for (const ticketType of existingTicketTypes) {
+        // Check token before starting batch operations
+        const token = getAuthToken();
+        if (!token) {
+          setError('Authentication token not found. Please log in again.');
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 2000);
+          return;
+        }
+
+        // Check if token is expired before starting updates
+        const tokenParts = token.split('.');
+        if (tokenParts.length === 3) {
           try {
-            const patchRes = await authenticatedFetch(`${API_BASE_URL}/api/ticket-types/${ticketType.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: ticketType.name,
-                price: ticketType.price,
-                capacity: ticketType.quantity,
-                admissionCount: 1,
-                attributes: ticketType.description ? { description: ticketType.description } : null
-              }),
-            });
-            if (!patchRes.ok) {
-              console.warn(`Failed to update ticket type ${ticketType.id}`);
+            const payload = JSON.parse(atob(tokenParts[1]));
+            if (payload.exp && payload.exp * 1000 < Date.now()) {
+              setError('Your session has expired. Please log in again.');
+              setTimeout(() => {
+                window.location.href = '/';
+              }, 2000);
+              return;
             }
-          } catch (patchErr) {
-            console.error(`Error updating ticket type ${ticketType.id}:`, patchErr);
+          } catch (e) {
+            // Token parsing failed, continue anyway (will be caught by API)
           }
+        }
+
+        const updateErrors: string[] = [];
+        const createErrors: string[] = [];
+
+        // Update existing ticket types (PATCH) - use Promise.allSettled to handle all updates
+        if (existingTicketTypes.length > 0) {
+          const updatePromises = existingTicketTypes.map(async (ticketType) => {
+            try {
+              const patchRes = await authenticatedFetch(`${API_BASE_URL}/api/ticket-types/${ticketType.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  name: ticketType.name,
+                  price: ticketType.price,
+                  capacity: ticketType.quantity,
+                  admissionCount: 1,
+                  attributes: ticketType.description ? { description: ticketType.description } : null
+                }),
+              });
+
+              if (!patchRes.ok) {
+                const errorData = await patchRes.json().catch(() => ({}));
+                throw new Error(errorData.error || `HTTP ${patchRes.status}`);
+              }
+
+              return { success: true, ticketType: ticketType.name };
+            } catch (patchErr: any) {
+              console.error(`Error updating ticket type ${ticketType.id}:`, patchErr);
+              return { 
+                success: false, 
+                ticketType: ticketType.name, 
+                error: patchErr.message || 'Unknown error' 
+              };
+            }
+          });
+
+          const updateResults = await Promise.allSettled(updatePromises);
+          updateResults.forEach((result, index) => {
+            if (result.status === 'fulfilled' && !result.value.success) {
+              updateErrors.push(`${result.value.ticketType}: ${result.value.error}`);
+            } else if (result.status === 'rejected') {
+              updateErrors.push(`${existingTicketTypes[index].name}: ${result.reason?.message || 'Update failed'}`);
+            }
+          });
         }
 
         // Create new ticket types (POST)
         if (newTicketTypes.length > 0) {
-          const newTicketTypesData = newTicketTypes.map(tt => ({
-            name: tt.name,
-            price: tt.price,
-            capacity: tt.quantity,
-            admissionCount: 1,
-            attributes: tt.description ? { description: tt.description } : null
-          }));
+          try {
+            const newTicketTypesData = newTicketTypes.map(tt => ({
+              name: tt.name,
+              price: tt.price,
+              capacity: tt.quantity,
+              admissionCount: 1,
+              attributes: tt.description ? { description: tt.description } : null
+            }));
 
-          const createRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${id}/tickets`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ticketTypes: newTicketTypesData,
-              generateTickets: false
-            }),
-          });
+            const createRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${id}/tickets`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ticketTypes: newTicketTypesData,
+                generateTickets: false
+              }),
+            });
 
-          if (!createRes.ok) {
-            console.warn("Failed to create new ticket types");
+            if (!createRes.ok) {
+              const errorData = await createRes.json().catch(() => ({}));
+              const errorMsg = errorData.error || errorData.details || `HTTP ${createRes.status}`;
+              createErrors.push(`Failed to create new ticket types: ${errorMsg}`);
+              
+              // If partial success, show warnings
+              if (errorData.warnings && Array.isArray(errorData.warnings)) {
+                createErrors.push(...errorData.warnings);
+              }
+            }
+          } catch (createErr: any) {
+            console.error("Error creating new ticket types:", createErr);
+            createErrors.push(`Failed to create new ticket types: ${createErr.message || 'Unknown error'}`);
           }
+        }
+
+        // Display errors if any occurred
+        const allErrors = [...updateErrors, ...createErrors];
+        if (allErrors.length > 0) {
+          const errorMessage = `Some ticket types failed to update:\n${allErrors.join('\n')}`;
+          console.warn(errorMessage);
+          // Show error to user but don't fail the entire update
+          setError(errorMessage);
+          setTimeout(() => setError(null), 10000);
         }
       } catch (ticketErr) {
         console.error("Error updating ticket types:", ticketErr);
@@ -543,6 +628,8 @@ export default function ManageEventsPage() {
       setUploadProgress(null);
     } finally {
       setUploadingImage(false);
+      setUpdatingId(null);
+      setUpdatingTicketTypes(null);
     }
   };
 
@@ -654,6 +741,47 @@ export default function ManageEventsPage() {
     } finally {
       setLoadingTicketTypes(false);
     }
+
+    // Fetch existing share messages
+    setLoadingShareMessages(true);
+    try {
+      const platforms = ['whatsapp', 'facebook', 'linkedin', null];
+      const messages: Record<string, { id?: string; message: string; platform: string | null }> = {
+        general: { message: '', platform: null },
+        whatsapp: { message: '', platform: 'whatsapp' },
+        facebook: { message: '', platform: 'facebook' },
+        linkedin: { message: '', platform: 'linkedin' },
+      };
+
+      for (const platform of platforms) {
+        try {
+          const url = platform 
+            ? `${API_BASE_URL}/api/events/${event.id}/share-messages?platform=${platform}`
+            : `${API_BASE_URL}/api/events/${event.id}/share-messages`;
+          
+          const response = await authenticatedFetch(url);
+          const data = await response.json();
+          
+          if (data.success && data.data?.message) {
+            const key = platform || 'general';
+            messages[key] = {
+              id: data.data.id,
+              message: data.data.message,
+              platform: data.data.platform,
+            };
+          }
+        } catch (err) {
+          // Silently fail for individual platforms
+          console.log(`No share message for platform: ${platform}`);
+        }
+      }
+
+      setShareMessages(messages);
+    } catch (err) {
+      console.error("Error fetching share messages:", err);
+    } finally {
+      setLoadingShareMessages(false);
+    }
   };
 
   const handleImageSelect = (file: File, isEdit: boolean = false) => {
@@ -716,10 +844,24 @@ export default function ManageEventsPage() {
 
   // Generate demo CSV file (horizontal format with multiple ticket types as columns)
   const generateDemoCSV = () => {
-    // Support up to 5 ticket types per event
-    const csvContent = `Title,Description,Start Date,End Date,Venue,City,State,Slug,Published,Status,Banner,Ticket Type 1 Name,Ticket Type 1 Price,Ticket Type 1 Quantity,Ticket Type 1 Description,Ticket Type 2 Name,Ticket Type 2 Price,Ticket Type 2 Quantity,Ticket Type 2 Description,Ticket Type 3 Name,Ticket Type 3 Price,Ticket Type 3 Quantity,Ticket Type 3 Description,Ticket Type 4 Name,Ticket Type 4 Price,Ticket Type 4 Quantity,Ticket Type 4 Description,Ticket Type 5 Name,Ticket Type 5 Price,Ticket Type 5 Quantity,Ticket Type 5 Description
-Summer Music Festival,Join us for an amazing summer music festival with top artists,2024-06-15T18:00,2024-06-15T23:00,Central Park,New York,New York,summer-music-festival-2024,true,upcoming,https://example.com/banner.jpg,VIP,5000,100,Includes front row seats and backstage access,General Admission,2000,500,Standard entry ticket,Early Bird,1500,200,Discounted price for early buyers,,,,
-Tech Conference 2024,Annual technology conference with industry leaders,2024-07-20T09:00,2024-07-20T17:00,Convention Center,San Francisco,California,tech-conference-2024,true,upcoming,https://example.com/tech-banner.jpg,Full Pass,3000,300,Full conference access with lunch,Student Pass,1000,100,Discounted student ticket,Day Pass,1500,50,Single day access only,,,`;
+    // Generate header with 15 ticket types as example (supports unlimited)
+    let header = 'Title,Description,Start Date,End Date,Venue,City,State,Slug,Published,Status,Banner';
+    for (let i = 1; i <= 15; i++) {
+      header += `,Ticket Type ${i} Name,Ticket Type ${i} Price,Ticket Type ${i} Quantity,Ticket Type ${i} Description`;
+    }
+    header += '\n';
+    
+    // Generate example row with 3 ticket types filled
+    let exampleRow = 'Summer Music Festival,Join us for an amazing summer music festival with top artists,2024-06-15T18:00,2024-06-15T23:00,Central Park,New York,New York,summer-music-festival-2024,true,upcoming,https://example.com/banner.jpg';
+    exampleRow += ',VIP,5000,100,Includes front row seats and backstage access';
+    exampleRow += ',General Admission,2000,500,Standard entry ticket';
+    exampleRow += ',Early Bird,1500,200,Discounted price for early buyers';
+    // Fill remaining ticket types with empty values
+    for (let i = 4; i <= 15; i++) {
+      exampleRow += ',,,';
+    }
+    
+    const csvContent = header + exampleRow;
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -795,26 +937,90 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
       const banner = getValue(['banner', 'banner url', 'bannerurl', 'image']);
 
       // Parse ticket types (horizontal format: Ticket Type 1 Name, Ticket Type 1 Price, etc.)
+      // Dynamically detect all ticket types - no limit
       const ticketTypes: Array<{ name: string; price: number; quantity: number; description?: string }> = [];
       
-      // Support up to 10 ticket types
-      for (let i = 1; i <= 10; i++) {
-        const name = getValue([`ticket type ${i} name`, `ticket ${i} name`, `tickettype${i}name`]);
-        const priceStr = getValue([`ticket type ${i} price`, `ticket ${i} price`, `tickettype${i}price`]);
-        const quantityStr = getValue([`ticket type ${i} quantity`, `ticket ${i} quantity`, `tickettype${i}quantity`]);
-        const description = getValue([`ticket type ${i} description`, `ticket ${i} description`, `tickettype${i}description`]);
-
-        if (name && name.trim()) {
-          const price = parseFloat(priceStr) || 0;
-          const quantity = parseInt(quantityStr) || 0;
+      // Find all ticket type columns by scanning headers
+      // Map structure: ticketIndex -> Map<fieldType, columnIndex>
+      const ticketTypeIndices = new Map<number, Map<'name' | 'price' | 'quantity' | 'description', number>>();
+      
+      headers.forEach((header, index) => {
+        const normalized = header.toLowerCase().trim();
+        // Match patterns like "ticket type 1 name", "ticket 2 price", "tickettype3quantity", etc.
+        const match = normalized.match(/ticket\s*type\s*(\d+)\s*(name|price|quantity|description)|ticket\s*(\d+)\s*(name|price|quantity|description)|tickettype(\d+)(name|price|quantity|description)/i);
+        if (match) {
+          const ticketIndex = parseInt(match[1] || match[3] || match[5] || '0', 10);
+          const fieldType = (match[2] || match[4] || match[6] || '').toLowerCase() as 'name' | 'price' | 'quantity' | 'description';
+          if (ticketIndex > 0 && ['name', 'price', 'quantity', 'description'].includes(fieldType)) {
+            if (!ticketTypeIndices.has(ticketIndex)) {
+              ticketTypeIndices.set(ticketIndex, new Map());
+            }
+            ticketTypeIndices.get(ticketIndex)!.set(fieldType, index);
+          }
+        }
+      });
+      
+      // Group by ticket index and parse
+      const ticketTypeMap = new Map<number, { name?: string; price?: string; quantity?: string; description?: string }>();
+      
+      ticketTypeIndices.forEach((fieldMap, ticketIndex) => {
+        if (!ticketTypeMap.has(ticketIndex)) {
+          ticketTypeMap.set(ticketIndex, {});
+        }
+        const ticketData = ticketTypeMap.get(ticketIndex)!;
+        
+        fieldMap.forEach((columnIndex, fieldType) => {
+          const value = eventValues[columnIndex]?.trim() || '';
+          if (fieldType === 'name') {
+            ticketData.name = value;
+          } else if (fieldType === 'price') {
+            ticketData.price = value;
+          } else if (fieldType === 'quantity') {
+            ticketData.quantity = value;
+          } else if (fieldType === 'description') {
+            ticketData.description = value;
+          }
+        });
+      });
+      
+      // Convert map to array and validate (sort by ticket index)
+      const sortedIndices = Array.from(ticketTypeMap.keys()).sort((a, b) => a - b);
+      sortedIndices.forEach((index) => {
+        const data = ticketTypeMap.get(index)!;
+        if (data.name && data.name.trim()) {
+          const price = parseFloat(data.price || '0') || 0;
+          const quantity = parseInt(data.quantity || '0', 10) || 0;
           
-          if (name.trim()) {
+          ticketTypes.push({
+            name: data.name.trim(),
+            price,
+            quantity,
+            description: (data.description || '').trim()
+          });
+        }
+      });
+      
+      // Fallback: If no ticket types found via pattern matching, try sequential approach up to 50
+      if (ticketTypes.length === 0) {
+        for (let i = 1; i <= 50; i++) {
+          const name = getValue([`ticket type ${i} name`, `ticket ${i} name`, `tickettype${i}name`]);
+          const priceStr = getValue([`ticket type ${i} price`, `ticket ${i} price`, `tickettype${i}price`]);
+          const quantityStr = getValue([`ticket type ${i} quantity`, `ticket ${i} quantity`, `tickettype${i}quantity`]);
+          const description = getValue([`ticket type ${i} description`, `ticket ${i} description`, `tickettype${i}description`]);
+
+          if (name && name.trim()) {
+            const price = parseFloat(priceStr) || 0;
+            const quantity = parseInt(quantityStr) || 0;
+            
             ticketTypes.push({
               name: name.trim(),
               price,
               quantity,
               description: description.trim() || ''
             });
+          } else {
+            // Stop if we hit a gap (no ticket type found)
+            break;
           }
         }
       }
@@ -1777,8 +1983,11 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                               <div className="border-t border-primary-border pt-4">
                                 <div className="flex justify-between items-center mb-4">
                                   <label className="block text-sm font-medium text-primary-fg">Ticket Types</label>
-                                  {loadingTicketTypes ? (
-                                    <span className="text-sm text-primary-muted">Loading...</span>
+                                  {(loadingTicketTypes || updatingTicketTypes === event.id) ? (
+                                    <span className="text-sm text-primary-muted flex items-center gap-2">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      {updatingTicketTypes === event.id ? 'Updating...' : 'Loading...'}
+                                    </span>
                                   ) : (
                                     <button
                                       type="button"
@@ -1795,8 +2004,11 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                                     </button>
                                   )}
                                 </div>
-                                {loadingTicketTypes ? (
-                                  <p className="text-sm text-primary-muted italic">Loading ticket types...</p>
+                                {(loadingTicketTypes || updatingTicketTypes === event.id) ? (
+                                  <p className="text-sm text-primary-muted italic flex items-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    {updatingTicketTypes === event.id ? 'Updating ticket types...' : 'Loading ticket types...'}
+                                  </p>
                                 ) : editTicketTypes.length === 0 ? (
                                   <p className="text-sm text-primary-muted italic">No ticket types added. Click &quot;Add Ticket Type&quot; to add one.</p>
                                 ) : (
@@ -1831,7 +2043,8 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                                                 setEditTicketTypes(newTicketTypes);
                                               }}
                                               placeholder="e.g., VIP, General, Early Bird"
-                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                              disabled={updatingTicketTypes === event.id}
+                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                                             />
                                           </div>
                                           <div>
@@ -1849,7 +2062,8 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                                                 newTicketTypes[index] = { ...ticketType, price: parseFloat(e.target.value) || 0 };
                                                 setEditTicketTypes(newTicketTypes);
                                               }}
-                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                              disabled={updatingTicketTypes === event.id}
+                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                                             />
                                           </div>
                                           <div>
@@ -1866,7 +2080,8 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                                                 newTicketTypes[index] = { ...ticketType, quantity: parseInt(e.target.value) || 0 };
                                                 setEditTicketTypes(newTicketTypes);
                                               }}
-                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                              disabled={updatingTicketTypes === event.id}
+                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                                             />
                                           </div>
                                           <div>
@@ -1882,7 +2097,8 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                                                 setEditTicketTypes(newTicketTypes);
                                               }}
                                               placeholder="Brief description of this ticket type"
-                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
+                                              disabled={updatingTicketTypes === event.id}
+                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                                             />
                                           </div>
                                         </div>
@@ -1992,6 +2208,95 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                                 )}
                               </div>
 
+                              {/* Share Messages Section */}
+                              <div className="border-t border-primary-border pt-4">
+                                <h3 className="text-sm font-semibold text-primary-fg mb-3">Share Messages (Update Messages)</h3>
+                                <p className="text-xs text-primary-muted mb-4">
+                                  Custom messages that appear when users share this event. Use {"{eventTitle}"} and {"{eventUrl}"} as placeholders.
+                                </p>
+                                
+                                {loadingShareMessages ? (
+                                  <p className="text-sm text-primary-muted italic flex items-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading share messages...
+                                  </p>
+                                ) : (
+                                  <div className="space-y-4">
+                                    {(['general', 'whatsapp', 'facebook', 'linkedin'] as const).map((platform) => (
+                                      <div key={platform} className="border border-primary-border rounded-lg p-4 bg-primary-accent-light">
+                                        <label className="block text-xs font-medium text-primary-fg mb-2 capitalize">
+                                          {platform === 'general' ? 'General Message (Default)' : `${platform.charAt(0).toUpperCase() + platform.slice(1)} Message`}
+                                        </label>
+                                        <textarea
+                                          value={shareMessages[platform]?.message || ''}
+                                          onChange={(e) => {
+                                            setShareMessages({
+                                              ...shareMessages,
+                                              [platform]: {
+                                                ...shareMessages[platform],
+                                                message: e.target.value,
+                                              },
+                                            });
+                                          }}
+                                          placeholder={platform === 'general' 
+                                            ? '🎉 Don\'t miss out! Join us at {eventTitle}\n\n✨ Experience something amazing - Book your tickets now!\n\n🔗 {eventUrl}\n\n#TalaashEvents #JaayveeWorld'
+                                            : 'Platform-specific message (optional)'
+                                          }
+                                          rows={4}
+                                          className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg resize-y"
+                                        />
+                                        <p className="text-xs text-primary-muted mt-1">
+                                          {platform === 'general' ? 'This message will be used if no platform-specific message is set.' : 'Leave empty to use the general message.'}
+                                        </p>
+                                      </div>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        setSavingShareMessages(true);
+                                        try {
+                                          for (const [platform, msg] of Object.entries(shareMessages)) {
+                                            if (msg.message.trim()) {
+                                              const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${event.id}/share-messages`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                  message: msg.message,
+                                                  platform: msg.platform,
+                                                  isActive: true,
+                                                }),
+                                              });
+                                              const data = await response.json();
+                                              if (data.success) {
+                                                setSuccess(`Share messages saved successfully!`);
+                                              }
+                                            }
+                                          }
+                                        } catch (err: any) {
+                                          setError(err.message || 'Failed to save share messages');
+                                        } finally {
+                                          setSavingShareMessages(false);
+                                        }
+                                      }}
+                                      disabled={savingShareMessages}
+                                      className="px-4 py-2 bg-primary-accent text-white rounded-lg hover:bg-primary-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                      {savingShareMessages ? (
+                                        <>
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                          Saving...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Save className="h-4 w-4" />
+                                          Save Share Messages
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                   <input
@@ -2027,10 +2332,20 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                                   </button>
                                   <button
                                     onClick={() => handleUpdate(event.id)}
-                                    className="px-4 py-2 text-sm text-white bg-primary-accent rounded-lg hover:bg-primary-accent-dark transition-colors flex items-center gap-2"
+                                    disabled={updatingId === event.id || uploadingImage}
+                                    className="px-4 py-2 text-sm text-white bg-primary-accent rounded-lg hover:bg-primary-accent-dark transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                                   >
-                                    <Save className="h-4 w-4" />
-                                    Save
+                                    {updatingId === event.id ? (
+                                      <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        {uploadProgress || 'Saving...'}
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Save className="h-4 w-4" />
+                                        Save
+                                      </>
+                                    )}
                                   </button>
                                 </div>
                               </div>
@@ -2068,13 +2383,6 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                           <td className="py-3 px-4">
                             <div className="flex items-center justify-end gap-2">
                               <button
-                                onClick={() => setShowFinancialPlanning(prev => ({ ...prev, [event.id]: !prev[event.id] }))}
-                                className="p-2 text-primary-fg hover:bg-primary-accent-light rounded-lg transition-colors"
-                                title="Financial Planning"
-                              >
-                                {showFinancialPlanning[event.id] ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                              </button>
-                              <button
                                 onClick={() => startEdit(event)}
                                 className="p-2 text-primary-fg hover:bg-primary-accent-light rounded-lg transition-colors"
                                 title="Edit"
@@ -2098,13 +2406,6 @@ Tech Conference 2024,Annual technology conference with industry leaders,2024-07-
                         </>
                       )}
                     </tr>
-                    {showFinancialPlanning[event.id] && editingId !== event.id && (
-                      <tr key={`financial-${event.id}`}>
-                        <td colSpan={5} className="p-4 bg-primary-accent-light/30">
-                          <EventFinancialPlanning eventId={event.id} eventTitle={event.title} />
-                        </td>
-                      </tr>
-                    )}
                     </>
                   ))}
                 </tbody>

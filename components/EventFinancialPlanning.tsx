@@ -1,123 +1,38 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { DollarSign, Calculator, TrendingUp, Download, Plus, Edit2, Trash2, Save, X, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { DollarSign, Calculator, TrendingUp, Download, Plus, Edit2, Trash2, Save, X, Loader2, ChevronDown, ChevronUp, BarChart3, Settings, Receipt } from "lucide-react";
 import { authenticatedFetch } from "@/lib/auth-utils";
+import { debounce } from "@/lib/utils/debounce";
+import FinancialSettings from "./EventFinancialPlanning/FinancialSettings";
+import ExpensesManagement from "./EventFinancialPlanning/ExpensesManagement";
+import CalculationsView from "./EventFinancialPlanning/CalculationsView";
+import type { ExpenseTemplate, EventExpense, EventFinancials, FinancialCalculations, FinancialsFormData, ExpenseFormData } from "./EventFinancialPlanning/types";
 
-interface ExpenseTemplate {
-  id: string;
-  name: string;
-  category: string;
-  defaultAmount: number;
-  isActive: boolean;
-}
-
-interface EventExpense {
-  id: string;
-  templateId?: string;
-  name: string;
-  category: string;
-  expenseType: 'fixed' | 'per_person' | 'percentage' | 'calculated';
-  amount?: number;
-  percentage?: number;
-  perPersonAmount?: number;
-  numberOfInvitees?: number;
-  isOptional: boolean;
-}
-
-interface EventFinancials {
-  id: string;
-  eventId: string;
-  eventPrice: number;
-  capacity: number;
-  expectedProfit: number;
-  referralPercentage: number;
-  tjwPointsPercentage: number;
-  tjwPointsMaxAmount: number;
-  tjwVoucherPercentage: number;
-  tjwVoucherMaxAmount: number;
-  sponsorIncome: number;
-  otherIncome: number;
-  calculatedTotalExpenses: number;
-  calculatedTotalIncome: number;
-  calculatedProfit: number;
-  calculatedProfitMargin: number;
-}
-
-interface FinancialCalculations {
-  expenses: {
-    fixedExpenses: number;
-    perPersonExpenses: number;
-    percentageExpenses: number;
-    totalExpenses: number;
-    breakdown: {
-      fixed: Array<{ name: string; amount: number; category: string }>;
-      perPerson: Array<{ name: string; amount: number; invitees: number }>;
-      percentage: Array<{ name: string; amount: number; percentage: number }>;
-    };
-  };
-  income: {
-    ticketIncome: number;
-    sponsorIncome: number;
-    otherIncome: number;
-    totalIncome: number;
-  };
-  profit: {
-    totalExpenses: number;
-    totalIncome: number;
-    profit: number;
-    profitMargin: number;
-  };
-  suggestions: {
-    priceIncrease: {
-      type: string;
-      description: string;
-      currentValue: number;
-      requiredValue: number;
-      increasePercentage: number;
-    };
-    capacityIncrease: {
-      type: string;
-      description: string;
-      currentValue: number;
-      requiredValue: number;
-      increasePercentage: number;
-    };
-    breakEven: {
-      breakEvenPrice: number;
-      breakEvenCapacity: number;
-    };
-    scenarios: Array<{
-      price: number;
-      capacity: number;
-      expectedIncome: number;
-      expectedProfit: number;
-      profitMargin: number;
-    }>;
-  };
-}
+// Types are now imported from EventFinancialPlanning/types.ts
 
 interface EventFinancialPlanningProps {
   eventId: string;
   eventTitle?: string;
 }
 
+type TabType = 'overview' | 'settings' | 'expenses' | 'calculations';
+
 export default function EventFinancialPlanning({ eventId, eventTitle }: EventFinancialPlanningProps) {
-  const [activeTab, setActiveTab] = useState<'settings' | 'expenses' | 'calculations'>('settings');
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
   const [financials, setFinancials] = useState<EventFinancials | null>(null);
-  const [expenses, setExpenses] = useState<EventExpense[]>([]);
   const [templates, setTemplates] = useState<ExpenseTemplate[]>([]);
+  const [expenses, setExpenses] = useState<EventExpense[]>([]);
   const [calculations, setCalculations] = useState<FinancialCalculations | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savingBulk, setSavingBulk] = useState(false);
+  const [calculating, setCalculating] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['basic', 'percentages']));
 
-  // Form states
-  const [financialsForm, setFinancialsForm] = useState({
-    eventPrice: 0,
+  const [financialsForm, setFinancialsForm] = useState<FinancialsFormData>({
     capacity: 0,
     expectedProfit: 0,
     referralPercentage: 20,
@@ -129,17 +44,7 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
     otherIncome: 0,
   });
 
-  const [expenseForm, setExpenseForm] = useState<{
-    templateId?: string;
-    name: string;
-    category: string;
-    expenseType: 'fixed' | 'per_person' | 'percentage';
-    amount?: number;
-    percentage?: number;
-    perPersonAmount?: number;
-    numberOfInvitees?: number;
-    isOptional: boolean;
-  }>({
+  const [expenseForm, setExpenseForm] = useState<ExpenseFormData>({
     name: '',
     category: 'direct',
     expenseType: 'fixed',
@@ -148,42 +53,91 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
 
   const [editingExpense, setEditingExpense] = useState<EventExpense | null>(null);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [bulkAddMode, setBulkAddMode] = useState(false);
+  const [bulkExpenses, setBulkExpenses] = useState<Array<{
+    name: string;
+    category: string;
+    expenseType: 'fixed' | 'per_person' | 'percentage';
+    amount?: number;
+    perPersonAmount?: number;
+    numberOfInvitees?: number;
+    percentage?: number;
+    isOptional: boolean;
+  }>>([{ name: '', category: 'direct', expenseType: 'fixed', isOptional: false }]);
 
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+  const [averageTicketPrice, setAverageTicketPrice] = useState<number | null>(null);
 
-  // Fetch all data
+  // Use relative path for same-origin requests, or API_BASE_URL if set
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+
+  // OPTIMIZATION: Memoized expensive calculations
+  const projectedTicketIncome = useMemo(() => {
+    if (averageTicketPrice !== null && financialsForm.capacity > 0) {
+      return averageTicketPrice * financialsForm.capacity;
+    }
+    return 0;
+  }, [averageTicketPrice, financialsForm.capacity]);
+
+  const totalProjectedIncome = useMemo(() => {
+    const sponsor = Number(financialsForm.sponsorIncome) || 0;
+    const other = Number(financialsForm.otherIncome) || 0;
+    return projectedTicketIncome + sponsor + other;
+  }, [projectedTicketIncome, financialsForm.sponsorIncome, financialsForm.otherIncome]);
+
+  // Fetch all data - OPTIMIZED: Parallel API calls
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch financials
-      const financialsRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/financials`);
+      // OPTIMIZATION: Fetch all independent data in parallel
+      const [financialsRes, templatesRes, ticketsRes, expensesRes] = await Promise.all([
+        authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/financials`),
+        authenticatedFetch(`${API_BASE_URL}/api/expense-templates`),
+        authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/tickets`),
+        authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/expenses`),
+      ]);
+
+      // Process financials
       if (financialsRes.ok) {
         const financialsData = await financialsRes.json();
-        if (financialsData.success && financialsData.data?.financials) {
-          const fin = financialsData.data.financials;
-          setFinancials(fin);
-          setFinancialsForm({
-            eventPrice: fin.eventPrice || 0,
-            capacity: fin.capacity || 0,
-            expectedProfit: fin.expectedProfit || 0,
-            referralPercentage: fin.referralPercentage || 20,
-            tjwPointsPercentage: fin.tjwPointsPercentage || 1,
-            tjwPointsMaxAmount: fin.tjwPointsMaxAmount || 40,
-            tjwVoucherPercentage: fin.tjwVoucherPercentage || 1,
-            tjwVoucherMaxAmount: fin.tjwVoucherMaxAmount || 40,
-            sponsorIncome: fin.sponsorIncome || 0,
-            otherIncome: fin.otherIncome || 0,
-          });
-          if (financialsData.data.calculations) {
-            setCalculations(financialsData.data.calculations);
+        if (financialsData.success && financialsData.data) {
+          if (financialsData.data !== null) {
+            setFinancials(financialsData.data);
+            setFinancialsForm({
+              capacity: financialsData.data.capacity,
+              expectedProfit: financialsData.data.expectedProfit || 0,
+              referralPercentage: financialsData.data.referralPercentage ?? 20,
+              tjwPointsPercentage: financialsData.data.tjwPointsPercentage ?? 1,
+              tjwPointsMaxAmount: financialsData.data.tjwPointsMaxAmount ?? 40,
+              tjwVoucherPercentage: financialsData.data.tjwVoucherPercentage ?? 1,
+              tjwVoucherMaxAmount: financialsData.data.tjwVoucherMaxAmount ?? 40,
+              sponsorIncome: financialsData.data.sponsorIncome || 0,
+              otherIncome: financialsData.data.otherIncome || 0,
+            });
+            if (financialsData.data.calculations) {
+              setCalculations(financialsData.data.calculations);
+            }
+          } else if (financialsData.data === null || financialsData.message?.includes('not found')) {
+            // Financials don't exist yet - initialize with defaults
+            setFinancials(null);
+            setFinancialsForm({
+              capacity: 0,
+              expectedProfit: 0,
+              referralPercentage: 20,
+              tjwPointsPercentage: 1,
+              tjwPointsMaxAmount: 40,
+              tjwVoucherPercentage: 1,
+              tjwVoucherMaxAmount: 40,
+              sponsorIncome: 0,
+              otherIncome: 0,
+            });
+            setCalculations(null);
           }
         }
       }
 
-      // Fetch templates first
-      const templatesRes = await authenticatedFetch(`${API_BASE_URL}/api/event-expense-templates?activeOnly=true`);
+      // Process templates
       let templatesData: ExpenseTemplate[] = [];
       if (templatesRes.ok) {
         const templatesResult = await templatesRes.json();
@@ -193,46 +147,92 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
         }
       }
 
-      // Fetch expenses
-      const expensesRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/expenses`);
-      let existingExpenses: EventExpense[] = [];
-      if (expensesRes.ok) {
-        const expensesData = await expensesRes.json();
-        if (expensesData.success && expensesData.data) {
-          existingExpenses = expensesData.data;
+      // Process ticket types
+      if (ticketsRes.ok) {
+        const ticketsData = await ticketsRes.json();
+        if (ticketsData.success && ticketsData.data?.ticketTypes) {
+          const ticketTypes = ticketsData.data.ticketTypes;
+          if (ticketTypes.length > 0) {
+            // Calculate weighted average price and total capacity
+            let totalPotentialRevenue = 0;
+            let totalCapacity = 0;
+            
+            for (const ticketType of ticketTypes) {
+              totalPotentialRevenue += ticketType.capacity * ticketType.price;
+              totalCapacity += ticketType.capacity;
+            }
+
+            const weightedAveragePrice = totalCapacity > 0 ? totalPotentialRevenue / totalCapacity : 0;
+            setAverageTicketPrice(weightedAveragePrice);
+            
+            // Update capacity in form
+            setFinancialsForm(prev => ({
+              ...prev,
+              capacity: totalCapacity,
+            }));
+          } else {
+            setAverageTicketPrice(null);
+            setFinancialsForm(prev => ({
+              ...prev,
+              capacity: 0,
+            }));
+          }
         }
       }
 
-      // Merge templates with existing expenses
-      // For templates that don't have corresponding expenses, create virtual expense entries
-      const templateExpenseMap = new Map(existingExpenses
-        .filter(e => e.templateId)
-        .map(e => [e.templateId!, e]));
-      
-      const allExpenses: EventExpense[] = [...existingExpenses];
-      
-      // Add template expenses that don't have corresponding event expenses yet
-      templatesData.forEach(template => {
-        if (!templateExpenseMap.has(template.id)) {
-          // Create a virtual expense entry for this template
-          allExpenses.push({
-            id: `template-${template.id}`, // Virtual ID
-            templateId: template.id,
-            name: template.name,
-            category: template.category,
-            expenseType: 'fixed',
-            amount: template.defaultAmount,
-            isOptional: false,
-          } as EventExpense);
+      // Process expenses
+      if (expensesRes.ok) {
+        const expensesData = await expensesRes.json();
+        if (expensesData.success && expensesData.data) {
+          setExpenses(expensesData.data);
+          
+          // Also add virtual expenses from templates that aren't added yet
+          const addedTemplateIds = new Set(expensesData.data.map((e: EventExpense) => e.templateId).filter(Boolean));
+          const virtualExpenses = templatesData
+            .filter(t => !addedTemplateIds.has(t.id))
+            .map(t => ({
+              id: `template-${t.id}`,
+              templateId: t.id,
+              name: t.name,
+              category: t.category,
+              expenseType: 'fixed' as const,
+              amount: t.defaultAmount,
+              isOptional: false,
+            } as EventExpense));
+          
+          setExpenses([...expensesData.data, ...virtualExpenses]);
         }
-      });
-      
-      setExpenses(allExpenses);
+      }
     } catch (err: any) {
       console.error('Error fetching financial data:', err);
-      setError(err.message || 'Failed to fetch financial data');
+      setError(err.message || 'Failed to load financial data');
     } finally {
       setLoading(false);
+    }
+  }, [eventId, API_BASE_URL]);
+
+  // Update capacity from ticket types when they change
+  useEffect(() => {
+    const updateCapacity = async () => {
+      try {
+        const ticketsRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/tickets`);
+        if (ticketsRes.ok) {
+          const ticketsData = await ticketsRes.json();
+          if (ticketsData.success && ticketsData.data?.ticketTypes) {
+            const ticketTypes = ticketsData.data.ticketTypes;
+            const totalCapacity = ticketTypes.reduce((sum: number, tt: any) => sum + (tt.capacity || 0), 0);
+            setFinancialsForm(prev => ({
+              ...prev,
+              capacity: totalCapacity,
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Error updating capacity from ticket types:', err);
+      }
+    };
+    if (eventId) {
+      updateCapacity();
     }
   }, [eventId, API_BASE_URL]);
 
@@ -260,67 +260,14 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
         throw new Error(data.error || 'Failed to save financials');
       }
 
+      setFinancials(data.data);
       setSuccess('Financial settings saved successfully!');
-      await fetchData();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       console.error('Error saving financials:', err);
-      setError(err.message || 'Failed to save financial settings');
+      setError(err.message || 'Failed to save financials');
     } finally {
       setSaving(false);
-    }
-  };
-
-  // Calculate financials
-  const handleCalculate = async () => {
-    try {
-      setCalculating(true);
-      setError(null);
-
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/financials/calculate`);
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to calculate financials');
-      }
-
-      setCalculations(data.data);
-      setSuccess('Calculations updated successfully!');
-      await fetchData();
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error('Error calculating financials:', err);
-      setError(err.message || 'Failed to calculate financials');
-    } finally {
-      setCalculating(false);
-    }
-  };
-
-  // Export CSV
-  const handleExportCSV = async () => {
-    try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/financials/export-csv`);
-
-      if (!response.ok) {
-        throw new Error('Failed to export CSV');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `event-financials-${eventTitle || eventId.substring(0, 8)}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      setSuccess('CSV exported successfully!');
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error('Error exporting CSV:', err);
-      setError(err.message || 'Failed to export CSV');
     }
   };
 
@@ -331,15 +278,14 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
       setError(null);
       setSuccess(null);
 
-      // If editing a virtual template expense (starts with 'template-'), treat it as a new expense
       const isVirtualExpense = editingExpense?.id.startsWith('template-');
-      const url = (editingExpense && !isVirtualExpense)
-        ? `${API_BASE_URL}/api/events/${eventId}/expenses/${editingExpense.id}`
-        : `${API_BASE_URL}/api/events/${eventId}/expenses`;
-
-      const response = await authenticatedFetch(url, {
+      
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/expenses`, {
         method: (editingExpense && !isVirtualExpense) ? 'PUT' : 'POST',
-        body: JSON.stringify(expenseForm),
+        body: JSON.stringify({
+          ...expenseForm,
+          id: editingExpense?.id,
+        }),
       });
 
       const data = await response.json();
@@ -348,7 +294,7 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
         throw new Error(data.error || 'Failed to save expense');
       }
 
-      setSuccess(editingExpense && !isVirtualExpense ? 'Expense updated successfully!' : 'Expense added successfully!');
+      setSuccess('Expense saved successfully!');
       setShowExpenseForm(false);
       setEditingExpense(null);
       setExpenseForm({
@@ -358,12 +304,87 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
         isOptional: false,
       });
       await fetchData();
+      // OPTIMIZATION: Debounced auto-calculation instead of immediate
+      debouncedCalculate();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       console.error('Error saving expense:', err);
       setError(err.message || 'Failed to save expense');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Save bulk expenses
+  const handleSaveBulkExpenses = async () => {
+    try {
+      setSavingBulk(true);
+      setError(null);
+      setSuccess(null);
+
+      // Validate all expenses
+      const validExpenses = bulkExpenses.filter(exp => exp.name.trim());
+      if (validExpenses.length === 0) {
+        setError('Please add at least one expense with a name');
+        return;
+      }
+
+      // Validate required fields for each expense
+      for (const exp of validExpenses) {
+        if (exp.expenseType === 'fixed' && !exp.amount) {
+          setError(`${exp.name || 'An expense'} is missing amount`);
+          return;
+        }
+        if (exp.expenseType === 'per_person' && (!exp.perPersonAmount || !exp.numberOfInvitees)) {
+          setError(`${exp.name || 'An expense'} is missing per-person amount or number of invitees`);
+          return;
+        }
+        if (exp.expenseType === 'percentage' && !exp.percentage) {
+          setError(`${exp.name || 'An expense'} is missing percentage`);
+          return;
+        }
+      }
+
+      // Save all expenses
+      const savePromises = validExpenses.map(expense =>
+        authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/expenses`, {
+          method: 'POST',
+          body: JSON.stringify(expense),
+        })
+      );
+
+      const results = await Promise.allSettled(savePromises);
+      const errors: string[] = [];
+      
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        if (result.status === 'rejected') {
+          errors.push(`${validExpenses[i].name}: ${result.reason?.message || 'Failed to save'}`);
+        } else {
+          const response = result.value;
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            errors.push(`${validExpenses[i].name}: ${data.error || 'Failed to save'}`);
+          }
+        }
+      }
+
+      if (errors.length > 0) {
+        setError(`Some expenses failed to save:\n${errors.join('\n')}`);
+      } else {
+        setSuccess(`Successfully added ${validExpenses.length} expense(s)!`);
+        setBulkExpenses([{ name: '', category: 'direct', expenseType: 'fixed', isOptional: false }]);
+        setBulkAddMode(false);
+        await fetchData();
+        // OPTIMIZATION: Debounced auto-calculation instead of immediate
+        debouncedCalculate();
+        setTimeout(() => setSuccess(null), 3000);
+      }
+    } catch (err: any) {
+      console.error('Error saving bulk expenses:', err);
+      setError(err.message || 'Failed to save expenses');
+    } finally {
+      setSavingBulk(false);
     }
   };
 
@@ -389,6 +410,8 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
 
       setSuccess('Expense deleted successfully!');
       await fetchData();
+      // OPTIMIZATION: Debounced auto-calculation instead of immediate
+      debouncedCalculate();
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       console.error('Error deleting expense:', err);
@@ -450,6 +473,39 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
     setShowExpenseForm(true);
   };
 
+  // Calculate function - MUST be before early return to follow Rules of Hooks
+  const handleCalculate = useCallback(async () => {
+    try {
+      setCalculating(true);
+      setError(null);
+
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/financials/calculate`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to calculate financials');
+      }
+
+      setCalculations(data.data);
+      setSuccess('Financial calculations updated!');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error calculating financials:', err);
+      setError(err.message || 'Failed to calculate financials');
+    } finally {
+      setCalculating(false);
+    }
+  }, [eventId, API_BASE_URL]);
+
+  // OPTIMIZATION: Debounced calculate function - MUST be before early return
+  const debouncedCalculate = useMemo(
+    () => debounce(handleCalculate, 500),
+    [handleCalculate]
+  );
+
   if (loading) {
     return (
       <div className="card p-8 text-center">
@@ -459,654 +515,363 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
     );
   }
 
-  return (
-    <div className="card">
-      {/* Tabs */}
-      <div className="border-b border-primary-border mb-6">
-        <div className="flex gap-4">
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-4 py-2 font-medium transition-colors ${
-              activeTab === 'settings'
-                ? 'text-primary-accent border-b-2 border-primary-accent'
-                : 'text-primary-muted hover:text-primary-fg'
-            }`}
-          >
-            <DollarSign className="h-4 w-4 inline mr-2" />
-            Financial Settings
-          </button>
-          <button
-            onClick={() => setActiveTab('expenses')}
-            className={`px-4 py-2 font-medium transition-colors ${
-              activeTab === 'expenses'
-                ? 'text-primary-accent border-b-2 border-primary-accent'
-                : 'text-primary-muted hover:text-primary-fg'
-            }`}
-          >
-            <Calculator className="h-4 w-4 inline mr-2" />
-            Expenses Management
-          </button>
-          <button
-            onClick={() => setActiveTab('calculations')}
-            className={`px-4 py-2 font-medium transition-colors ${
-              activeTab === 'calculations'
-                ? 'text-primary-accent border-b-2 border-primary-accent'
-                : 'text-primary-muted hover:text-primary-fg'
-            }`}
-          >
-            <TrendingUp className="h-4 w-4 inline mr-2" />
-            Calculations & Suggestions
-          </button>
-        </div>
-      </div>
+  // Export CSV
+  const handleExportCSV = async () => {
+    if (!calculations) return;
 
-      {/* Messages */}
+    const csvRows = [
+      ['Category', 'Item', 'Amount'],
+      ['Expenses', 'Fixed Expenses', calculations.expenses.fixedExpenses.toFixed(2)],
+      ['Expenses', 'Per-Person Expenses', calculations.expenses.perPersonExpenses.toFixed(2)],
+      ['Expenses', 'Percentage Expenses', calculations.expenses.percentageExpenses.toFixed(2)],
+      ['Expenses', 'Total Expenses', calculations.expenses.totalExpenses.toFixed(2)],
+      ['Income', 'Ticket Income', calculations.income.ticketIncome.toFixed(2)],
+      ['Income', 'Sponsor Income', calculations.income.sponsorIncome.toFixed(2)],
+      ['Income', 'Other Income', calculations.income.otherIncome.toFixed(2)],
+      ['Income', 'Total Income', calculations.income.totalIncome.toFixed(2)],
+      ['Profit', 'Total Expenses', calculations.profit.totalExpenses.toFixed(2)],
+      ['Profit', 'Total Income', calculations.profit.totalIncome.toFixed(2)],
+      ['Profit', 'Profit/Loss', calculations.profit.profit.toFixed(2)],
+      ['Profit', 'Profit Margin %', calculations.profit.profitMargin.toFixed(2)],
+    ];
+
+    const csvContent = csvRows.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const filename = eventTitle 
+      ? `event-financials-${eventTitle.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.csv`
+      : `event-financials-${eventId.substring(0, 8)}.csv`;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const tabs = [
+    { id: 'overview' as TabType, label: 'Overview', icon: BarChart3 },
+    { id: 'settings' as TabType, label: 'Settings', icon: Settings },
+    { id: 'expenses' as TabType, label: 'Expenses', icon: Receipt },
+    { id: 'calculations' as TabType, label: 'Calculations', icon: Calculator },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Error/Success Messages */}
       {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm animate-in fade-in slide-in-from-top-2">
           {error}
         </div>
       )}
       {success && (
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-4 text-green-700 text-sm">
+        <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 text-sm animate-in fade-in slide-in-from-top-2">
           {success}
         </div>
       )}
 
-      {/* Financial Settings Tab */}
-      {activeTab === 'settings' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-primary-fg mb-2">
-                Event Price (per person) *
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={financialsForm.eventPrice}
-                onChange={(e) => setFinancialsForm({ ...financialsForm, eventPrice: parseFloat(e.target.value) || 0 })}
-                className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-primary-fg mb-2">
-                Capacity (Expected Occupancy) *
-              </label>
-              <input
-                type="number"
-                value={financialsForm.capacity}
-                onChange={(e) => setFinancialsForm({ ...financialsForm, capacity: parseInt(e.target.value) || 0 })}
-                className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-primary-fg mb-2">
-                Expected Profit
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={financialsForm.expectedProfit}
-                onChange={(e) => setFinancialsForm({ ...financialsForm, expectedProfit: parseFloat(e.target.value) || 0 })}
-                className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-primary-fg mb-2">
-                Sponsor Income
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={financialsForm.sponsorIncome}
-                onChange={(e) => setFinancialsForm({ ...financialsForm, sponsorIncome: parseFloat(e.target.value) || 0 })}
-                className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-primary-fg mb-2">
-                Other Income
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                value={financialsForm.otherIncome}
-                onChange={(e) => setFinancialsForm({ ...financialsForm, otherIncome: parseFloat(e.target.value) || 0 })}
-                className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-              />
-            </div>
-          </div>
-
-          <div className="border-t border-primary-border pt-4">
-            <h3 className="text-lg font-semibold text-primary-fg mb-4">Customizable Percentages</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-primary-fg mb-2">
-                  Referral Percentage (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={financialsForm.referralPercentage}
-                  onChange={(e) => setFinancialsForm({ ...financialsForm, referralPercentage: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-primary-fg mb-2">
-                  TJW Coins Percentage (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={financialsForm.tjwPointsPercentage}
-                  onChange={(e) => setFinancialsForm({ ...financialsForm, tjwPointsPercentage: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-primary-fg mb-2">
-                  TJW Coins Max Amount
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={financialsForm.tjwPointsMaxAmount}
-                  onChange={(e) => setFinancialsForm({ ...financialsForm, tjwPointsMaxAmount: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-primary-fg mb-2">
-                  TJW Voucher Percentage (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={financialsForm.tjwVoucherPercentage}
-                  onChange={(e) => setFinancialsForm({ ...financialsForm, tjwVoucherPercentage: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-primary-fg mb-2">
-                  TJW Voucher Max Amount
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={financialsForm.tjwVoucherMaxAmount}
-                  onChange={(e) => setFinancialsForm({ ...financialsForm, tjwVoucherMaxAmount: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-4">
-            <button
-              onClick={handleSaveFinancials}
-              disabled={saving}
-              className="btn-primary flex items-center gap-2 disabled:opacity-50"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  Save Settings
-                </>
-              )}
-            </button>
-          </div>
+      {/* Modern Tab Navigation */}
+      <div className="border border-primary-border rounded-xl bg-primary-bg overflow-hidden">
+        {/* Tab Headers */}
+        <div className="flex border-b border-primary-border bg-primary-bg/50 overflow-x-auto">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-6 py-4 font-medium transition-all duration-200 whitespace-nowrap ${
+                  isActive
+                    ? 'text-primary-accent border-b-2 border-primary-accent bg-primary-bg'
+                    : 'text-primary-muted hover:text-primary-fg hover:bg-primary-bg/50'
+                }`}
+              >
+                <Icon className={`h-4 w-4 ${isActive ? 'text-primary-accent' : ''}`} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
-      )}
 
-      {/* Expenses Management Tab */}
-      {activeTab === 'expenses' && (
-        <div className="space-y-6">
-          {/* Templates */}
-          {templates.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold text-primary-fg mb-4">Expense Templates</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-                {templates.map((template) => (
-                  <button
-                    key={template.id}
-                    onClick={() => addExpenseFromTemplate(template)}
-                    className="p-3 border border-primary-border rounded-lg hover:bg-primary-accent-light transition-colors text-left"
-                  >
-                    <div className="font-medium text-primary-fg">{template.name}</div>
-                    <div className="text-sm text-primary-muted">₹{template.defaultAmount.toFixed(2)}</div>
-                    <div className="text-xs text-primary-muted mt-1">{template.category}</div>
-                  </button>
-                ))}
+        {/* Tab Content */}
+        <div className="p-6">
+          {/* Overview Tab */}
+          {activeTab === 'overview' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-left-2">
+              {/* Quick Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="border border-primary-border rounded-xl p-5 bg-gradient-to-br from-blue-50 to-blue-100/50 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-medium text-primary-muted uppercase tracking-wide">Ticket Income</div>
+                    <TrendingUp className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-primary-fg mb-1">
+                    {isNaN(projectedTicketIncome) || !isFinite(projectedTicketIncome)
+                      ? '₹0.00'
+                      : `₹${projectedTicketIncome.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </div>
+                  <div className="text-xs text-primary-muted">Auto-calculated from tickets</div>
+                </div>
+                <div className="border border-primary-border rounded-xl p-5 bg-gradient-to-br from-green-50 to-green-100/50 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-medium text-primary-muted uppercase tracking-wide">Total Income</div>
+                    <DollarSign className="h-4 w-4 text-green-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-primary-fg mb-1">
+                    {isNaN(totalProjectedIncome) || !isFinite(totalProjectedIncome)
+                      ? '₹0.00'
+                      : `₹${totalProjectedIncome.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </div>
+                  <div className="text-xs text-primary-muted">Ticket + Sponsor + Other</div>
+                </div>
+                <div className="border border-primary-border rounded-xl p-5 bg-gradient-to-br from-orange-50 to-orange-100/50 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-medium text-primary-muted uppercase tracking-wide">Total Expenses</div>
+                    <Receipt className="h-4 w-4 text-orange-600" />
+                  </div>
+                  <div className="text-2xl font-bold text-primary-fg mb-1">
+                    {calculations
+                      ? `₹${calculations.expenses.totalExpenses.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : '₹0.00'}
+                  </div>
+                  <div className="text-xs text-primary-muted">
+                    {expenses.length} expense{expenses.length !== 1 ? 's' : ''} added
+                  </div>
+                </div>
+                <div className={`border rounded-xl p-5 hover:shadow-md transition-shadow ${
+                  calculations && calculations.profit.profit >= 0
+                    ? 'bg-gradient-to-br from-green-50 to-green-100/50 border-green-200'
+                    : calculations && calculations.profit.profit < 0
+                    ? 'bg-gradient-to-br from-red-50 to-red-100/50 border-red-200'
+                    : 'bg-gradient-to-br from-gray-50 to-gray-100/50 border-primary-border'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-medium text-primary-muted uppercase tracking-wide">Projected Profit</div>
+                    <Calculator className={`h-4 w-4 ${
+                      calculations && calculations.profit.profit >= 0
+                        ? 'text-green-600'
+                        : calculations && calculations.profit.profit < 0
+                        ? 'text-red-600'
+                        : 'text-primary-muted'
+                    }`} />
+                  </div>
+                  <div className={`text-2xl font-bold mb-1 ${
+                    calculations && calculations.profit.profit >= 0
+                      ? 'text-green-700'
+                      : calculations && calculations.profit.profit < 0
+                      ? 'text-red-700'
+                      : 'text-primary-fg'
+                  }`}>
+                    {calculations
+                      ? `₹${calculations.profit.profit.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : 'Calculate to see'}
+                  </div>
+                  <div className="text-xs text-primary-muted">
+                    {calculations ? `${calculations.profit.profitMargin.toFixed(2)}% margin` : 'Click Calculate'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="p-4 border border-primary-border rounded-xl hover:border-primary-accent hover:bg-primary-accent-light transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-primary-accent/10 rounded-lg group-hover:bg-primary-accent/20 transition-colors">
+                      <Settings className="h-5 w-5 text-primary-accent" />
+                    </div>
+                    <h3 className="font-semibold text-primary-fg">Configure Settings</h3>
+                  </div>
+                  <p className="text-sm text-primary-muted">Set up financial parameters and percentages</p>
+                </button>
+                <button
+                  onClick={() => setActiveTab('expenses')}
+                  className="p-4 border border-primary-border rounded-xl hover:border-primary-accent hover:bg-primary-accent-light transition-all text-left group"
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-primary-accent/10 rounded-lg group-hover:bg-primary-accent/20 transition-colors">
+                      <Receipt className="h-5 w-5 text-primary-accent" />
+                    </div>
+                    <h3 className="font-semibold text-primary-fg">Manage Expenses</h3>
+                  </div>
+                  <p className="text-sm text-primary-muted">Add and track event expenses</p>
+                </button>
+                <button
+                  onClick={() => setActiveTab('calculations')}
+                  disabled={!calculations}
+                  className="p-4 border border-primary-border rounded-xl hover:border-primary-accent hover:bg-primary-accent-light transition-all text-left group disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-primary-accent/10 rounded-lg group-hover:bg-primary-accent/20 transition-colors">
+                      <Calculator className="h-5 w-5 text-primary-accent" />
+                    </div>
+                    <h3 className="font-semibold text-primary-fg">View Analysis</h3>
+                  </div>
+                  <p className="text-sm text-primary-muted">See financial calculations and scenarios</p>
+                </button>
+              </div>
+
+              {/* Status Summary */}
+              <div className="border border-primary-border rounded-xl p-5 bg-primary-bg/50">
+                <h3 className="font-semibold text-primary-fg mb-4">Setup Status</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-primary-muted">Financial Settings</span>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      financials ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {financials ? 'Configured' : 'Not Set'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-primary-muted">Expenses</span>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      expenses.length > 0 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {expenses.length} added
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-primary-muted">Calculations</span>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      calculations ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {calculations ? 'Ready' : 'Pending'}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Add/Edit Expense Form */}
-          {showExpenseForm && (
-            <div className="border border-primary-border rounded-lg p-4 bg-primary-accent-light">
-              <h3 className="text-lg font-semibold text-primary-fg mb-4">
-                {editingExpense ? 'Edit Expense' : 'Add Expense'}
-              </h3>
-              <div className="space-y-4">
+          {/* Settings Tab */}
+          {activeTab === 'settings' && (
+            <div className="animate-in fade-in slide-in-from-left-2">
+              <div className="flex items-center justify-between mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-primary-fg mb-2">
-                    Name * 
-                    {expenseForm.templateId && (
-                      <span className="text-xs text-primary-muted ml-2">(Fixed - from template)</span>
-                    )}
-                  </label>
-                  <input
-                    type="text"
-                    value={expenseForm.name}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, name: e.target.value })}
-                    disabled={!!expenseForm.templateId}
-                    className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:bg-primary-accent-light disabled:cursor-not-allowed"
-                  />
+                  <h2 className="text-xl font-semibold text-primary-fg mb-1">Financial Settings</h2>
+                  <p className="text-sm text-primary-muted">Configure your event's financial parameters</p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-primary-fg mb-2">
-                      Category *
-                      {expenseForm.templateId && (
-                        <span className="text-xs text-primary-muted ml-2">(Fixed - from template)</span>
-                      )}
-                    </label>
-                    <select
-                      value={expenseForm.category}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
-                      disabled={!!expenseForm.templateId}
-                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:bg-primary-accent-light disabled:cursor-not-allowed"
-                    >
-                      <option value="direct">Direct</option>
-                      <option value="indirect">Indirect</option>
-                      <option value="marketing">Marketing</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-primary-fg mb-2">
-                      Type *
-                      {expenseForm.templateId && (
-                        <span className="text-xs text-primary-muted ml-2">(Fixed - from template)</span>
-                      )}
-                    </label>
-                    <select
-                      value={expenseForm.expenseType}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, expenseType: e.target.value as any })}
-                      disabled={!!expenseForm.templateId}
-                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:bg-primary-accent-light disabled:cursor-not-allowed"
-                    >
-                      <option value="fixed">Fixed</option>
-                      <option value="per_person">Per Person</option>
-                      <option value="percentage">Percentage</option>
-                    </select>
-                  </div>
+                <button
+                  onClick={handleSaveFinancials}
+                  disabled={saving || financialsForm.capacity <= 0}
+                  className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      {financials ? 'Save Changes' : 'Create Settings'}
+                    </>
+                  )}
+                </button>
+              </div>
+              <FinancialSettings
+                financialsForm={financialsForm}
+                setFinancialsForm={setFinancialsForm}
+                averageTicketPrice={averageTicketPrice}
+                projectedTicketIncome={projectedTicketIncome}
+                totalProjectedIncome={totalProjectedIncome}
+                expandedSections={expandedSections}
+                setExpandedSections={setExpandedSections}
+                saving={saving}
+                financials={financials}
+                onSave={handleSaveFinancials}
+              />
+            </div>
+          )}
+
+          {/* Expenses Tab */}
+          {activeTab === 'expenses' && (
+            <div className="animate-in fade-in slide-in-from-left-2">
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold text-primary-fg mb-1">Expenses Management</h2>
+                <p className="text-sm text-primary-muted">Add and manage event expenses</p>
+              </div>
+              <ExpensesManagement
+                templates={templates}
+                expenses={expenses}
+                expenseForm={expenseForm}
+                setExpenseForm={setExpenseForm}
+                editingExpense={editingExpense}
+                setEditingExpense={setEditingExpense}
+                showExpenseForm={showExpenseForm}
+                setShowExpenseForm={setShowExpenseForm}
+                bulkAddMode={bulkAddMode}
+                setBulkAddMode={setBulkAddMode}
+                bulkExpenses={bulkExpenses}
+                setBulkExpenses={setBulkExpenses}
+                saving={saving}
+                savingBulk={savingBulk}
+                calculations={calculations}
+                projectedTicketIncome={projectedTicketIncome}
+                totalProjectedIncome={totalProjectedIncome}
+                onAddFromTemplate={addExpenseFromTemplate}
+                onSaveExpense={handleSaveExpense}
+                onSaveBulkExpenses={handleSaveBulkExpenses}
+                onDeleteExpense={handleDeleteExpense}
+                onStartEdit={startEditExpense}
+              />
+            </div>
+          )}
+
+          {/* Calculations Tab */}
+          {activeTab === 'calculations' && (
+            <div className="animate-in fade-in slide-in-from-left-2">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold text-primary-fg mb-1">Financial Calculations</h2>
+                  <p className="text-sm text-primary-muted">View detailed financial analysis and scenarios</p>
                 </div>
-                {expenseForm.expenseType === 'fixed' && (
-                  <div>
-                    <label className="block text-sm font-medium text-primary-fg mb-2">Amount *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={expenseForm.amount || ''}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, amount: parseFloat(e.target.value) || undefined })}
-                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-                    />
-                  </div>
-                )}
-                {expenseForm.expenseType === 'per_person' && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium text-primary-fg mb-2">Per Person Amount *</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={expenseForm.perPersonAmount || ''}
-                        onChange={(e) => setExpenseForm({ ...expenseForm, perPersonAmount: parseFloat(e.target.value) || undefined })}
-                        className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-primary-fg mb-2">Number of Invitees *</label>
-                      <input
-                        type="number"
-                        value={expenseForm.numberOfInvitees || ''}
-                        onChange={(e) => setExpenseForm({ ...expenseForm, numberOfInvitees: parseInt(e.target.value) || undefined })}
-                        className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-                      />
-                    </div>
-                  </>
-                )}
-                {expenseForm.expenseType === 'percentage' && (
-                  <div>
-                    <label className="block text-sm font-medium text-primary-fg mb-2">Percentage *</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={expenseForm.percentage || ''}
-                      onChange={(e) => setExpenseForm({ ...expenseForm, percentage: parseFloat(e.target.value) || undefined })}
-                      className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
-                    />
-                  </div>
-                )}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isOptional"
-                    checked={expenseForm.isOptional}
-                    onChange={(e) => setExpenseForm({ ...expenseForm, isOptional: e.target.checked })}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="isOptional" className="text-sm text-primary-fg">
-                    Optional Expense
-                  </label>
-                </div>
-                <div className="flex justify-end gap-2">
+                <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      setShowExpenseForm(false);
-                      setEditingExpense(null);
-                      setExpenseForm({
-                        name: '',
-                        category: 'direct',
-                        expenseType: 'fixed',
-                        isOptional: false,
-                      });
-                    }}
-                    className="px-4 py-2 text-primary-fg border border-primary-border rounded-lg hover:bg-primary-accent-light"
+                    onClick={handleCalculate}
+                    disabled={calculating || loading}
+                    className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <X className="h-4 w-4 inline mr-2" />
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveExpense}
-                    disabled={saving || !expenseForm.name}
-                    className="btn-primary flex items-center gap-2 disabled:opacity-50"
-                  >
-                    {saving ? (
+                    {calculating ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Saving...
+                        Calculating...
                       </>
                     ) : (
                       <>
-                        <Save className="h-4 w-4" />
-                        Save
+                        <Calculator className="h-4 w-4" />
+                        {calculations ? 'Recalculate' : 'Calculate'}
                       </>
                     )}
                   </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Expenses List */}
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-primary-fg">Event Expenses</h3>
-              {!showExpenseForm && (
-                <button
-                  onClick={() => setShowExpenseForm(true)}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Expense
-                </button>
-              )}
-            </div>
-            {expenses.length === 0 ? (
-              <p className="text-primary-muted text-center py-8">No expenses added yet. Add expenses from templates or create custom ones.</p>
-            ) : (
-              <div className="space-y-2">
-                {expenses.map((expense) => {
-                  const isTemplateExpense = !!expense.templateId;
-                  const isVirtualExpense = expense.id.startsWith('template-');
-                  
-                  return (
-                    <div
-                      key={expense.id}
-                      className={`p-4 border rounded-lg flex justify-between items-center ${
-                        isTemplateExpense 
-                          ? 'border-primary-accent bg-primary-accent-light/30' 
-                          : 'border-primary-border'
-                      }`}
+                  {calculations && (
+                    <button
+                      onClick={handleExportCSV}
+                      className="btn-secondary flex items-center gap-2"
                     >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <div className="font-medium text-primary-fg">{expense.name}</div>
-                          {isTemplateExpense && (
-                            <span className="text-xs px-2 py-0.5 bg-primary-accent text-primary-fg rounded">
-                              Fixed Template
-                            </span>
-                          )}
-                          {isVirtualExpense && (
-                            <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-800 rounded">
-                              Not Added Yet
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-sm text-primary-muted">
-                          {expense.category} • {expense.expenseType}
-                          {expense.expenseType === 'fixed' && expense.amount && ` • ₹${expense.amount.toFixed(2)}`}
-                          {expense.expenseType === 'per_person' && expense.perPersonAmount && expense.numberOfInvitees && ` • ₹${expense.perPersonAmount.toFixed(2)} × ${expense.numberOfInvitees}`}
-                          {expense.expenseType === 'percentage' && expense.percentage && ` • ${expense.percentage}%`}
-                          {expense.isOptional && ' • Optional'}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => startEditExpense(expense)}
-                          className="p-2 text-primary-fg hover:bg-primary-accent-light rounded-lg"
-                          title={isTemplateExpense ? "Edit amount (label is fixed)" : "Edit expense"}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        {!isVirtualExpense && (
-                          <button
-                            onClick={() => handleDeleteExpense(expense.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                            title="Delete expense"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                      <Download className="h-4 w-4" />
+                      Export CSV
+                    </button>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Calculations & Suggestions Tab */}
-      {activeTab === 'calculations' && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold text-primary-fg">Financial Calculations</h3>
-            <div className="flex gap-2">
-              <button
-                onClick={handleCalculate}
-                disabled={calculating || !financials}
-                className="btn-primary flex items-center gap-2 disabled:opacity-50"
-              >
-                {calculating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Calculating...
-                  </>
-                ) : (
-                  <>
-                    <Calculator className="h-4 w-4" />
-                    Recalculate
-                  </>
-                )}
-              </button>
-              <button
-                onClick={handleExportCSV}
-                disabled={!calculations}
-                className="btn-primary flex items-center gap-2 disabled:opacity-50"
-              >
-                <Download className="h-4 w-4" />
-                Export CSV
-              </button>
+              <CalculationsView
+                calculations={calculations}
+                financials={financials}
+                financialsForm={financialsForm}
+                calculating={calculating}
+                loading={loading}
+                onCalculate={handleCalculate}
+                onExportCSV={handleExportCSV}
+                onNavigateToSettings={() => setActiveTab('settings')}
+              />
             </div>
-          </div>
-
-          {!calculations ? (
-            <div className="text-center py-8 text-primary-muted">
-              <p>No calculations available. Please save financial settings and click &quot;Recalculate&quot;.</p>
-            </div>
-          ) : (
-            <>
-              {/* Expenses Breakdown */}
-              <div className="border border-primary-border rounded-lg p-4">
-                <h4 className="font-semibold text-primary-fg mb-4">Expenses Breakdown</h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-primary-muted">Fixed Expenses:</span>
-                    <span className="font-medium text-primary-fg">₹{calculations.expenses.fixedExpenses.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-primary-muted">Per-Person Expenses:</span>
-                    <span className="font-medium text-primary-fg">₹{calculations.expenses.perPersonExpenses.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-primary-muted">Percentage Expenses:</span>
-                    <span className="font-medium text-primary-fg">₹{calculations.expenses.percentageExpenses.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-primary-border font-semibold">
-                    <span className="text-primary-fg">Total Expenses:</span>
-                    <span className="text-primary-fg">₹{calculations.expenses.totalExpenses.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Income Breakdown */}
-              <div className="border border-primary-border rounded-lg p-4">
-                <h4 className="font-semibold text-primary-fg mb-4">Income Breakdown</h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-primary-muted">Ticket Income:</span>
-                    <span className="font-medium text-primary-fg">₹{calculations.income.ticketIncome.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-primary-muted">Sponsor Income:</span>
-                    <span className="font-medium text-primary-fg">₹{calculations.income.sponsorIncome.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-primary-muted">Other Income:</span>
-                    <span className="font-medium text-primary-fg">₹{calculations.income.otherIncome.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-primary-border font-semibold">
-                    <span className="text-primary-fg">Total Income:</span>
-                    <span className="text-primary-fg">₹{calculations.income.totalIncome.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Profit/Loss */}
-              <div className={`border rounded-lg p-4 ${calculations.profit.profit >= 0 ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-                <h4 className="font-semibold mb-4">Profit/Loss Summary</h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span>Total Expenses:</span>
-                    <span className="font-medium">₹{calculations.profit.totalExpenses.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Total Income:</span>
-                    <span className="font-medium">₹{calculations.profit.totalIncome.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t font-semibold text-lg">
-                    <span>Profit/Loss:</span>
-                    <span className={calculations.profit.profit >= 0 ? 'text-green-700' : 'text-red-700'}>
-                      ₹{calculations.profit.profit.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Profit Margin:</span>
-                    <span className={`font-medium ${calculations.profit.profitMargin >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                      {calculations.profit.profitMargin.toFixed(2)}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Suggestions */}
-              <div className="border border-primary-border rounded-lg p-4">
-                <h4 className="font-semibold text-primary-fg mb-4">Suggestions</h4>
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-sm text-primary-muted mb-1">Price Increase</div>
-                    <div className="text-primary-fg">
-                      Required Price: ₹{calculations.suggestions.priceIncrease.requiredValue.toFixed(2)} 
-                      ({calculations.suggestions.priceIncrease.increasePercentage >= 0 ? '+' : ''}{calculations.suggestions.priceIncrease.increasePercentage.toFixed(2)}%)
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-primary-muted mb-1">Capacity Increase</div>
-                    <div className="text-primary-fg">
-                      Required Capacity: {Math.ceil(calculations.suggestions.capacityIncrease.requiredValue)} 
-                      ({calculations.suggestions.capacityIncrease.increasePercentage >= 0 ? '+' : ''}{calculations.suggestions.capacityIncrease.increasePercentage.toFixed(2)}%)
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-primary-muted mb-1">Break-Even Analysis</div>
-                    <div className="text-primary-fg">
-                      Break-Even Price: ₹{calculations.suggestions.breakEven.breakEvenPrice.toFixed(2)} | 
-                      Break-Even Capacity: {calculations.suggestions.breakEven.breakEvenCapacity}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Scenarios */}
-              {calculations.suggestions.scenarios.length > 0 && (
-                <div className="border border-primary-border rounded-lg p-4">
-                  <h4 className="font-semibold text-primary-fg mb-4">Top Scenarios</h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-primary-border">
-                          <th className="text-left py-2 px-2 text-primary-muted">Price</th>
-                          <th className="text-left py-2 px-2 text-primary-muted">Capacity</th>
-                          <th className="text-right py-2 px-2 text-primary-muted">Income</th>
-                          <th className="text-right py-2 px-2 text-primary-muted">Profit</th>
-                          <th className="text-right py-2 px-2 text-primary-muted">Margin %</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {calculations.suggestions.scenarios.map((scenario, idx) => (
-                          <tr key={idx} className="border-b border-primary-border">
-                            <td className="py-2 px-2 text-primary-fg">₹{scenario.price.toFixed(2)}</td>
-                            <td className="py-2 px-2 text-primary-fg">{scenario.capacity}</td>
-                            <td className="py-2 px-2 text-right text-primary-fg">₹{scenario.expectedIncome.toFixed(2)}</td>
-                            <td className={`py-2 px-2 text-right ${scenario.expectedProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              ₹{scenario.expectedProfit.toFixed(2)}
-                            </td>
-                            <td className={`py-2 px-2 text-right ${scenario.profitMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              {scenario.profitMargin.toFixed(2)}%
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
-
-

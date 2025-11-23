@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckSquare, Plus, Clock, PlayCircle, X, User, Calendar, Edit2, Trash2, GripVertical, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { CheckSquare, Plus, Clock, PlayCircle, X, User, Calendar, Edit2, Trash2, GripVertical, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Send } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { format, differenceInHours, differenceInDays, differenceInMinutes } from "date-fns";
 import { isSuperAdmin } from "@/lib/rbac";
@@ -28,6 +28,16 @@ interface TeamUser {
   id: string;
   email: string;
   fullName: string;
+}
+
+interface TaskRemark {
+  id: string;
+  taskId: string;
+  userId: string;
+  remark: string;
+  createdAt: string;
+  userName: string | null;
+  userEmail: string | null;
 }
 
 export default function TasksPage() {
@@ -417,14 +427,69 @@ export default function TasksPage() {
     });
   };
 
-  const openViewModal = (task: Task) => {
+  const openViewModal = async (task: Task) => {
     setViewingTask(task);
+    await fetchTaskRemarks(task.id);
+  };
+
+  const fetchTaskRemarks = async (taskId: string) => {
+    try {
+      setLoadingRemarks(true);
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks/${taskId}/remarks`);
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setTaskRemarks(result.data || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching remarks:', err);
+    } finally {
+      setLoadingRemarks(false);
+    }
+  };
+
+  const handleAddRemark = async () => {
+    if (!viewingTask || !newRemark.trim() || addingRemark) return;
+
+    try {
+      setAddingRemark(true);
+      setError(null);
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks/${viewingTask.id}/remarks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ remark: newRemark.trim() }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add remark');
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        setTaskRemarks(prev => [result.data, ...prev]);
+        setNewRemark('');
+      }
+    } catch (err: any) {
+      console.error('Error adding remark:', err);
+      setError(err.message || 'Failed to add remark');
+    } finally {
+      setAddingRemark(false);
+    }
   };
 
   const closeModal = () => {
     setShowCreateModal(false);
     setEditingTask(null);
     setViewingTask(null);
+    setTaskRemarks([]);
+    setNewRemark('');
     setFormData({ title: '', description: '', assignedTo: '', deadline: '' });
   };
 
@@ -859,6 +924,95 @@ export default function TasksPage() {
                   </p>
                 </div>
               )}
+
+              {/* Remarks Section */}
+              <div className="pt-4 border-t border-primary-border">
+                <div className="flex items-center gap-2 mb-4">
+                  <MessageSquare className="h-5 w-5 text-primary-accent" />
+                  <h3 className="text-lg font-semibold text-primary-fg">Remarks</h3>
+                  <span className="text-sm text-primary-muted">({taskRemarks.length})</span>
+                </div>
+
+                {/* Add Remark Form */}
+                <div className="mb-4">
+                  <textarea
+                    value={newRemark}
+                    onChange={(e) => setNewRemark(e.target.value)}
+                    placeholder="Add a remark or comment..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg placeholder-primary-muted focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        handleAddRemark();
+                      }
+                    }}
+                  />
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-xs text-primary-muted">
+                      Press Ctrl+Enter or Cmd+Enter to submit
+                    </p>
+                    <button
+                      onClick={handleAddRemark}
+                      disabled={!newRemark.trim() || addingRemark}
+                      className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {addingRemark ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4" />
+                          Add Remark
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Remarks List */}
+                {loadingRemarks ? (
+                  <div className="text-center py-4">
+                    <div className="w-6 h-6 border-2 border-primary-accent border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                    <p className="text-sm text-primary-muted">Loading remarks...</p>
+                  </div>
+                ) : taskRemarks.length === 0 ? (
+                  <div className="text-center py-8 border border-primary-border rounded-lg bg-primary-bg/50">
+                    <MessageSquare className="h-8 w-8 text-primary-muted mx-auto mb-2" />
+                    <p className="text-sm text-primary-muted">No remarks yet. Be the first to add one!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {taskRemarks.map((remark) => (
+                      <div
+                        key={remark.id}
+                        className="border border-primary-border rounded-lg p-4 bg-primary-bg/50"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-primary-muted" />
+                            <span className="font-medium text-primary-fg">
+                              {remark.userName || remark.userEmail || 'Unknown User'}
+                            </span>
+                            {remark.userEmail && remark.userName && (
+                              <span className="text-xs text-primary-muted">
+                                ({remark.userEmail})
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-primary-muted">
+                            {format(new Date(remark.createdAt), "MMM dd, yyyy 'at' HH:mm")}
+                          </span>
+                        </div>
+                        <p className="text-sm text-primary-fg whitespace-pre-wrap">
+                          {remark.remark}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="flex gap-2 pt-4 border-t border-primary-border">
                 <button

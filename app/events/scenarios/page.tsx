@@ -6,6 +6,7 @@ import { TrendingUp, BarChart3, RefreshCw, ExternalLink, Loader2, Filter, Info, 
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { isSuperAdmin } from "@/lib/rbac";
 import { API_BASE_URL } from "@/lib/api";
+import EventFinancialPlanning from "@/components/EventFinancialPlanning";
 
 interface Event {
   id: string;
@@ -218,6 +219,17 @@ export default function EventScenariosPage() {
               : event
           ));
           setLoadedCalculations(prev => new Set(prev).add(eventId));
+        } else if (!calcData.success && calcData.error?.includes('Financial data not found')) {
+          // Financials don't exist - this is okay, EventFinancialPlanning will handle it
+          console.log(`Financial data not found for event ${eventId}, user can create it`);
+        }
+      } else {
+        const calcData = await calcRes.json().catch(() => ({ error: 'Unknown error' }));
+        if (calcRes.status === 404 && calcData.error?.includes('Financial data not found')) {
+          // Financials don't exist - this is okay, EventFinancialPlanning will handle it
+          console.log(`Financial data not found for event ${eventId}, user can create it`);
+        } else {
+          console.error(`Error fetching calculations for event ${eventId}:`, calcData.error || 'Unknown error');
         }
       }
     } catch (error) {
@@ -543,6 +555,11 @@ export default function EventScenariosPage() {
               {/* Financial Calculations - Accordion Content */}
               {isExpanded && (
                 <div className="mt-6 pt-6 border-t border-primary-border">
+                  {/* Financial Planning Form - Always show so users can configure and calculate */}
+                  <div className="mb-6">
+                    <EventFinancialPlanning eventId={event.id} eventTitle={event.title} />
+                  </div>
+
                   {isLoadingCalc ? (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-6 w-6 animate-spin text-primary-accent mr-3" />
@@ -550,16 +567,17 @@ export default function EventScenariosPage() {
                     </div>
                   ) : hasCalculations ? (
                     <>
-                      {/* Summary Cards */}
+
+                      {/* At-a-Glance Summary */}
                       {event.calculations && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                          <div>
+                          <div className="border border-primary-border rounded-lg p-4">
                             <div className="text-sm text-primary-muted mb-1">Total Expenses</div>
                             <div className="text-lg font-semibold text-primary-fg">
                               {formatCurrency(event.calculations.expenses.totalExpenses)}
                             </div>
                           </div>
-                          <div>
+                          <div className="border border-primary-border rounded-lg p-4">
                             <div className="text-sm text-primary-muted mb-1 flex items-center gap-1">
                               Total Income
                               <div className="group relative">
@@ -593,7 +611,7 @@ export default function EventScenariosPage() {
                               {formatCurrency(event.calculations.income.totalIncome)}
                             </div>
                           </div>
-                          <div>
+                          <div className="border border-primary-border rounded-lg p-4">
                             <div className="text-sm text-primary-muted mb-1">Profit Margin</div>
                             <div
                               className={`text-lg font-semibold ${
@@ -607,6 +625,7 @@ export default function EventScenariosPage() {
                           </div>
                         </div>
                       )}
+
 
                       {/* Subscriber Limits Breakdown - Accordion */}
                       {event.calculations?.subscriberLimitsBreakdown && event.calculations.subscriberLimitsBreakdown.enabled && (
@@ -825,7 +844,8 @@ export default function EventScenariosPage() {
                             <table className="w-full text-sm">
                               <thead>
                                 <tr className="border-b border-primary-border">
-                                  <th className="text-left py-2 px-2 text-primary-muted">Price</th>
+                                  <th className="text-left py-2 px-2 text-primary-muted">Scenario</th>
+                                  <th className="text-left py-2 px-2 text-primary-muted">Fill Rate</th>
                                   <th className="text-left py-2 px-2 text-primary-muted">Capacity</th>
                                   <th className="text-right py-2 px-2 text-primary-muted">Income</th>
                                   <th className="text-right py-2 px-2 text-primary-muted">Profit</th>
@@ -833,31 +853,42 @@ export default function EventScenariosPage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {event.calculations.suggestions.scenarios.map((scenario, idx) => (
-                                  <tr key={idx} className="border-b border-primary-border">
-                                    <td className="py-2 px-2 text-primary-fg">
-                                      {formatCurrency(scenario.price)}
-                                    </td>
-                                    <td className="py-2 px-2 text-primary-fg">{scenario.capacity}</td>
-                                    <td className="py-2 px-2 text-right text-primary-fg">
-                                      {formatCurrency(scenario.expectedIncome)}
-                                    </td>
-                                    <td
-                                      className={`py-2 px-2 text-right ${
-                                        scenario.expectedProfit >= 0 ? "text-green-600" : "text-red-600"
-                                      }`}
-                                    >
-                                      {formatCurrency(scenario.expectedProfit)}
-                                    </td>
-                                    <td
-                                      className={`py-2 px-2 text-right ${
-                                        scenario.profitMargin >= 0 ? "text-green-600" : "text-red-600"
-                                      }`}
-                                    >
-                                      {scenario.profitMargin.toFixed(2)}%
-                                    </td>
-                                  </tr>
-                                ))}
+                                {event.calculations.suggestions.scenarios.slice(0, 2).map((scenario, idx) => {
+                                  // Calculate fill rate based on total capacity
+                                  const totalCapacity = event.financials?.capacity || 0;
+                                  const fillRate = totalCapacity > 0 ? ((scenario.capacity / totalCapacity) * 100).toFixed(0) : '0';
+                                  
+                                  // Identify scenario: first is 100% (all tickets), second is 75% (realistic)
+                                  const scenarioName = idx === 0 ? 'All Tickets Sold' : 'Realistic Projection';
+                                  const fillRatePercent = idx === 0 ? 100 : 75;
+                                  
+                                  return (
+                                    <tr key={idx} className="border-b border-primary-border">
+                                      <td className="py-2 px-2 text-primary-fg font-medium">
+                                        {scenarioName}
+                                      </td>
+                                      <td className="py-2 px-2 text-primary-fg">{fillRatePercent}%</td>
+                                      <td className="py-2 px-2 text-primary-fg">{scenario.capacity}</td>
+                                      <td className="py-2 px-2 text-right text-primary-fg">
+                                        {formatCurrency(scenario.expectedIncome)}
+                                      </td>
+                                      <td
+                                        className={`py-2 px-2 text-right ${
+                                          scenario.expectedProfit >= 0 ? "text-green-600" : "text-red-600"
+                                        }`}
+                                      >
+                                        {formatCurrency(scenario.expectedProfit)}
+                                      </td>
+                                      <td
+                                        className={`py-2 px-2 text-right ${
+                                          scenario.profitMargin >= 0 ? "text-green-600" : "text-red-600"
+                                        }`}
+                                      >
+                                        {scenario.profitMargin.toFixed(2)}%
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>

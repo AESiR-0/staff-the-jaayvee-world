@@ -25,11 +25,17 @@ const nextConfig: NextConfig = {
   },
 };
 
+// Only apply PWA in production to avoid warnings in development
+// This prevents the "GenerateSW has been called multiple times" warning
+// The disable flag ensures the plugin doesn't run in development even if loaded
 const pwaConfig = withPWA({
   dest: 'public',
   register: true,
   skipWaiting: true,
-  disable: false, // Enable PWA in all environments
+  // Completely disable in development to prevent multiple GenerateSW calls
+  disable: process.env.NODE_ENV === 'development',
+  buildExcludes: [/app-build-manifest\.json$/],
+  sw: 'sw.js',
   runtimeCaching: [
     {
       urlPattern: /^https?.*/,
