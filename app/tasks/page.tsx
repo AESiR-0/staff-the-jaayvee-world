@@ -85,9 +85,13 @@ export default function TasksPage() {
     checkCreatePermission();
     
     // Check if user is admin
-    const session = getTeamSession();
-    const userEmail = session?.email;
-    setIsAdmin(isSuperAdmin(userEmail));
+    const checkAdminStatus = async () => {
+      const session = getTeamSession();
+      const userEmail = session?.email;
+      const adminStatus = await isSuperAdmin(userEmail);
+      setIsAdmin(adminStatus);
+    };
+    checkAdminStatus();
   }, []);
 
   const checkCreatePermission = async () => {
