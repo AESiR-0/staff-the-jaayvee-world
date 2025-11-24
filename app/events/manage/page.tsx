@@ -175,7 +175,8 @@ export default function ManageEventsPage() {
 
         // Check if user is super admin first
         const { isSuperAdmin } = require('@/lib/rbac');
-        if (isSuperAdmin(userEmail) || ALLOWED_EMAIL.includes(userEmail?.toLowerCase() || '')) {
+        const adminCheck = await isSuperAdmin(userEmail);
+        if (adminCheck || ALLOWED_EMAIL.includes(userEmail?.toLowerCase() || '')) {
           setAuthorized(true);
           fetchEvents();
         } else {

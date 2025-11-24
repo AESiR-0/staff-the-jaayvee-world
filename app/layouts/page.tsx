@@ -87,14 +87,16 @@ export default function LayoutsPage() {
       const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
-      setCanManage(isSuperAdmin(userEmail));
+      const adminCheck = await isSuperAdmin(userEmail);
+      setCanManage(adminCheck);
     } catch (err) {
       console.error('Error checking permissions:', err);
       // Fallback: check if user is admin
       const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
-      setCanManage(isSuperAdmin(userEmail));
+      const adminCheck = await isSuperAdmin(userEmail);
+      setCanManage(adminCheck);
     }
   }, [API_BASE_URL]);
 

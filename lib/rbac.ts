@@ -194,9 +194,39 @@ const ACCESS_DENY: Partial<Record<TabKey, string[]>> = {
 };
 
 /**
- * Check if an email is a super admin
+ * Check if an email is a super admin (database-only)
+ * This function now checks the database for the "Super Admin" role
  */
-export function isSuperAdmin(email?: string | null): boolean {
+export async function isSuperAdmin(email?: string | null): Promise<boolean> {
+  if (!email) return false;
+  
+  try {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+    const { authenticatedFetch } = await import('@/lib/auth-utils');
+    
+    // Check if user has Super Admin role via API
+    const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac/check-super-admin?email=${encodeURIComponent(email)}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        return data.data.isSuperAdmin === true;
+      }
+    }
+  } catch (error) {
+    console.error('Error checking super admin status:', error);
+    // Fallback: return false on error (fail secure)
+  }
+  
+  return false;
+}
+
+/**
+ * Synchronous version for backward compatibility (deprecated)
+ * This will be removed after migration is complete
+ * @deprecated Use async isSuperAdmin instead
+ */
+export function isSuperAdminSync(email?: string | null): boolean {
   if (!email) return false;
   const normalized = email.trim().toLowerCase();
   return SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(normalized);
@@ -278,9 +308,9 @@ export function clearPermissionsCache(): void {
   permissionsCacheTime = 0;
 }
 
-export function canAccess(tab: TabKey, email?: string | null): boolean {
+export async function canAccess(tab: TabKey, email?: string | null): Promise<boolean> {
   // Super admins have access to everything
-  if (isSuperAdmin(email)) {
+  if (await isSuperAdmin(email)) {
     return true;
   }
   

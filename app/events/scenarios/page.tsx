@@ -300,7 +300,8 @@ export default function EventScenariosPage() {
         return;
       }
 
-      if (!isSuperAdmin(session.email)) {
+      const adminCheck = await isSuperAdmin(session.email);
+      if (!adminCheck) {
         setAuthorized(false);
         setLoading(false);
         return;

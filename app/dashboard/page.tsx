@@ -50,7 +50,8 @@ function DashboardContent() {
             const { isSuperAdmin } = require('@/lib/rbac');
             
             // Super admins can do everything
-            if (isSuperAdmin(userEmail)) {
+            const adminCheck = await isSuperAdmin(userEmail);
+            if (adminCheck) {
               setCanCreateUpdates(true);
               setCanAccessRBAC(true);
             } else {

@@ -25,7 +25,8 @@ import {
   FileText,
   GraduationCap,
   ChevronUp,
-  LucideIcon
+  LucideIcon,
+  AlertCircle
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -124,7 +125,7 @@ export default function Sidebar() {
     }
   ];
 
-  // Fetch sidebar data
+  // Fetch sidebar data and check access permissions
   useEffect(() => {
     const loadSidebar = async () => {
       try {
@@ -136,6 +137,18 @@ export default function Sidebar() {
           // Expand all groups by default
           const allGroupIds = new Set<string>(data.data.groups.map((g: SidebarGroup) => g.id));
           setExpandedGroups(allGroupIds);
+          
+          // Check access for all items and cache results
+          const accessibleSet = new Set<string>();
+          for (const group of data.data.groups) {
+            for (const item of group.items) {
+              const hasAccess = await canAccessItem(item);
+              if (hasAccess) {
+                accessibleSet.add(item.href || item.url || '');
+              }
+            }
+          }
+          setAccessibleItems(accessibleSet);
         }
       } catch (err) {
         console.error('Error loading sidebar:', err);
@@ -144,7 +157,7 @@ export default function Sidebar() {
       }
     };
     loadSidebar();
-  }, []);
+  }, [email, permissions, permissionsLoaded]);
 
   // Fetch RBAC permissions on mount
   useEffect(() => {
@@ -194,7 +207,44 @@ export default function Sidebar() {
     };
   }, [showRoleSwitcher]);
 
-  const handleLogout = () => {
+  const [todayDeadlinesCount, setTodayDeadlinesCount] = useState(0);
+  const [showLogoutWarning, setShowLogoutWarning] = useState(false);
+
+  // Check for today's deadlines on mount and periodically
+  useEffect(() => {
+    const checkTodayDeadlines = async () => {
+      try {
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+        const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks/today-deadlines`);
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            setTodayDeadlinesCount(result.data.count || 0);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking today deadlines:', error);
+      }
+    };
+    
+    checkTodayDeadlines();
+    // Check every 5 minutes
+    const interval = setInterval(checkTodayDeadlines, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleLogout = async () => {
+    // Check for today's deadlines before logout
+    const { logoutUser } = await import('@/lib/auth-utils');
+    const result = await logoutUser(false);
+    
+    if (!result.allowed) {
+      setShowLogoutWarning(true);
+      setTimeout(() => setShowLogoutWarning(false), 3000);
+      return;
+    }
+    
+    // Logout allowed, proceed
     // Clear authentication data
     localStorage.removeItem("authToken");
     localStorage.removeItem("userSession");
@@ -203,10 +253,20 @@ export default function Sidebar() {
     router.push("/login");
   };
 
-  // Check if user can access an item
-  const canAccessItem = (item: SidebarItem): boolean => {
+  // State to track which items are accessible
+  const [accessibleItems, setAccessibleItems] = useState<Set<string>>(new Set());
+
+  // Check if user can access an item (cached version for synchronous use)
+  const canAccessItemSync = (item: SidebarItem): boolean => {
+    // Use cached accessible items set
+    return accessibleItems.has(item.href || item.url || '');
+  };
+
+  // Async function to check access (used for initial load)
+  const canAccessItem = async (item: SidebarItem): Promise<boolean> => {
     // Super admins have access to everything
-    if (isSuperAdmin(email)) {
+    const adminCheck = await isSuperAdmin(email);
+    if (adminCheck) {
       return true;
     }
     
@@ -239,7 +299,7 @@ export default function Sidebar() {
     }
     // Event Scenarios - admin only
     if (item.href === "/events/scenarios") {
-      return isSuperAdmin(email);
+      return await isSuperAdmin(email);
     }
     // RBAC management - only for thejaayveeworldofficial@gmail.com
     if (item.href === "/rbac") {
@@ -247,11 +307,11 @@ export default function Sidebar() {
     }
     // Users page - admin only
     if (item.href === "/users") {
-      return isSuperAdmin(email);
+      return await isSuperAdmin(email);
     }
     // Students page - admin only
     if (item.href === "/students") {
-      return isSuperAdmin(email);
+      return await isSuperAdmin(email);
     }
     // Check RBAC permissions first if loaded
     const tabKey = routeToTabKey[item.href as keyof typeof routeToTabKey];
@@ -345,7 +405,7 @@ export default function Sidebar() {
               {sidebarData.groups
                 .filter(group => group.items.length > 0)
                 .map((group) => {
-                  const visibleItems = group.items.filter(item => canAccessItem(item));
+                  const visibleItems = group.items.filter(item => canAccessItemSync(item));
                   if (visibleItems.length === 0) return null;
 
                   const isExpanded = expandedGroups.has(group.id);
@@ -450,11 +510,28 @@ export default function Sidebar() {
           {/* Logout */}
           <button 
             onClick={handleLogout}
-            className="sidebar-item w-full text-left hover:bg-red-50 hover:text-red-600"
+            disabled={todayDeadlinesCount > 0}
+            className={`sidebar-item w-full text-left ${
+              todayDeadlinesCount > 0 
+                ? 'opacity-50 cursor-not-allowed bg-red-50 text-red-600' 
+                : 'hover:bg-red-50 hover:text-red-600'
+            }`}
+            title={todayDeadlinesCount > 0 ? `You have ${todayDeadlinesCount} task${todayDeadlinesCount > 1 ? 's' : ''} with deadline${todayDeadlinesCount > 1 ? 's' : ''} today. Please complete them before logging out.` : 'Sign Out'}
           >
             <LogOut size={20} />
             <span className="font-medium">Logout</span>
+            {todayDeadlinesCount > 0 && (
+              <span className="ml-2 text-xs bg-red-600 text-white px-1.5 py-0.5 rounded-full">
+                {todayDeadlinesCount}
+              </span>
+            )}
           </button>
+          {showLogoutWarning && todayDeadlinesCount > 0 && (
+            <div className="px-3 py-2 bg-red-600 text-white text-sm rounded-lg flex items-center gap-2 mt-2">
+              <AlertCircle className="h-4 w-4" />
+              <span>Complete {todayDeadlinesCount} task{todayDeadlinesCount > 1 ? 's' : ''} with deadline{todayDeadlinesCount > 1 ? 's' : ''} today first</span>
+            </div>
+          )}
         </div>
       </div>
     </>

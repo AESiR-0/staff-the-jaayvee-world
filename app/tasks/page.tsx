@@ -15,7 +15,8 @@ interface Task {
   assignedToName: string | null;
   assignedToEmail: string | null;
   assignedAt: string | null;
-  deadline: string | null;
+  submissionDeadline: string | null; // Submission deadline for assignee
+  deadline: string | null; // Presentation deadline for creator
   createdBy: string;
   createdByName: string | null;
   createdByEmail: string | null;
@@ -60,12 +61,19 @@ export default function TasksPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isAdmin, setIsAdmin] = useState(false);
   
+  // Task remarks state
+  const [taskRemarks, setTaskRemarks] = useState<TaskRemark[]>([]);
+  const [newRemark, setNewRemark] = useState('');
+  const [addingRemark, setAddingRemark] = useState(false);
+  const [loadingRemarks, setLoadingRemarks] = useState(false);
+  
   // Form state
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     assignedTo: '',
-    deadline: '',
+    submissionDeadline: '',
+    deadline: '', // presentation deadline
   });
 
   const session = getTeamSession();
@@ -88,7 +96,7 @@ export default function TasksPage() {
       // Check if user is admin first (admins can always create tasks)
       const session = getTeamSession();
       const userEmail = session?.email;
-      const isAdmin = isSuperAdmin(userEmail);
+      const isAdmin = await isSuperAdmin(userEmail);
       
       if (isAdmin) {
         setCanCreate(true);
@@ -226,7 +234,7 @@ export default function TasksPage() {
       if (result.success) {
         await fetchTasks();
         setShowCreateModal(false);
-        setFormData({ title: '', description: '', assignedTo: '', deadline: '' });
+        setFormData({ title: '', description: '', assignedTo: '', submissionDeadline: '', deadline: '' });
       }
     } catch (err: any) {
       console.error('Error creating task:', err);
@@ -410,7 +418,7 @@ export default function TasksPage() {
 
       await fetchTasks();
       setEditingTask(null);
-      setFormData({ title: '', description: '', assignedTo: '', deadline: '' });
+      setFormData({ title: '', description: '', assignedTo: '', submissionDeadline: '', deadline: '' });
     } catch (err: any) {
       console.error('Error updating task:', err);
       setError(err.message || 'Failed to update task');
@@ -490,7 +498,7 @@ export default function TasksPage() {
     setViewingTask(null);
     setTaskRemarks([]);
     setNewRemark('');
-    setFormData({ title: '', description: '', assignedTo: '', deadline: '' });
+    setFormData({ title: '', description: '', assignedTo: '', submissionDeadline: '', deadline: '' });
   };
 
   // Filter tasks by search query and assignee (admin only)
@@ -725,6 +733,7 @@ export default function TasksPage() {
                 getTimeTaken={getTimeTaken}
                 isOverdue={isOverdue}
                 draggedTask={draggedTask}
+                currentUserId={currentUserId}
               />
             ))}
             {tasksByStatus.not_started.length === 0 && (
@@ -760,6 +769,7 @@ export default function TasksPage() {
                 getTimeTaken={getTimeTaken}
                 isOverdue={isOverdue}
                 draggedTask={draggedTask}
+                currentUserId={currentUserId}
               />
             ))}
             {tasksByStatus.in_progress.length === 0 && (
@@ -795,6 +805,7 @@ export default function TasksPage() {
                 getTimeTaken={getTimeTaken}
                 isOverdue={isOverdue}
                 draggedTask={draggedTask}
+                currentUserId={currentUserId}
               />
             ))}
             {tasksByStatus.completed.length === 0 && (
@@ -870,10 +881,30 @@ export default function TasksPage() {
                 )}
               </div>
 
-              {viewingTask.deadline && (
+              {/* Show submission deadline to assignee */}
+              {viewingTask.submissionDeadline && viewingTask.assignedTo === currentUserId && (
                 <div>
                   <label className="block text-sm font-medium text-primary-muted mb-1">
-                    Deadline
+                    Submission Deadline
+                  </label>
+                  <p className={`text-primary-fg ${
+                    new Date(viewingTask.submissionDeadline) < new Date() && viewingTask.status !== 'completed' 
+                      ? 'text-red-500 font-medium' 
+                      : ''
+                  }`}>
+                    {format(new Date(viewingTask.submissionDeadline), "MMM dd, yyyy 'at' HH:mm")}
+                    {new Date(viewingTask.submissionDeadline) < new Date() && viewingTask.status !== 'completed' && (
+                      <span className="ml-2 text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Overdue</span>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {/* Show presentation deadline only to creator */}
+              {viewingTask.deadline && viewingTask.createdBy === currentUserId && (
+                <div>
+                  <label className="block text-sm font-medium text-primary-muted mb-1">
+                    Presentation Deadline
                   </label>
                   <p className={`text-primary-fg ${
                     new Date(viewingTask.deadline) < new Date() && viewingTask.status !== 'completed' 
@@ -1101,7 +1132,20 @@ export default function TasksPage() {
 
               <div>
                 <label className="block text-sm font-medium text-primary-fg mb-2">
-                  Deadline
+                  Submission Deadline (for assignee)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={formData.submissionDeadline}
+                  onChange={(e) => setFormData({ ...formData, submissionDeadline: e.target.value })}
+                  className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg"
+                />
+                <p className="text-xs text-primary-muted mt-1">Optional: When the assignee should submit the work</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Presentation Deadline (for creator - visible only to you)
                 </label>
                 <input
                   type="datetime-local"
@@ -1109,7 +1153,7 @@ export default function TasksPage() {
                   onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
                   className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg"
                 />
-                <p className="text-xs text-primary-muted mt-1">Optional: Set a deadline for this task</p>
+                <p className="text-xs text-primary-muted mt-1">Optional: When you need to present/review the work (only visible to creator)</p>
               </div>
 
               <div className="flex gap-2 pt-2">
@@ -1155,6 +1199,7 @@ function TaskCard({
   getTimeTaken,
   isOverdue,
   draggedTask,
+  currentUserId,
 }: {
   task: Task;
   onStatusChange: (taskId: string, status: 'not_started' | 'in_progress' | 'completed') => void;
@@ -1166,6 +1211,7 @@ function TaskCard({
   getTimeTaken: (task: Task) => string | null;
   isOverdue: (task: Task) => boolean;
   draggedTask?: Task | null;
+  currentUserId?: string;
 }) {
   const timeTaken = getTimeTaken(task);
   const overdue = isOverdue(task);
@@ -1272,11 +1318,22 @@ function TaskCard({
           </div>
         )}
         
-        {task.deadline && (
+        {/* Show submission deadline to assignee */}
+        {task.submissionDeadline && task.assignedTo === currentUserId && (
+          <div className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            <span className={new Date(task.submissionDeadline) < new Date() && task.status !== 'completed' ? 'text-red-500 font-medium' : ''}>
+              Submission: {format(new Date(task.submissionDeadline), "MMM dd, yyyy HH:mm")}
+            </span>
+          </div>
+        )}
+        
+        {/* Show presentation deadline only to creator */}
+        {task.deadline && task.createdBy === currentUserId && (
           <div className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
             <span className={new Date(task.deadline) < new Date() && task.status !== 'completed' ? 'text-red-500 font-medium' : ''}>
-              Deadline: {format(new Date(task.deadline), "MMM dd, yyyy HH:mm")}
+              Presentation: {format(new Date(task.deadline), "MMM dd, yyyy HH:mm")}
             </span>
           </div>
         )}

@@ -72,13 +72,61 @@ let isLoggingOut = false;
 let logoutPromise: Promise<void> | null = null;
 
 /**
+ * Check if user has tasks with deadlines today (same day)
+ */
+async function hasTodayDeadlines(): Promise<{ hasDeadlines: boolean; count: number; tasks: any[] }> {
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      return { hasDeadlines: false, count: 0, tasks: [] };
+    }
+
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+    const response = await fetch(`${API_BASE_URL}/api/team/tasks/today-deadlines`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        return {
+          hasDeadlines: result.data.hasTodayDeadlines,
+          count: result.data.count,
+          tasks: result.data.tasks || [],
+        };
+      }
+    }
+    return { hasDeadlines: false, count: 0, tasks: [] };
+  } catch (error) {
+    console.error('Error checking today deadlines:', error);
+    return { hasDeadlines: false, count: 0, tasks: [] };
+  }
+}
+
+/**
  * Logout user by clearing storage and redirecting
  * Uses a singleton pattern to prevent multiple simultaneous logouts
+ * Now checks for same-day deadlines before allowing logout
  */
-async function logoutUser(): Promise<void> {
+export async function logoutUser(force: boolean = false): Promise<{ allowed: boolean; reason?: string; tasks?: any[] }> {
+  // Check for same-day deadlines unless forced
+  if (!force) {
+    const deadlineCheck = await hasTodayDeadlines();
+    if (deadlineCheck.hasDeadlines) {
+      return {
+        allowed: false,
+        reason: `You have ${deadlineCheck.count} task${deadlineCheck.count > 1 ? 's' : ''} with deadline${deadlineCheck.count > 1 ? 's' : ''} today. Please complete them before logging out.`,
+        tasks: deadlineCheck.tasks,
+      };
+    }
+  }
+
   // If already logging out, return the existing promise
   if (isLoggingOut && logoutPromise) {
-    return logoutPromise;
+    await logoutPromise;
+    return { allowed: true };
   }
 
   isLoggingOut = true;
@@ -126,7 +174,8 @@ async function logoutUser(): Promise<void> {
     }
   })();
 
-  return logoutPromise;
+  await logoutPromise;
+  return { allowed: true };
 }
 
 /**
@@ -225,9 +274,16 @@ export async function authenticatedFetch(url: string, options?: RequestInit): Pr
     
     // Check for 401 Unauthorized response (token expired on server)
     if (response.status === 401) {
-      console.warn('Received 401 Unauthorized, token expired on server');
-      // Don't await logout - let it happen in background to not block error handling
-      logoutUser().catch(() => {});
+      console.warn('Received 401 Unauthorized, checking for today deadlines before logout');
+      // Check for today's deadlines before auto-logout
+      const deadlineCheck = await hasTodayDeadlines();
+      if (deadlineCheck.hasDeadlines) {
+        // Don't auto-logout if there are same-day deadlines
+        console.warn(`401 received but user has ${deadlineCheck.count} task(s) with deadline(s) today. Preventing auto-logout.`);
+        throw new Error(`TOKEN_EXPIRED_WITH_TODAY_DEADLINES:${deadlineCheck.count}`);
+      }
+      // No same-day deadlines, proceed with logout
+      logoutUser(true).catch(() => {});
       throw new Error('Token expired');
     }
     

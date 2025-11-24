@@ -118,7 +118,7 @@ export default function DownlinePage() {
       const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
-      const admin = isSuperAdmin(userEmail);
+      const admin = await isSuperAdmin(userEmail);
       setIsAdmin(admin);
 
       // If admin, fetch all team list first, then downline

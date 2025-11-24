@@ -249,6 +249,7 @@ export default function FinancialSettings({
                   value={financialsForm.tjwPointsPercentage ?? ''}
                   onChange={(e) => setFinancialsForm({ ...financialsForm, tjwPointsPercentage: parseFloat(e.target.value) || 1 })}
                   placeholder="1"
+                  required
                   className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
                 />
                 {(!financialsForm.tjwPointsPercentage || financialsForm.tjwPointsPercentage === 0) && (
@@ -268,6 +269,7 @@ export default function FinancialSettings({
                   value={financialsForm.tjwPointsMaxAmount ?? ''}
                   onChange={(e) => setFinancialsForm({ ...financialsForm, tjwPointsMaxAmount: parseFloat(e.target.value) || 40 })}
                   placeholder="40"
+                  required
                   className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg"
                 />
                 {(!financialsForm.tjwPointsMaxAmount || financialsForm.tjwPointsMaxAmount === 0) && (

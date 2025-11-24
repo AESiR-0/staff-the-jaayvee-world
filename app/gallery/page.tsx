@@ -70,8 +70,9 @@ export default function GalleryPage() {
       const session = getTeamSession();
       const userEmail = session?.email;
       const { isSuperAdmin } = require('@/lib/rbac');
+      const adminCheck = await isSuperAdmin(userEmail);
       
-      if (isSuperAdmin(userEmail)) {
+      if (adminCheck) {
         setCanManage(true);
         return;
       }

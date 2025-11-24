@@ -752,7 +752,7 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-xl font-semibold text-primary-fg mb-1">Financial Settings</h2>
-                  <p className="text-sm text-primary-muted">Configure your event's financial parameters</p>
+                  <p className="text-sm text-primary-muted">Configure your event&apos;s financial parameters</p>
                 </div>
                 <button
                   onClick={handleSaveFinancials}
