@@ -435,6 +435,7 @@ export default function TasksPage() {
       title: task.title,
       description: task.description || '',
       assignedTo: task.assignedTo || '',
+      submissionDeadline: task.submissionDeadline ? convertFromISO(task.submissionDeadline) : '',
       deadline: task.deadline ? convertFromISO(task.deadline) : '',
     });
   };

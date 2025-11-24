@@ -41,10 +41,12 @@ export default function ExpenseModal({
 
   useEffect(() => {
     if (expense) {
+      // Convert 'calculated' to 'fixed' since calculated expenses can't be edited
+      const expenseType = expense.expenseType === 'calculated' ? 'fixed' : expense.expenseType;
       setFormData({
         name: expense.name,
         category: expense.category,
-        expenseType: expense.expenseType,
+        expenseType: expenseType as 'fixed' | 'per_person' | 'percentage',
         amount: expense.amount,
         perPersonAmount: expense.perPersonAmount,
         numberOfInvitees: expense.numberOfInvitees,
@@ -69,13 +71,12 @@ export default function ExpenseModal({
 
   const handleTemplateSelect = (template: ExpenseTemplate) => {
     setFormData({
+      templateId: template.id,
       name: template.name,
       category: template.category,
-      expenseType: template.expenseType,
-      amount: template.amount,
-      perPersonAmount: template.perPersonAmount,
-      percentage: template.percentage,
-      isOptional: template.isOptional,
+      expenseType: 'fixed', // Templates are always fixed type
+      amount: template.defaultAmount,
+      isOptional: false,
     });
   };
 
@@ -121,12 +122,8 @@ export default function ExpenseModal({
                   >
                     <div className="font-medium text-primary-fg text-sm">{template.name}</div>
                     <div className="text-xs text-primary-muted mt-1">
-                      {template.expenseType === 'fixed' && template.amount
-                        ? `₹${template.amount.toLocaleString('en-IN')}`
-                        : template.expenseType === 'per_person' && template.perPersonAmount
-                        ? `₹${template.perPersonAmount.toLocaleString('en-IN')}/person`
-                        : template.percentage
-                        ? `${template.percentage}%`
+                      {template.defaultAmount
+                        ? `₹${template.defaultAmount.toLocaleString('en-IN')}`
                         : 'Variable'}
                     </div>
                   </button>
