@@ -259,7 +259,7 @@ export default function Sidebar() {
   // Check if user can access an item (cached version for synchronous use)
   const canAccessItemSync = (item: SidebarItem): boolean => {
     // Use cached accessible items set
-    return accessibleItems.has(item.href || item.url || '');
+    return accessibleItems.has(item.href || '');
   };
 
   // Async function to check access (used for initial load)
