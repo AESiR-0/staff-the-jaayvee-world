@@ -70,7 +70,7 @@ export function TemplateTaskEditor({ templateId, onClose, onUpdate }: TemplateTa
 
   const fetchRBACData = async () => {
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/rbac?type=all`);
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=all`);
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
