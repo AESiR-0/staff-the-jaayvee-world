@@ -430,13 +430,8 @@ export default function Sidebar() {
       return;
     }
     
-    // Logout allowed, proceed
-    // Clear authentication data
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("userSession");
-    
-    // Redirect to login
-    router.push("/login");
+    // Logout allowed - logoutUser will handle the redirect to /login
+    // No need to manually redirect as logoutUser already does it
   };
 
   // State to track which items are accessible
@@ -617,6 +612,18 @@ export default function Sidebar() {
             </div>
           ) : sidebarData ? (
             <div className="space-y-1">
+              {/* Profile Link - Always visible */}
+              <div className="mb-2">
+                <Link
+                  href="/profile"
+                  className={`sidebar-item ${isItemActive('/profile') ? "active" : ""}`}
+                  onClick={() => setIsOpen(false)}
+                >
+                  <UserCircle size={20} />
+                  <span className="font-medium">Profile</span>
+                </Link>
+              </div>
+
               {/* Hardcoded Admin Items */}
               {(() => {
                 const adminItems: SidebarItem[] = [];

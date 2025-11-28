@@ -160,13 +160,26 @@ export async function logoutUser(force: boolean = false): Promise<{ allowed: boo
       // Clear local storage
       localStorage.removeItem('authToken');
       localStorage.removeItem('userSession');
+      localStorage.removeItem('tjw_auth_token'); // Clear any alternate token keys
       
-      // Delay redirect slightly to allow error handling in calling code
-      // This prevents immediate cancellation of pending requests
+      // Clear any cached data
+      try {
+        localStorage.removeItem('sidebarCache');
+        localStorage.removeItem('sidebarCacheTimestamp');
+        localStorage.removeItem('accessibleItemsCache');
+        localStorage.removeItem('accessibleItemsCacheTimestamp');
+        localStorage.removeItem('isUserAdminCache');
+        localStorage.removeItem('isUserAdminCacheTimestamp');
+      } catch (e) {
+        // Ignore errors clearing cache
+      }
+      
+      // Use window.location.replace to prevent back button issues
+      // Delay slightly to allow error handling in calling code
       if (typeof window !== 'undefined') {
         setTimeout(() => {
-          window.location.href = '/';
-        }, 100);
+          window.location.replace('/login');
+        }, 150);
       }
       
       isLoggingOut = false;

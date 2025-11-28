@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter, ChevronDown, ChevronUp, FileText, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter, ChevronDown, ChevronUp, FileText, Download, Loader2, Calendar, Send, Eye, EyeOff } from "lucide-react";
 import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 import { utcToDateTimeLocal } from "@/lib/utils/timezone";
 
@@ -65,6 +65,8 @@ interface Event {
   slug: string | null;
   published: boolean;
   status: string;
+  scheduledPublishAt?: string | null;
+  publishedAt?: string | null;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -100,7 +102,7 @@ export default function ManageEventsPage() {
     state: "",
     slug: "",
     published: false,
-    status: "upcoming",
+    status: "draft",
     ticketTypes: [] as Array<{ name: string; price: number; quantity: number; description?: string }>,
     subscriberLimitsEnabled: false,
     subscriberLimits: {
@@ -137,12 +139,17 @@ export default function ManageEventsPage() {
   const [searchQuery, setSearchQuery] = useState<string>(""); // Search query
   const [filterStatus, setFilterStatus] = useState<string>("all"); // Filter by status
   const [filterPublished, setFilterPublished] = useState<string>("all"); // Filter by published status
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleEventId, setScheduleEventId] = useState<string | null>(null);
+  const [scheduledPublishTime, setScheduledPublishTime] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   // Use relative path for same-origin requests, or API_BASE_URL if set
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+  // Default to talaash API if not set (ticket type APIs are in jaayvee-world/talaash)
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
 
   // Cleanup preview URLs on unmount
   useEffect(() => {
@@ -331,9 +338,50 @@ export default function ManageEventsPage() {
         throw new Error(data.error || "Failed to create event");
       }
 
-      setSuccess("Event created successfully!");
-      
       const createdEventId = data.data?.id;
+      
+      // Create ticket types if provided
+      if (createForm.ticketTypes && createForm.ticketTypes.length > 0 && createdEventId) {
+        try {
+          setUploadProgress('Creating ticket types...');
+          console.log('🎫 Creating ticket types for event:', createdEventId, createForm.ticketTypes);
+          
+          const ticketTypesData = createForm.ticketTypes.map(tt => ({
+            name: tt.name,
+            // Round price to 2 decimal places to avoid floating point precision issues
+            price: Math.round((tt.price || 0) * 100) / 100,
+            capacity: tt.quantity,
+            admissionCount: 1,
+            attributes: tt.description ? { description: tt.description } : null
+          }));
+          
+          const ticketsResponse = await authenticatedFetch(`${API_BASE_URL}/api/events/${createdEventId}/tickets`, {
+            method: "POST",
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              ticketTypes: ticketTypesData,
+              generateTickets: false // Don't generate individual tickets, just create ticket types
+            }),
+          });
+          
+          const ticketsData = await ticketsResponse.json();
+          
+          if (!ticketsResponse.ok || !ticketsData.success) {
+            console.error('Failed to create ticket types:', ticketsData);
+            setError(`Event created but failed to add ticket types: ${ticketsData.error || 'Unknown error'}`);
+          } else {
+            console.log('✅ Ticket types created successfully:', ticketsData);
+            setSuccess(`Event created successfully with ${createForm.ticketTypes.length} ticket type(s)!`);
+          }
+        } catch (ticketErr: any) {
+          console.error('Error creating ticket types:', ticketErr);
+          setError(`Event created but failed to add ticket types: ${ticketErr.message || 'Unknown error'}`);
+        }
+      } else {
+        setSuccess("Event created successfully!");
+      }
       
       // Apply template if selected
       if (createForm.selectedTemplateId && createdEventId) {
@@ -506,121 +554,101 @@ export default function ManageEventsPage() {
         throw new Error(data.error || "Failed to update event");
       }
 
-      // Update ticket types - handle create, update, and delete
+      // Update ticket types - consolidated into single batch operation
+      // NOTE: Ticket type APIs are ONLY called here on Save button click, not on every action
+      // All ticket type modifications (add/remove/edit) only update local state until Save is clicked
       setUpdatingTicketTypes(id);
       setUploadProgress('Updating ticket types...');
       try {
-        // Find ticket types that were deleted (in original but not in current)
+        // Prepare all ticket type operations in a single batch
+        // Strategy: Delete removed ones, then send all current ticket types (updated + new) to tickets endpoint
+        // This avoids CORS issues with individual PATCH requests
+        
+        // 1. Delete removed ticket types
         const deletedTicketTypes = originalTicketTypes.filter(
           original => !editTicketTypes.some(current => current.id === original.id)
         );
 
-        // Delete removed ticket types
-        for (const deletedType of deletedTicketTypes) {
+        const deletePromises = deletedTicketTypes.map(async (deletedType) => {
           try {
-            const deleteRes = await authenticatedFetch(`${API_BASE_URL}/api/ticket-types/${deletedType.id}`, {
+            const deleteUrl = API_BASE_URL ? `${API_BASE_URL}/api/ticket-types/${deletedType.id}` : `/api/ticket-types/${deletedType.id}`;
+            const deleteRes = await authenticatedFetch(deleteUrl, {
               method: "DELETE",
             });
             if (!deleteRes.ok) {
               console.warn(`Failed to delete ticket type ${deletedType.id}`);
+              return { success: false, name: deletedType.name, error: `HTTP ${deleteRes.status}` };
             }
-          } catch (deleteErr) {
+            return { success: true, name: deletedType.name };
+          } catch (deleteErr: any) {
             console.error(`Error deleting ticket type ${deletedType.id}:`, deleteErr);
+            return { success: false, name: deletedType.name, error: deleteErr.message || 'Delete failed' };
           }
-        }
+        });
 
-        // Separate new and existing ticket types
-        const newTicketTypes = editTicketTypes.filter(tt => !tt.id);
+        // Wait for all deletions to complete
+        const deleteResults = await Promise.allSettled(deletePromises);
+        const deleteErrors: string[] = [];
+        deleteResults.forEach((result) => {
+          if (result.status === 'fulfilled' && !result.value.success) {
+            deleteErrors.push(`${result.value.name}: ${result.value.error}`);
+          } else if (result.status === 'rejected') {
+            deleteErrors.push(`Delete failed: ${result.reason?.message || 'Unknown error'}`);
+          }
+        });
+
+        // 2. Prepare all current ticket types (both existing and new) for batch update
+        // For existing ticket types, we'll delete and recreate them to avoid PATCH CORS issues
+        // For new ticket types, we'll create them
+        const allTicketTypesData = editTicketTypes.map(tt => ({
+          name: tt.name,
+          // Round price to 2 decimal places to avoid floating point precision issues
+          price: Math.round((tt.price || 0) * 100) / 100,
+          capacity: tt.quantity,
+          admissionCount: 1,
+          attributes: tt.description ? { description: tt.description } : null
+        }));
+
+        // 3. Delete all existing ticket types that need updating (to recreate them)
         const existingTicketTypes = editTicketTypes.filter(tt => tt.id);
-
-        // Check token before starting batch operations
-        const token = getAuthToken();
-        if (!token) {
-          setError('Authentication token not found. Please log in again.');
-          setTimeout(() => {
-            window.location.href = '/';
-          }, 2000);
-          return;
-        }
-
-        // Check if token is expired before starting updates
-        const tokenParts = token.split('.');
-        if (tokenParts.length === 3) {
+        const deleteExistingPromises = existingTicketTypes.map(async (ticketType) => {
           try {
-            const payload = JSON.parse(atob(tokenParts[1]));
-            if (payload.exp && payload.exp * 1000 < Date.now()) {
-              setError('Your session has expired. Please log in again.');
-              setTimeout(() => {
-                window.location.href = '/';
-              }, 2000);
-              return;
+            const deleteUrl = API_BASE_URL ? `${API_BASE_URL}/api/ticket-types/${ticketType.id}` : `/api/ticket-types/${ticketType.id}`;
+            const deleteRes = await authenticatedFetch(deleteUrl, {
+              method: "DELETE",
+            });
+            if (!deleteRes.ok) {
+              console.warn(`Failed to delete existing ticket type ${ticketType.id} for update`);
+              return { success: false, name: ticketType.name, error: `HTTP ${deleteRes.status}` };
             }
-          } catch (e) {
-            // Token parsing failed, continue anyway (will be caught by API)
+            return { success: true, name: ticketType.name };
+          } catch (deleteErr: any) {
+            console.error(`Error deleting existing ticket type ${ticketType.id}:`, deleteErr);
+            return { success: false, name: ticketType.name, error: deleteErr.message || 'Delete failed' };
           }
-        }
+        });
 
-        const updateErrors: string[] = [];
-        const createErrors: string[] = [];
+        // Wait for existing ticket type deletions
+        const deleteExistingResults = await Promise.allSettled(deleteExistingPromises);
+        const deleteExistingErrors: string[] = [];
+        deleteExistingResults.forEach((result) => {
+          if (result.status === 'fulfilled' && !result.value.success) {
+            deleteExistingErrors.push(`${result.value.name}: ${result.value.error}`);
+          } else if (result.status === 'rejected') {
+            deleteExistingErrors.push(`Delete failed: ${result.reason?.message || 'Unknown error'}`);
+          }
+        });
 
-        // Update existing ticket types (PATCH) - use Promise.allSettled to handle all updates
-        if (existingTicketTypes.length > 0) {
-          const updatePromises = existingTicketTypes.map(async (ticketType) => {
-            try {
-              const patchRes = await authenticatedFetch(`${API_BASE_URL}/api/ticket-types/${ticketType.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  name: ticketType.name,
-                  price: ticketType.price,
-                  capacity: ticketType.quantity,
-                  admissionCount: 1,
-                  attributes: ticketType.description ? { description: ticketType.description } : null
-                }),
-              });
-
-              if (!patchRes.ok) {
-                const errorData = await patchRes.json().catch(() => ({}));
-                throw new Error(errorData.error || `HTTP ${patchRes.status}`);
-              }
-
-              return { success: true, ticketType: ticketType.name };
-            } catch (patchErr: any) {
-              console.error(`Error updating ticket type ${ticketType.id}:`, patchErr);
-              return { 
-                success: false, 
-                ticketType: ticketType.name, 
-                error: patchErr.message || 'Unknown error' 
-              };
-            }
-          });
-
-          const updateResults = await Promise.allSettled(updatePromises);
-          updateResults.forEach((result, index) => {
-            if (result.status === 'fulfilled' && !result.value.success) {
-              updateErrors.push(`${result.value.ticketType}: ${result.value.error}`);
-            } else if (result.status === 'rejected') {
-              updateErrors.push(`${existingTicketTypes[index].name}: ${result.reason?.message || 'Update failed'}`);
-            }
-          });
-        }
-
-        // Create new ticket types (POST)
-        if (newTicketTypes.length > 0) {
+        // 4. Create all ticket types in one batch (both updated and new)
+        let createError: string | null = null;
+        if (allTicketTypesData.length > 0) {
           try {
-            const newTicketTypesData = newTicketTypes.map(tt => ({
-              name: tt.name,
-              price: tt.price,
-              capacity: tt.quantity,
-              admissionCount: 1,
-              attributes: tt.description ? { description: tt.description } : null
-            }));
-
-            const createRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${id}/tickets`, {
+            const createUrl = API_BASE_URL ? `${API_BASE_URL}/api/events/${id}/tickets` : `/api/events/${id}/tickets`;
+            const createRes = await authenticatedFetch(createUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                ticketTypes: newTicketTypesData,
+                ticketTypes: allTicketTypesData,
                 generateTickets: false
               }),
             });
@@ -628,31 +656,56 @@ export default function ManageEventsPage() {
             if (!createRes.ok) {
               const errorData = await createRes.json().catch(() => ({}));
               const errorMsg = errorData.error || errorData.details || `HTTP ${createRes.status}`;
-              createErrors.push(`Failed to create new ticket types: ${errorMsg}`);
+              createError = `Failed to create ticket types: ${errorMsg}`;
               
               // If partial success, show warnings
               if (errorData.warnings && Array.isArray(errorData.warnings)) {
-                createErrors.push(...errorData.warnings);
+                createError += `\n${errorData.warnings.join('\n')}`;
               }
+            } else {
+              console.log(`✅ Successfully created/updated ${allTicketTypesData.length} ticket type(s)`);
             }
           } catch (createErr: any) {
-            console.error("Error creating new ticket types:", createErr);
-            createErrors.push(`Failed to create new ticket types: ${createErr.message || 'Unknown error'}`);
+            console.error("Error creating ticket types:", createErr);
+            createError = `Failed to create ticket types: ${createErr.message || 'Unknown error'}`;
           }
         }
 
-        // Display errors if any occurred
-        const allErrors = [...updateErrors, ...createErrors];
+        // 5. Collect all errors
+        const allErrors = [...deleteErrors, ...deleteExistingErrors];
+        if (createError) {
+          allErrors.push(createError);
+        }
+
+        // 6. Display errors if any occurred
         if (allErrors.length > 0) {
-          const errorMessage = `Some ticket types failed to update:\n${allErrors.join('\n')}`;
-          console.warn(errorMessage);
-          // Show error to user but don't fail the entire update
-          setError(errorMessage);
-          setTimeout(() => setError(null), 10000);
+          // Check if errors are network/CORS related (might be false positives if API actually succeeded)
+          const networkErrors = allErrors.filter(err => 
+            err.includes('Failed to fetch') || 
+            err.includes('Network error') || 
+            err.includes('CORS')
+          );
+          
+          // If all errors are network-related, they might be false positives
+          if (networkErrors.length === allErrors.length && networkErrors.length > 0) {
+            console.warn('⚠️ All ticket type update errors are network-related. The updates may have actually succeeded. Please verify in the event details.');
+            const errorMessage = `Network errors occurred during ticket type updates, but they may have succeeded:\n${allErrors.join('\n')}\n\nPlease check the event details to verify if ticket types were actually updated.`;
+            setError(errorMessage);
+            setTimeout(() => setError(null), 15000);
+          } else {
+            // Real errors (not just network issues)
+            const errorMessage = `Some ticket types failed to update:\n${allErrors.join('\n')}`;
+            console.warn(errorMessage);
+            setError(errorMessage);
+            setTimeout(() => setError(null), 10000);
+          }
+        } else {
+          console.log('✅ All ticket types updated successfully');
         }
       } catch (ticketErr) {
         console.error("Error updating ticket types:", ticketErr);
-        // Don't fail the whole update if ticket types fail
+        setError(`Failed to update ticket types: ${ticketErr instanceof Error ? ticketErr.message : 'Unknown error'}`);
+        setTimeout(() => setError(null), 10000);
       }
 
       setSuccess("Event updated successfully!");
@@ -716,6 +769,76 @@ export default function ManageEventsPage() {
     }
   };
 
+  const handlePublish = async (eventId: string, scheduledPublishAt?: string) => {
+    setPublishingId(eventId);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/publish`, {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scheduledPublishAt: scheduledPublishAt || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to publish event");
+      }
+
+      setSuccess(scheduledPublishAt ? `Event scheduled to publish at ${new Date(scheduledPublishAt).toLocaleString()}` : "Event published successfully!");
+      fetchEvents();
+      setTimeout(() => setSuccess(null), 5000);
+      setShowScheduleModal(false);
+      setScheduleEventId(null);
+      setScheduledPublishTime("");
+    } catch (err: any) {
+      console.error("Error publishing event:", err);
+      setError(err.message || "Failed to publish event");
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  const handleUnpublish = async (eventId: string) => {
+    if (!confirm("Are you sure you want to unpublish this event? It will no longer be visible to users.")) return;
+    setPublishingId(eventId);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/publish`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Failed to unpublish event");
+      }
+
+      setSuccess("Event unpublished and set to draft");
+      fetchEvents();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error("Error unpublishing event:", err);
+      setError(err.message || "Failed to unpublish event");
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  const openScheduleModal = (eventId: string) => {
+    setScheduleEventId(eventId);
+    setScheduledPublishTime("");
+    setShowScheduleModal(true);
+  };
+
   const startEdit = async (event: Event) => {
     setEditingId(event.id);
     setOriginalBanner(event.banner || null); // Store original banner URL
@@ -769,6 +892,7 @@ export default function ManageEventsPage() {
       const ticketsRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${event.id}/tickets`);
       if (ticketsRes.ok) {
         const ticketsData = await ticketsRes.json();
+        console.log('🎫 Fetched ticket types for event:', event.id, ticketsData);
         if (ticketsData.success && ticketsData.data?.ticketTypes) {
           const ticketTypes = ticketsData.data.ticketTypes.map((tt: any) => ({
             id: tt.id,
@@ -777,14 +901,17 @@ export default function ManageEventsPage() {
             quantity: tt.capacity,
             description: tt.attributes?.description || ""
           }));
+          console.log('✅ Parsed ticket types:', ticketTypes);
           setEditTicketTypes(ticketTypes);
           // Store original ticket types for comparison
           setOriginalTicketTypes(ticketTypes.map((tt: any) => ({ ...tt })));
         } else {
+          console.warn('⚠️ No ticket types found in response:', ticketsData);
           setEditTicketTypes([]);
           setOriginalTicketTypes([]);
         }
       } else {
+        console.error('❌ Failed to fetch ticket types, status:', ticketsRes.status);
         setEditTicketTypes([]);
       }
     } catch (err) {
@@ -792,6 +919,10 @@ export default function ManageEventsPage() {
       setEditTicketTypes([]);
     } finally {
       setLoadingTicketTypes(false);
+      // Log final state
+      setTimeout(() => {
+        console.log('📋 Final editTicketTypes state:', editTicketTypes);
+      }, 100);
     }
 
     // Fetch existing share messages
@@ -1054,14 +1185,19 @@ export default function ManageEventsPage() {
           const price = parseFloat(data.price || '0') || 0;
           const quantity = parseInt(data.quantity || '0', 10) || 0;
           
+          // Only add if we have at least a name (price and quantity can be 0, but should be set)
+          // Round price to 2 decimal places to avoid floating point precision issues
+          const roundedPrice = isNaN(price) ? 0 : Math.round(price * 100) / 100;
           ticketTypes.push({
             name: data.name.trim(),
-            price,
-            quantity,
-            description: (data.description || '').trim()
+            price: roundedPrice,
+            quantity: isNaN(quantity) ? 0 : quantity,
+            description: (data.description || '').trim() || undefined
           });
         }
       });
+      
+      console.log(`📦 Parsed ${ticketTypes.length} ticket types from pattern matching`);
       
       // Fallback: If no ticket types found via pattern matching, try sequential approach up to 100
       // Don't break on gaps - continue checking all ticket types up to the limit
@@ -1080,11 +1216,13 @@ export default function ManageEventsPage() {
             const price = parseFloat(priceStr) || 0;
             const quantity = parseInt(quantityStr) || 0;
             
+            // Round price to 2 decimal places to avoid floating point precision issues
+            const roundedPrice = isNaN(price) ? 0 : Math.round(price * 100) / 100;
             ticketTypes.push({
               name: name.trim(),
-              price,
-              quantity,
-              description: description.trim() || ''
+              price: roundedPrice,
+              quantity: isNaN(quantity) ? 0 : quantity,
+              description: (description || '').trim() || undefined
             });
           } else {
             consecutiveEmpty++;
@@ -1117,7 +1255,19 @@ export default function ManageEventsPage() {
         }
       }
 
-      setCreateForm({
+      // Filter and validate ticket types - only require name, allow price and quantity to be 0
+      // This ensures ticket types are visible even if price/quantity need to be set manually
+      const validTicketTypes = ticketTypes.filter(tt => tt.name && tt.name.trim());
+      
+      console.log('📊 CSV Import - Parsed ticket types:', ticketTypes);
+      console.log('✅ CSV Import - Valid ticket types (after filtering):', validTicketTypes);
+      
+      if (validTicketTypes.length === 0 && ticketTypes.length > 0) {
+        console.warn('⚠️ All ticket types were filtered out! Original ticket types:', ticketTypes);
+      }
+      
+      setCreateForm(prevForm => ({
+        ...prevForm,
         title: title || '',
         description: description || '',
         startDate: formattedStartDate,
@@ -1129,7 +1279,7 @@ export default function ManageEventsPage() {
         slug: slug || '',
         published: published.toLowerCase() === 'true' || published === '1' || false,
         status: status || 'upcoming',
-        ticketTypes: ticketTypes.filter(tt => tt.name && tt.name.trim()),
+        ticketTypes: validTicketTypes, // Set ticket types explicitly
         subscriberLimitsEnabled: false,
         subscriberLimits: {
           premium: 0,
@@ -1138,11 +1288,29 @@ export default function ManageEventsPage() {
           student: 0,
         },
         selectedTemplateId: "",
-      });
+      }));
 
       const eventCount = lines.length - 1; // Subtract header row
-      setSuccess(`CSV imported successfully! Loaded first event with ${ticketTypes.length} ticket type(s). ${eventCount > 1 ? `(${eventCount} events found in CSV - only first event loaded)` : ''}`);
-      setTimeout(() => setSuccess(null), 5000);
+      const ticketCount = validTicketTypes.length;
+      
+      if (ticketCount > 0) {
+        setSuccess(`CSV imported successfully! Loaded first event with ${ticketCount} ticket type(s). ${eventCount > 1 ? `(${eventCount} events found in CSV - only first event loaded)` : ''}`);
+      } else {
+        setSuccess(`CSV imported successfully! Event data loaded, but no ticket types found. ${eventCount > 1 ? `(${eventCount} events found in CSV - only first event loaded)` : ''}`);
+        setError('No ticket types were found in the CSV. Please add ticket types manually or check your CSV format.');
+        setTimeout(() => setError(null), 5000);
+      }
+      
+      // Log the form state after setting it
+      setTimeout(() => {
+        console.log('📋 Create form state after CSV import - checking ticketTypes:', {
+          title,
+          ticketTypesCount: validTicketTypes.length,
+          ticketTypes: validTicketTypes
+        });
+      }, 100);
+      
+      setTimeout(() => setSuccess(null), 8000);
     } catch (err: any) {
       console.error('CSV parsing error:', err);
       setError(err.message || 'Failed to parse CSV file');
@@ -1530,11 +1698,37 @@ export default function ManageEventsPage() {
                               min="0"
                               step="0.01"
                               disabled={submitting}
-                              value={ticketType.price || ""}
+                              value={ticketType.price !== undefined && ticketType.price !== null ? ticketType.price : ""}
                               onChange={(e) => {
                                 const newTicketTypes = [...createForm.ticketTypes];
-                                newTicketTypes[index] = { ...ticketType, price: parseFloat(e.target.value) || 0 };
+                                const inputValue = e.target.value;
+                                // Handle empty input
+                                if (inputValue === "" || inputValue === null || inputValue === undefined) {
+                                  newTicketTypes[index] = { ...ticketType, price: 0 };
+                                } else {
+                                  // Parse as float, then round to 2 decimal places to avoid floating point precision issues
+                                  const parsedPrice = parseFloat(inputValue);
+                                  if (!isNaN(parsedPrice)) {
+                                    // Round to 2 decimal places to avoid floating point precision issues
+                                    const roundedPrice = Math.round(parsedPrice * 100) / 100;
+                                    newTicketTypes[index] = { ...ticketType, price: roundedPrice };
+                                  } else {
+                                    newTicketTypes[index] = { ...ticketType, price: 0 };
+                                  }
+                                }
                                 setCreateForm({ ...createForm, ticketTypes: newTicketTypes });
+                              }}
+                              onBlur={(e) => {
+                                // Ensure value is properly rounded on blur
+                                const newTicketTypes = [...createForm.ticketTypes];
+                                const currentPrice = newTicketTypes[index].price;
+                                if (currentPrice !== undefined && currentPrice !== null) {
+                                  const roundedPrice = Math.round(currentPrice * 100) / 100;
+                                  if (roundedPrice !== currentPrice) {
+                                    newTicketTypes[index] = { ...ticketType, price: roundedPrice };
+                                    setCreateForm({ ...createForm, ticketTypes: newTicketTypes });
+                                  }
+                                }
                               }}
                               className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
                             />
@@ -2112,14 +2306,14 @@ export default function ManageEventsPage() {
                                     </button>
                                   )}
                                 </div>
-                                {(loadingTicketTypes || updatingTicketTypes === event.id) ? (
+                                {(loadingTicketTypes && editingId === event.id) || updatingTicketTypes === event.id ? (
                                   <p className="text-sm text-primary-muted italic flex items-center gap-2">
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     {updatingTicketTypes === event.id ? 'Updating ticket types...' : 'Loading ticket types...'}
                                   </p>
-                                ) : editTicketTypes.length === 0 ? (
+                                ) : editingId === event.id && editTicketTypes.length === 0 ? (
                                   <p className="text-sm text-primary-muted italic">No ticket types added. Click &quot;Add Ticket Type&quot; to add one.</p>
-                                ) : (
+                                ) : editingId === event.id && editTicketTypes.length > 0 ? (
                                   <div className="space-y-4">
                                     {editTicketTypes.map((ticketType, index) => (
                                       <div key={index} className="border border-primary-border rounded-lg p-4 bg-primary-accent-light">
@@ -2164,11 +2358,37 @@ export default function ManageEventsPage() {
                                               required
                                               min="0"
                                               step="0.01"
-                                              value={ticketType.price || ""}
+                                              value={ticketType.price !== undefined && ticketType.price !== null ? ticketType.price : ""}
                                               onChange={(e) => {
                                                 const newTicketTypes = [...editTicketTypes];
-                                                newTicketTypes[index] = { ...ticketType, price: parseFloat(e.target.value) || 0 };
+                                                const inputValue = e.target.value;
+                                                // Handle empty input
+                                                if (inputValue === "" || inputValue === null || inputValue === undefined) {
+                                                  newTicketTypes[index] = { ...ticketType, price: 0 };
+                                                } else {
+                                                  // Parse as float, then round to 2 decimal places to avoid floating point precision issues
+                                                  const parsedPrice = parseFloat(inputValue);
+                                                  if (!isNaN(parsedPrice)) {
+                                                    // Round to 2 decimal places to avoid floating point precision issues
+                                                    const roundedPrice = Math.round(parsedPrice * 100) / 100;
+                                                    newTicketTypes[index] = { ...ticketType, price: roundedPrice };
+                                                  } else {
+                                                    newTicketTypes[index] = { ...ticketType, price: 0 };
+                                                  }
+                                                }
                                                 setEditTicketTypes(newTicketTypes);
+                                              }}
+                                              onBlur={(e) => {
+                                                // Ensure value is properly rounded on blur
+                                                const newTicketTypes = [...editTicketTypes];
+                                                const currentPrice = newTicketTypes[index].price;
+                                                if (currentPrice !== undefined && currentPrice !== null) {
+                                                  const roundedPrice = Math.round(currentPrice * 100) / 100;
+                                                  if (roundedPrice !== currentPrice) {
+                                                    newTicketTypes[index] = { ...ticketType, price: roundedPrice };
+                                                    setEditTicketTypes(newTicketTypes);
+                                                  }
+                                                }
                                               }}
                                               disabled={updatingTicketTypes === event.id}
                                               className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
@@ -2213,7 +2433,7 @@ export default function ManageEventsPage() {
                                       </div>
                                     ))}
                                   </div>
-                                )}
+                                ) : null}
                               </div>
 
                               {/* Subscriber Limits Section for Edit */}
@@ -2482,14 +2702,58 @@ export default function ManageEventsPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4">
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              event.published ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                              {event.published ? 'Published' : 'Draft'}
-                            </span>
+                            <div className="flex flex-col gap-1">
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                event.published ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {event.published ? 'Published' : event.scheduledPublishAt ? 'Scheduled' : 'Draft'}
+                              </span>
+                              {event.scheduledPublishAt && !event.published && (
+                                <span className="text-xs text-primary-muted">
+                                  {new Date(event.scheduledPublishAt).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center justify-end gap-2">
+                              {event.published ? (
+                                <button
+                                  onClick={() => handleUnpublish(event.id)}
+                                  disabled={publishingId === event.id}
+                                  className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors disabled:opacity-50"
+                                  title="Unpublish"
+                                >
+                                  {publishingId === event.id ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                  ) : (
+                                    <EyeOff size={16} />
+                                  )}
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handlePublish(event.id)}
+                                    disabled={publishingId === event.id}
+                                    className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Publish Now"
+                                  >
+                                    {publishingId === event.id ? (
+                                      <Loader2 size={16} className="animate-spin" />
+                                    ) : (
+                                      <Send size={16} />
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={() => openScheduleModal(event.id)}
+                                    disabled={publishingId === event.id}
+                                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Schedule Publish"
+                                  >
+                                    <Calendar size={16} />
+                                  </button>
+                                </>
+                              )}
                               <button
                                 onClick={() => startEdit(event)}
                                 className="p-2 text-primary-fg hover:bg-primary-accent-light rounded-lg transition-colors"
@@ -2522,6 +2786,71 @@ export default function ManageEventsPage() {
           )}
         </div>
       </div>
+
+      {/* Schedule Publish Modal */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => {
+          setShowScheduleModal(false);
+          setScheduleEventId(null);
+          setScheduledPublishTime("");
+        }}>
+          <div className="bg-primary-bg rounded-lg p-6 max-w-md w-full mx-4 border border-primary-border shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-semibold text-primary-fg mb-4">Schedule Event Publish</h2>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="schedule-publish-time" className="block text-sm font-medium text-primary-fg mb-2">
+                  Publish Date & Time
+                </label>
+                <input
+                  id="schedule-publish-time"
+                  type="datetime-local"
+                  value={scheduledPublishTime}
+                  onChange={(e) => setScheduledPublishTime(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="w-full px-4 py-2 border-2 border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent focus:border-primary-accent bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  style={{ minHeight: '40px' }}
+                />
+                <p className="text-xs text-primary-muted mt-1">
+                  Select when you want this event to be automatically published
+                </p>
+              </div>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => {
+                    setShowScheduleModal(false);
+                    setScheduleEventId(null);
+                    setScheduledPublishTime("");
+                  }}
+                  className="px-4 py-2 text-sm text-primary-fg bg-primary-border rounded-lg hover:bg-primary-accent-light transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (scheduleEventId && scheduledPublishTime) {
+                      handlePublish(scheduleEventId, scheduledPublishTime);
+                    }
+                  }}
+                  disabled={!scheduledPublishTime || publishingId === scheduleEventId}
+                  className="px-4 py-2 text-sm text-white bg-primary-accent rounded-lg hover:bg-primary-accent-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {publishingId === scheduleEventId ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Scheduling...
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="h-4 w-4" />
+                      Schedule
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -11,9 +11,9 @@ export const metadata: Metadata = {
   },
   description: "Internal team portal for Jaayvee operations. Handle KYC, payouts, campaign checks, and internal validation tasks with our comprehensive team dashboard.",
   icons: {
-    icon: "/static/logos/team/team_icon_192.png",
-    shortcut: "/static/logos/team/team_icon_192.png",
-    apple: "/static/logos/team/team_icon_192.png",
+    icon: "https://www.thejaayveeworld.com/static/logo(icon)%20white/jaayvee%20world%20icon-03.png",
+    shortcut: "https://www.thejaayveeworld.com/static/logo(icon)%20white/jaayvee%20world%20icon-03.png",
+    apple: "https://www.thejaayveeworld.com/static/logo(icon)%20white/jaayvee%20world%20icon-03.png",
   },
   manifest: "/manifest.json",
   appleWebApp: {
@@ -39,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="apple-touch-icon" href="/static/logos/team/team_icon_192.png" />
+        <link rel="apple-touch-icon" href="https://www.thejaayveeworld.com/static/logo(icon)%20white/jaayvee%20world%20icon-03.png" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
