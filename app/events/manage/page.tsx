@@ -999,15 +999,26 @@ export default function ManageEventsPage() {
       headers.forEach((header, index) => {
         const normalized = header.toLowerCase().trim();
         // Match patterns like "ticket type 1 name", "ticket 2 price", "tickettype3quantity", etc.
-        const match = normalized.match(/ticket\s*type\s*(\d+)\s*(name|price|quantity|description)|ticket\s*(\d+)\s*(name|price|quantity|description)|tickettype(\d+)(name|price|quantity|description)/i);
-        if (match) {
-          const ticketIndex = parseInt(match[1] || match[3] || match[5] || '0', 10);
-          const fieldType = (match[2] || match[4] || match[6] || '').toLowerCase() as 'name' | 'price' | 'quantity' | 'description';
-          if (ticketIndex > 0 && ['name', 'price', 'quantity', 'description'].includes(fieldType)) {
-            if (!ticketTypeIndices.has(ticketIndex)) {
-              ticketTypeIndices.set(ticketIndex, new Map());
+        // Improved regex to handle all variations
+        const patterns = [
+          /ticket\s*type\s*(\d+)\s*(name|price|quantity|description)/i,
+          /ticket\s*(\d+)\s*(name|price|quantity|description)/i,
+          /tickettype\s*(\d+)\s*(name|price|quantity|description)/i,
+          /tickettype(\d+)(name|price|quantity|description)/i
+        ];
+        
+        for (const pattern of patterns) {
+          const match = normalized.match(pattern);
+          if (match) {
+            const ticketIndex = parseInt(match[1] || '0', 10);
+            const fieldType = (match[2] || '').toLowerCase() as 'name' | 'price' | 'quantity' | 'description';
+            if (ticketIndex > 0 && ['name', 'price', 'quantity', 'description'].includes(fieldType)) {
+              if (!ticketTypeIndices.has(ticketIndex)) {
+                ticketTypeIndices.set(ticketIndex, new Map());
+              }
+              ticketTypeIndices.get(ticketIndex)!.set(fieldType, index);
+              break; // Found a match, no need to check other patterns
             }
-            ticketTypeIndices.get(ticketIndex)!.set(fieldType, index);
           }
         }
       });
@@ -1052,15 +1063,20 @@ export default function ManageEventsPage() {
         }
       });
       
-      // Fallback: If no ticket types found via pattern matching, try sequential approach up to 50
+      // Fallback: If no ticket types found via pattern matching, try sequential approach up to 100
+      // Don't break on gaps - continue checking all ticket types up to the limit
       if (ticketTypes.length === 0) {
-        for (let i = 1; i <= 50; i++) {
+        let consecutiveEmpty = 0;
+        const maxConsecutiveEmpty = 10; // Allow up to 10 consecutive empty slots before stopping
+        
+        for (let i = 1; i <= 100; i++) {
           const name = getValue([`ticket type ${i} name`, `ticket ${i} name`, `tickettype${i}name`]);
           const priceStr = getValue([`ticket type ${i} price`, `ticket ${i} price`, `tickettype${i}price`]);
           const quantityStr = getValue([`ticket type ${i} quantity`, `ticket ${i} quantity`, `tickettype${i}quantity`]);
           const description = getValue([`ticket type ${i} description`, `ticket ${i} description`, `tickettype${i}description`]);
 
           if (name && name.trim()) {
+            consecutiveEmpty = 0; // Reset counter when we find a ticket type
             const price = parseFloat(priceStr) || 0;
             const quantity = parseInt(quantityStr) || 0;
             
@@ -1071,8 +1087,11 @@ export default function ManageEventsPage() {
               description: description.trim() || ''
             });
           } else {
-            // Stop if we hit a gap (no ticket type found)
-            break;
+            consecutiveEmpty++;
+            // Only stop if we've hit many consecutive empty slots
+            if (consecutiveEmpty >= maxConsecutiveEmpty) {
+              break;
+            }
           }
         }
       }

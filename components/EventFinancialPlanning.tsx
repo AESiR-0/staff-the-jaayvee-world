@@ -497,6 +497,16 @@ export default function EventFinancialPlanning({ eventId, eventTitle }: EventFin
       }
 
       setCalculations(data.data);
+      
+      // Refresh financials data to get updated calculatedTotalIncome
+      const financialsRes = await authenticatedFetch(`${API_BASE_URL}/api/events/${eventId}/financials`);
+      if (financialsRes.ok) {
+        const financialsData = await financialsRes.json();
+        if (financialsData.success && financialsData.data) {
+          setFinancials(financialsData.data);
+        }
+      }
+      
       setSuccess('Financial calculations updated!');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
