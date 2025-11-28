@@ -101,7 +101,7 @@ export function FeedbackModal({ source }: FeedbackModalProps) {
             <MessageSquare className="h-6 w-6 text-blue-600" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-primary-fg">We'd Love Your Feedback!</h2>
+            <h2 className="text-xl font-bold text-primary-fg">We&apos;d Love Your Feedback!</h2>
             <p className="text-sm text-primary-muted">Help us improve your experience</p>
           </div>
         </div>
@@ -115,7 +115,7 @@ export function FeedbackModal({ source }: FeedbackModalProps) {
         ) : (
           <>
             <p className="text-primary-fg mb-4">
-              We're constantly working to improve. Your thoughts and suggestions help us serve you better.
+              We&apos;re constantly working to improve. Your thoughts and suggestions help us serve you better.
             </p>
 
             {error && (

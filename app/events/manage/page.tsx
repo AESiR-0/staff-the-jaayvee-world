@@ -1101,7 +1101,8 @@ export default function ManageEventsPage() {
           diamond: 0,
           exclusiveBlack: 0,
           student: 0,
-        }
+        },
+        selectedTemplateId: "",
       });
 
       const eventCount = lines.length - 1; // Subtract header row
