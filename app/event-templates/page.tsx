@@ -63,8 +63,7 @@ export default function EventTemplatesPage() {
   useEffect(() => {
     if (isAdmin === true) {
       fetchTemplates();
-      fetchGroups();
-      fetchTeamUsers();
+      fetchRBACData();
     }
   }, [isAdmin]);
 
@@ -102,31 +101,18 @@ export default function EventTemplatesPage() {
     }
   };
 
-  const fetchGroups = async () => {
+  const fetchRBACData = async () => {
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`);
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=all`);
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.data?.groups) {
-          setGroups(data.data.groups);
+        if (data.success) {
+          setGroups(data.data?.groups || []);
+          setTeamUsers(data.data?.users || []);
         }
       }
     } catch (err) {
-      console.error('Error fetching groups:', err);
-    }
-  };
-
-  const fetchTeamUsers = async () => {
-    try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data?.users) {
-          setTeamUsers(data.data.users);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching team users:', err);
+      console.error('Error fetching RBAC data:', err);
     }
   };
 

@@ -46,8 +46,8 @@ export function TemplateTaskEditor({ templateId, onClose, onUpdate }: TemplateTa
 
   useEffect(() => {
     fetchTasks();
-    fetchGroups();
-    fetchTeamUsers();
+    fetchRBACData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
   const fetchTasks = async () => {
@@ -68,31 +68,18 @@ export function TemplateTaskEditor({ templateId, onClose, onUpdate }: TemplateTa
     }
   };
 
-  const fetchGroups = async () => {
+  const fetchRBACData = async () => {
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`);
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=all`);
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.data?.groups) {
-          setGroups(data.data.groups);
+        if (data.success) {
+          setGroups(data.data?.groups || []);
+          setTeamUsers(data.data?.users || []);
         }
       }
     } catch (err) {
-      console.error('Error fetching groups:', err);
-    }
-  };
-
-  const fetchTeamUsers = async () => {
-    try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data?.users) {
-          setTeamUsers(data.data.users);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching team users:', err);
+      console.error('Error fetching RBAC data:', err);
     }
   };
 
