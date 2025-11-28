@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Sidebar from "./Sidebar";
 import NotificationPanel from "./NotificationPanel";
 import NotificationManager from "./NotificationManager";
+import { FeedbackModal } from "./FeedbackModal";
 
 interface ConditionalLayoutProps {
   children: React.ReactNode;
@@ -77,6 +78,8 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
       </main>
       {/* Notification Popup Manager */}
       <NotificationManager />
+      {/* Feedback Modal */}
+      <FeedbackModal source="staff" />
     </div>
   );
 }

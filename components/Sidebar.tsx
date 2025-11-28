@@ -125,30 +125,157 @@ export default function Sidebar() {
     }
   ];
 
-  // Fetch sidebar data and check access permissions
+  // Cache admin status to avoid repeated checks
+  const [isUserAdmin, setIsUserAdmin] = useState<boolean | null>(null);
+
+  // Check admin status once on mount (with localStorage cache)
+  useEffect(() => {
+    const checkAdmin = async () => {
+      if (!email) return;
+      
+      // Check localStorage cache first (5 minute TTL)
+      const cacheKey = `admin_status_${email}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const { status, timestamp } = JSON.parse(cached);
+          const age = Date.now() - timestamp;
+          // Use cache if less than 5 minutes old
+          if (age < 5 * 60 * 1000) {
+            setIsUserAdmin(status);
+            return;
+          }
+        } catch (e) {
+          // Invalid cache, continue to fetch
+        }
+      }
+      
+      // Fetch fresh admin status
+      const adminStatus = await isSuperAdmin(email);
+      setIsUserAdmin(adminStatus);
+      
+      // Cache the result
+      localStorage.setItem(cacheKey, JSON.stringify({
+        status: adminStatus,
+        timestamp: Date.now()
+      }));
+    };
+    checkAdmin();
+  }, [email]);
+
+  // Fetch sidebar data and check access permissions (with localStorage cache)
   useEffect(() => {
     const loadSidebar = async () => {
       try {
+        // Check localStorage cache first (5 minute TTL)
+        const sidebarCacheKey = 'sidebar_data';
+        const accessibleCacheKey = `accessible_items_${email}`;
+        
+        const cachedSidebar = localStorage.getItem(sidebarCacheKey);
+        const cachedAccessible = email ? localStorage.getItem(accessibleCacheKey) : null;
+        
+        if (cachedSidebar && cachedAccessible && isUserAdmin !== null) {
+          try {
+            const { data: sidebarData, timestamp } = JSON.parse(cachedSidebar);
+            const { items: accessibleItems, adminItems, timestamp: accessibleTimestamp } = JSON.parse(cachedAccessible);
+            const sidebarAge = Date.now() - timestamp;
+            const accessibleAge = Date.now() - accessibleTimestamp;
+            
+            // Use cache if less than 5 minutes old
+            if (sidebarAge < 5 * 60 * 1000 && accessibleAge < 5 * 60 * 1000) {
+              setSidebarData(sidebarData);
+              const allGroupIds = new Set<string>(sidebarData.groups.map((g: SidebarGroup) => g.id));
+              setExpandedGroups(allGroupIds);
+              setAccessibleItems(new Set(accessibleItems));
+              setAdminItemsVisible(adminItems || { feedback: false, userActivity: false });
+              setLoadingSidebar(false);
+              return;
+            }
+          } catch (e) {
+            // Invalid cache, continue to fetch
+          }
+        }
+        
         const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://thejaayveeworld.com';
         const response = await authenticatedFetch(`${API_BASE_URL}/api/sidebar`);
         const data = await response.json();
         if (data.success) {
           setSidebarData(data.data);
+          // Cache sidebar data
+          localStorage.setItem(sidebarCacheKey, JSON.stringify({
+            data: data.data,
+            timestamp: Date.now()
+          }));
+          
           // Expand all groups by default
           const allGroupIds = new Set<string>(data.data.groups.map((g: SidebarGroup) => g.id));
           setExpandedGroups(allGroupIds);
           
-          // Check access for all items and cache results
-          const accessibleSet = new Set<string>();
-          for (const group of data.data.groups) {
-            for (const item of group.items) {
-              const hasAccess = await canAccessItem(item);
-              if (hasAccess) {
-                accessibleSet.add(item.href || item.url || '');
-              }
+          // If user is admin, they have access to everything - skip individual checks
+          if (isUserAdmin === true) {
+            const allItems: SidebarItem[] = [];
+            data.data.groups.forEach((group: SidebarGroup) => {
+              group.items.forEach((item: SidebarItem) => {
+                allItems.push(item);
+              });
+            });
+            const accessibleSet = new Set<string>(allItems.map(item => item.href || ''));
+            accessibleSet.add('/feedback');
+            accessibleSet.add('/user-activity');
+            accessibleSet.add('/event-templates');
+            setAccessibleItems(accessibleSet);
+            const adminItemsVisible = { feedback: true, userActivity: true };
+            setAdminItemsVisible(adminItemsVisible);
+            
+            // Cache accessible items
+            if (email) {
+              localStorage.setItem(accessibleCacheKey, JSON.stringify({
+                items: Array.from(accessibleSet),
+                adminItems: adminItemsVisible,
+                timestamp: Date.now()
+              }));
+            }
+            
+            setLoadingSidebar(false);
+            return;
+          }
+
+          // For non-admins, check access for items (but only if admin status is determined)
+          if (isUserAdmin === false) {
+            const allItems: SidebarItem[] = [];
+            data.data.groups.forEach((group: SidebarGroup) => {
+              group.items.forEach((item: SidebarItem) => {
+                allItems.push(item);
+              });
+            });
+
+            // Check access in parallel batches
+            const accessibleSet = new Set<string>();
+            const batchSize = 10;
+            for (let i = 0; i < allItems.length; i += batchSize) {
+              const batch = allItems.slice(i, i + batchSize);
+              const accessChecks = await Promise.all(
+                batch.map(item => canAccessItem(item))
+              );
+              batch.forEach((item, index) => {
+                if (accessChecks[index]) {
+                  accessibleSet.add(item.href || '');
+                }
+              });
+            }
+            setAccessibleItems(accessibleSet);
+            const adminItemsVisible = { feedback: false, userActivity: false };
+            setAdminItemsVisible(adminItemsVisible);
+            
+            // Cache accessible items
+            if (email) {
+              localStorage.setItem(accessibleCacheKey, JSON.stringify({
+                items: Array.from(accessibleSet),
+                adminItems: adminItemsVisible,
+                timestamp: Date.now()
+              }));
             }
           }
-          setAccessibleItems(accessibleSet);
         }
       } catch (err) {
         console.error('Error loading sidebar:', err);
@@ -156,17 +283,52 @@ export default function Sidebar() {
         setLoadingSidebar(false);
       }
     };
-    loadSidebar();
-  }, [email, permissions, permissionsLoaded]);
+    
+    // Only load sidebar after admin status is determined
+    if (isUserAdmin !== null) {
+      loadSidebar();
+    }
+  }, [email, permissions, permissionsLoaded, isUserAdmin]);
 
-  // Fetch RBAC permissions on mount
+  // Fetch RBAC permissions on mount (with localStorage cache)
   useEffect(() => {
     const loadPermissions = async () => {
       try {
         setLoadingPermissions(true);
+        
+        // Check localStorage cache first (5 minute TTL)
+        if (email) {
+          const permissionsCacheKey = `permissions_${email}`;
+          const cached = localStorage.getItem(permissionsCacheKey);
+          if (cached) {
+            try {
+              const { permissions: cachedPerms, timestamp } = JSON.parse(cached);
+              const age = Date.now() - timestamp;
+              // Use cache if less than 5 minutes old
+              if (age < 5 * 60 * 1000) {
+                setPermissions(cachedPerms);
+                setPermissionsLoaded(true);
+                setLoadingPermissions(false);
+                return;
+              }
+            } catch (e) {
+              // Invalid cache, continue to fetch
+            }
+          }
+        }
+        
         const perms = await fetchUserPermissions();
         setPermissions(perms);
         setPermissionsLoaded(true);
+        
+        // Cache the result
+        if (email) {
+          const permissionsCacheKey = `permissions_${email}`;
+          localStorage.setItem(permissionsCacheKey, JSON.stringify({
+            permissions: perms,
+            timestamp: Date.now()
+          }));
+        }
       } catch (err) {
         console.error('Error loading permissions:', err);
         setPermissionsLoaded(true); // Still mark as loaded to avoid infinite loading
@@ -175,7 +337,7 @@ export default function Sidebar() {
       }
     };
     loadPermissions();
-  }, []);
+  }, [email]);
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups(prev => {
@@ -209,28 +371,52 @@ export default function Sidebar() {
 
   const [todayDeadlinesCount, setTodayDeadlinesCount] = useState(0);
   const [showLogoutWarning, setShowLogoutWarning] = useState(false);
+  const [isCheckingDeadlines, setIsCheckingDeadlines] = useState(false);
 
   // Check for today's deadlines on mount and periodically
   useEffect(() => {
+    let isMounted = true;
+    let checkInProgress = false;
+    
     const checkTodayDeadlines = async () => {
+      // Prevent multiple simultaneous checks
+      if (checkInProgress) return;
+      
       try {
+        checkInProgress = true;
+        setIsCheckingDeadlines(true);
         const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
         const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks/today-deadlines`);
-        if (response.ok) {
+        if (response.ok && isMounted) {
           const result = await response.json();
           if (result.success) {
-            setTodayDeadlinesCount(result.data.count || 0);
+            const newCount = result.data.count || 0;
+            // Only update if count actually changed to prevent unnecessary re-renders
+            setTodayDeadlinesCount(prevCount => {
+              if (prevCount !== newCount) {
+                return newCount;
+              }
+              return prevCount;
+            });
           }
         }
       } catch (error) {
         console.error('Error checking today deadlines:', error);
+      } finally {
+        if (isMounted) {
+          setIsCheckingDeadlines(false);
+        }
+        checkInProgress = false;
       }
     };
     
     checkTodayDeadlines();
     // Check every 5 minutes
     const interval = setInterval(checkTodayDeadlines, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const handleLogout = async () => {
@@ -255,6 +441,7 @@ export default function Sidebar() {
 
   // State to track which items are accessible
   const [accessibleItems, setAccessibleItems] = useState<Set<string>>(new Set());
+  const [adminItemsVisible, setAdminItemsVisible] = useState<{ feedback: boolean; userActivity: boolean }>({ feedback: false, userActivity: false });
 
   // Check if user can access an item (cached version for synchronous use)
   const canAccessItemSync = (item: SidebarItem): boolean => {
@@ -264,10 +451,18 @@ export default function Sidebar() {
 
   // Async function to check access (used for initial load)
   const canAccessItem = async (item: SidebarItem): Promise<boolean> => {
-    // Super admins have access to everything
-    const adminCheck = await isSuperAdmin(email);
-    if (adminCheck) {
+    // Use cached admin status if available
+    if (isUserAdmin === true) {
       return true;
+    }
+    if (isUserAdmin === false) {
+      // Continue with permission checks below
+    } else {
+      // Admin status not yet determined, check it
+      const adminCheck = await isSuperAdmin(email);
+      if (adminCheck) {
+        return true;
+      }
     }
     
     // Special handling for Updates - show to authorized users
@@ -313,6 +508,24 @@ export default function Sidebar() {
     if (item.href === "/students") {
       return await isSuperAdmin(email);
     }
+    // Feedback page - admin only
+    if (item.href === "/feedback") {
+      if (isUserAdmin) return true;
+      if (isUserAdmin === false) return false;
+      return await isSuperAdmin(email);
+    }
+    // User Activity page - admin only
+    if (item.href === "/user-activity") {
+      if (isUserAdmin) return true;
+      if (isUserAdmin === false) return false;
+      return await isSuperAdmin(email);
+    }
+    // Event Templates page - admin only
+    if (item.href === "/event-templates") {
+      if (isUserAdmin) return true;
+      if (isUserAdmin === false) return false;
+      return await isSuperAdmin(email);
+    }
     // Check RBAC permissions first if loaded
     const tabKey = routeToTabKey[item.href as keyof typeof routeToTabKey];
     if (permissionsLoaded && permissions.length > 0 && tabKey) {
@@ -339,6 +552,9 @@ export default function Sidebar() {
       (href === "/downline" && pathname.startsWith("/downline")) ||
       (href === "/users" && pathname.startsWith("/users")) ||
       (href === "/students" && pathname.startsWith("/students")) ||
+      (href === "/feedback" && pathname.startsWith("/feedback")) ||
+      (href === "/user-activity" && pathname.startsWith("/user-activity")) ||
+      (href === "/event-templates" && pathname.startsWith("/event-templates")) ||
       (href === "/tasks" && pathname.startsWith("/tasks")) ||
       (href === "/gallery" && pathname.startsWith("/gallery")) ||
       (href === "/layouts" && pathname.startsWith("/layouts")) ||
@@ -401,6 +617,49 @@ export default function Sidebar() {
             </div>
           ) : sidebarData ? (
             <div className="space-y-1">
+              {/* Hardcoded Admin Items */}
+              {(() => {
+                const adminItems: SidebarItem[] = [];
+                // Use cached admin status for faster rendering
+                if (isUserAdmin === true || adminItemsVisible.feedback) {
+                  adminItems.push({ id: 'feedback-admin', name: 'Feedback', href: '/feedback', iconName: 'MessageSquare', order: 0, isActive: true });
+                }
+                if (isUserAdmin === true || adminItemsVisible.userActivity) {
+                  adminItems.push({ id: 'user-activity-admin', name: 'User Activity', href: '/user-activity', iconName: 'UserCircle', order: 1, isActive: true });
+                }
+                if (isUserAdmin === true) {
+                  adminItems.push({ id: 'event-templates-admin', name: 'Event Templates', href: '/event-templates', iconName: 'FileText', order: 2, isActive: true });
+                }
+                
+                if (adminItems.length > 0) {
+                  return (
+                    <div className="mb-2">
+                      <div className="px-3 py-2 text-xs font-semibold text-primary-muted uppercase tracking-wider">
+                        Administration
+                      </div>
+                      <div className="ml-2 mt-1 space-y-1 border-l-2 border-primary-border pl-2">
+                        {adminItems.map((item) => {
+                          const Icon = iconMap[item.iconName] || FileText;
+                          const isActive = isItemActive(item.href);
+                          return (
+                            <Link
+                              key={item.id}
+                              href={item.href}
+                              className={`sidebar-item ${isActive ? "active" : ""}`}
+                              onClick={() => setIsOpen(false)}
+                            >
+                              <Icon size={20} />
+                              <span className="font-medium">{item.name}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              
               {/* All groups including common (accordion style) */}
               {sidebarData.groups
                 .filter(group => group.items.length > 0)
@@ -510,8 +769,8 @@ export default function Sidebar() {
           {/* Logout */}
           <button 
             onClick={handleLogout}
-            disabled={todayDeadlinesCount > 0}
-            className={`sidebar-item w-full text-left ${
+            disabled={todayDeadlinesCount > 0 || isCheckingDeadlines}
+            className={`sidebar-item w-full text-left transition-all duration-200 ${
               todayDeadlinesCount > 0 
                 ? 'opacity-50 cursor-not-allowed bg-red-50 text-red-600' 
                 : 'hover:bg-red-50 hover:text-red-600'

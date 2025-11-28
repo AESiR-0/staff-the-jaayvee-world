@@ -33,7 +33,7 @@ export function TasksWidget() {
   const fetchTasks = async () => {
     try {
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/tasks`);
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch tasks');

@@ -80,16 +80,17 @@ export default function TasksPage() {
   const currentUserId = session?.userId || session?.teamId || session?.staffId; // Backward compatibility
 
   useEffect(() => {
-    fetchTasks();
     fetchTeamUsers();
     checkCreatePermission();
     
-    // Check if user is admin
+    // Check if user is admin first, then fetch tasks
     const checkAdminStatus = async () => {
       const session = getTeamSession();
       const userEmail = session?.email;
       const adminStatus = await isSuperAdmin(userEmail);
       setIsAdmin(adminStatus);
+      // Fetch tasks after admin status is determined
+      fetchTasks();
     };
     checkAdminStatus();
   }, []);
@@ -97,32 +98,12 @@ export default function TasksPage() {
   const checkCreatePermission = async () => {
     try {
       setLoadingPermissions(true);
-      // Check if user is admin first (admins can always create tasks)
-      const session = getTeamSession();
-      const userEmail = session?.email;
-      const isAdmin = await isSuperAdmin(userEmail);
-      
-      if (isAdmin) {
-        setCanCreate(true);
-        setLoadingPermissions(false);
-        return;
-      }
-
-      // For non-admins, check RBAC permission
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        // Check if user has 'creation' permission
-        const userPermissions = data.data?.userPermissions || [];
-        const hasCreationPermission = userPermissions.some(
-          (up: any) => up.permission?.resource === 'creation' && up.isActive
-        );
-        setCanCreate(hasCreationPermission);
-      }
+      // Everyone can create tasks now
+      setCanCreate(true);
     } catch (err) {
       console.error('Error checking permissions:', err);
+      // Default to allowing creation even on error
+      setCanCreate(true);
     } finally {
       setLoadingPermissions(false);
     }
@@ -143,7 +124,28 @@ export default function TasksPage() {
 
       const result = await response.json();
       if (result.success) {
-        setTasks(result.data || []);
+        const allTasks = result.data || [];
+        
+        // Check admin status directly to avoid race condition
+        const session = getTeamSession();
+        const userEmail = session?.email;
+        const userIsAdmin = await isSuperAdmin(userEmail);
+        
+        // If user is admin, show all tasks (backend already filtered correctly)
+        // Otherwise, filter tasks to show only:
+        // 1. Tasks created by current user
+        // 2. Tasks assigned to current user
+        let filteredTasks = allTasks;
+        if (!userIsAdmin) {
+          filteredTasks = allTasks.filter((task: Task) => {
+            const isCreatedByUser = task.createdBy === currentUserId;
+            const isAssignedToUser = task.assignedTo === currentUserId;
+            
+            return isCreatedByUser || isAssignedToUser;
+          });
+        }
+        
+        setTasks(filteredTasks);
       } else {
         throw new Error(result.error || 'Failed to fetch tasks');
       }
@@ -165,11 +167,21 @@ export default function TasksPage() {
         const data = await response.json();
         if (data.success && data.data?.users) {
           const staffList = data.data.users;
-          setTeamUsers(staffList.map((u: any) => ({
-            id: u.id,
-            email: u.email,
-            fullName: u.fullName || u.email,
-          })));
+          
+          // Filter out admins and MD from assignee list
+          const filteredUsers = [];
+          for (const user of staffList) {
+            const userIsAdmin = await isSuperAdmin(user.email);
+            if (!userIsAdmin) {
+              filteredUsers.push({
+                id: user.id,
+                email: user.email,
+                fullName: user.fullName || user.email,
+              });
+            }
+          }
+          
+          setTeamUsers(filteredUsers);
         }
       } else {
         console.warn('RBAC API returned non-OK status:', response.status);
@@ -225,13 +237,21 @@ export default function TasksPage() {
           title: formData.title.trim(),
           description: formData.description.trim() || null,
           assignedTo: formData.assignedTo || null,
+          submissionDeadline: formData.submissionDeadline ? convertToISO(formData.submissionDeadline) : null,
           deadline: formData.deadline ? convertToISO(formData.deadline) : null,
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create task');
+        let errorMessage = 'Failed to create task';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          // If response is not JSON, use status text
+          errorMessage = `${response.status} ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();

@@ -108,8 +108,12 @@ export default function ManageEventsPage() {
       diamond: 0,
       exclusiveBlack: 0,
       student: 0,
-    }
+    },
+    selectedTemplateId: "",
   });
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [showTemplateCustomization, setShowTemplateCustomization] = useState(false);
+  const [templateCustomizations, setTemplateCustomizations] = useState<any>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -313,6 +317,34 @@ export default function ManageEventsPage() {
 
       setSuccess("Event created successfully!");
       
+      const createdEventId = data.data?.id;
+      
+      // Apply template if selected
+      if (createForm.selectedTemplateId && createdEventId) {
+        try {
+          setUploadProgress('Applying template...');
+          const templateResponse = await authenticatedFetch(`${API_BASE_URL}/api/team/events/apply-template`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              eventId: createdEventId,
+              templateId: createForm.selectedTemplateId,
+              customizations: templateCustomizations,
+            }),
+          });
+          
+          if (templateResponse.ok) {
+            const templateData = await templateResponse.json();
+            if (templateData.success) {
+              setSuccess(`Event created and template applied! ${templateData.data.tasksCreated} task(s) created.`);
+            }
+          }
+        } catch (templateErr) {
+          console.error('Error applying template:', templateErr);
+          // Don't fail the event creation if template application fails
+        }
+      }
+      
       // Clean up preview URLs
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
@@ -337,16 +369,19 @@ export default function ManageEventsPage() {
           diamond: 0,
           exclusiveBlack: 0,
           student: 0,
-        }
+        },
+        selectedTemplateId: "",
       });
       setSelectedFile(null);
       setPreviewUrl(null);
+      setTemplateCustomizations({});
+      setShowTemplateCustomization(false);
       setCreating(false);
       fetchEvents();
       setTimeout(() => {
         setSuccess(null);
         setUploadProgress(null);
-      }, 3000);
+      }, 5000);
     } catch (err: any) {
       console.error("Error creating event:", err);
       setError(err.message || "Failed to create event");
@@ -1637,6 +1672,39 @@ export default function ManageEventsPage() {
                   className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
+              {/* Template Selection */}
+              <div className="border-t border-primary-border pt-4">
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Apply Event Template (Optional)
+                </label>
+                <select
+                  value={createForm.selectedTemplateId}
+                  onChange={(e) => {
+                    setCreateForm({ ...createForm, selectedTemplateId: e.target.value });
+                    if (e.target.value) {
+                      setShowTemplateCustomization(true);
+                    } else {
+                      setShowTemplateCustomization(false);
+                      setTemplateCustomizations({});
+                    }
+                  }}
+                  disabled={submitting}
+                  className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg disabled:opacity-50"
+                >
+                  <option value="">No Template</option>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} {template.festivalType ? `(${template.festivalType})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {createForm.selectedTemplateId && (
+                  <p className="text-xs text-primary-muted mt-1">
+                    Template will be applied after event creation. Tasks will be created based on event start date.
+                  </p>
+                )}
+              </div>
+
               <div className="flex items-center gap-3 p-4 bg-primary-accent-light rounded-lg border border-primary-border">
                 <input
                   type="checkbox"
@@ -1679,8 +1747,11 @@ export default function ManageEventsPage() {
                         diamond: 0,
                         exclusiveBlack: 0,
                         student: 0,
-                      }
+                      },
+                      selectedTemplateId: "",
                     });
+                    setTemplateCustomizations({});
+                    setShowTemplateCustomization(false);
       setSelectedFile(null);
       setPreviewUrl(null);
                   }}

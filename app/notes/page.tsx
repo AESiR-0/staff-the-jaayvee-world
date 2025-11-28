@@ -33,7 +33,7 @@ export default function NotesPage() {
   const fetchNotes = async () => {
     try {
       setLoading(true);
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/notes`);
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/notes`);
       const data = await response.json();
 
       if (data.success) {
@@ -56,7 +56,7 @@ export default function NotesPage() {
     }
 
     try {
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/staff/notes`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -89,7 +89,7 @@ export default function NotesPage() {
 
     try {
       const response = await authenticatedFetch(
-        `${API_BASE_URL}/api/staff/notes/${editingNote.id}`,
+        `${API_BASE_URL}/api/team/notes/${editingNote.id}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -123,7 +123,7 @@ export default function NotesPage() {
 
     try {
       const response = await authenticatedFetch(
-        `${API_BASE_URL}/api/staff/notes/${id}`,
+        `${API_BASE_URL}/api/team/notes/${id}`,
         {
           method: "DELETE",
         }

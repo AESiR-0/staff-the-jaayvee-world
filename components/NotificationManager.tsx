@@ -346,12 +346,17 @@ export default function NotificationManager({ onMarkAsRead }: NotificationManage
           }
         }
       )
-      .subscribe((status) => {
-        console.log('📡 Realtime subscription status:', status);
+      .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           console.log('✅ Successfully subscribed to notifications');
         } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Realtime channel error');
+          // Handle error gracefully - Supabase might not be configured or connection failed
+          console.warn('⚠️ Realtime channel error - notifications will still work via polling', err);
+          // Don't throw error, just log warning
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⚠️ Realtime subscription timed out - notifications will still work via polling');
+        } else if (status === 'CLOSED') {
+          console.log('📡 Realtime subscription closed');
         }
       });
 
