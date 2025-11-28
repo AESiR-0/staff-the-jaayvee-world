@@ -183,6 +183,7 @@ export default function ManageEventsPage() {
         if (adminCheck || ALLOWED_EMAIL.includes(userEmail?.toLowerCase() || '')) {
           setAuthorized(true);
           fetchEvents();
+          fetchTemplates();
         } else {
           console.log("Unauthorized access attempt by:", userEmail);
           router.push("/dashboard");
@@ -211,6 +212,21 @@ export default function ManageEventsPage() {
     } catch (err: any) {
       console.error("Failed to fetch events:", err);
       setError("Failed to fetch events");
+    }
+  };
+
+  const fetchTemplates = async () => {
+    try {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/event-templates`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setTemplates(data.data || []);
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch templates:", err);
+      // Don't set error state for templates as it's optional
     }
   };
 
