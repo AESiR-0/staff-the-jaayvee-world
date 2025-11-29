@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { LogIn, LogOut, User, Mail, Calendar, Clock, Search, Filter, AlertCircle, X } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { API_BASE_URL } from "@/lib/api";
@@ -42,7 +42,7 @@ export default function UserActivityPage() {
     }
   }, [isAdmin]);
 
-  const checkAdminStatus = async () => {
+  const checkAdminStatus = useCallback(async () => {
     try {
       const { getAuthToken } = require('@/lib/auth-utils');
       const { checkHasAccessClient } = require('@/lib/permissions');
@@ -60,7 +60,7 @@ export default function UserActivityPage() {
       console.error('Error checking admin status:', err);
       setIsAdmin(false);
     }
-  };
+  }, [currentUserEmail]);
 
   const fetchActivities = async () => {
     try {

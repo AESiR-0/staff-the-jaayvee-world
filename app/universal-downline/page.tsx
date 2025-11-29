@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Users, Mail, Phone, Calendar, TrendingUp, Search, ChevronDown, ChevronUp, Filter, X, Wallet, ShoppingCart, UserPlus, DollarSign, CheckCircle2 } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
@@ -100,11 +100,8 @@ export default function UniversalDownlinePage() {
     router.replace(newUrl, { scroll: false });
   }, [searchQuery, roleFilter, partnerCodeFilter, dateFrom, dateTo, minCheckouts, maxCheckouts, minEarnings, maxEarnings, router]);
 
-  useEffect(() => {
-    fetchUniversalDownline();
-  }, [roleFilter, partnerCodeFilter, searchQuery, dateFrom, dateTo, minCheckouts, maxCheckouts, minEarnings, maxEarnings]);
 
-  const fetchUniversalDownline = async () => {
+  const fetchUniversalDownline = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);

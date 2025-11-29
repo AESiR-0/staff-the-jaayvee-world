@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Download, Edit, Trash2, Eye, Filter, X, FileDown } from 'lucide-react';
 import CSVUploadModal from '@/components/CSVUploadModal';
 import CSVEditModal from '@/components/CSVEditModal';
@@ -50,7 +50,7 @@ export default function SalesPage() {
     }
   }, [previewingCsvId]);
 
-  const fetchCsvLists = async () => {
+  const fetchCsvLists = useCallback(async () => {
     setLoadingCsvLists(true);
     setError(null);
     try {

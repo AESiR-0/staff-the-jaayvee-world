@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { CheckSquare, Plus, Clock, PlayCircle, X, User, Calendar, Edit2, Trash2, GripVertical, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Send } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { format, differenceInHours, differenceInDays, differenceInMinutes } from "date-fns";
@@ -111,7 +111,7 @@ export default function TasksPage() {
       fetchTasks();
     };
     checkPermissions();
-  }, []);
+  }, [fetchTasks]);
 
   const checkCreatePermission = async () => {
     try {
@@ -127,7 +127,7 @@ export default function TasksPage() {
     }
   };
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);

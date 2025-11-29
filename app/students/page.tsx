@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Search, GraduationCap, Mail, Calendar, User, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock, Eye, FileText } from "lucide-react";
 import { authenticatedFetch } from "@/lib/auth-utils";
 import { format } from "date-fns";
@@ -36,7 +36,7 @@ export default function StudentsPage() {
   const [updating, setUpdating] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
 
-  const fetchVerifications = async () => {
+  const fetchVerifications = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);

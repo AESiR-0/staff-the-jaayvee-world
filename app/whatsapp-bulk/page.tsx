@@ -148,7 +148,7 @@ export default function WhatsAppBulkPage() {
     }
   };
 
-  const checkAuthStatus = async () => {
+  const checkAuthStatus = useCallback(async () => {
     try {
       const response = await fetch('/api/whatsapp/auth?action=status');
       const data = await response.json();
@@ -158,9 +158,9 @@ export default function WhatsAppBulkPage() {
     } catch (err) {
       console.error('Failed to check auth status:', err);
     }
-  };
+  }, []);
 
-  const fetchCsvLists = async () => {
+  const fetchCsvLists = useCallback(async () => {
     setLoadingCsvLists(true);
     try {
       const params = new URLSearchParams();

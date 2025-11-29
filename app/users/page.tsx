@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Search, Users, Mail, Calendar, User, ChevronLeft, ChevronRight } from "lucide-react";
 import { authenticatedFetch } from "@/lib/auth-utils";
 import { format } from "date-fns";
@@ -24,7 +24,7 @@ export default function UsersPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -58,11 +58,11 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, search, roleFilter]);
 
   useEffect(() => {
     fetchUsers();
-  }, [page, search, roleFilter]);
+  }, [fetchUsers]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

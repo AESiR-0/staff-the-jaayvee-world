@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Users, Mail, Phone, Calendar, TrendingUp, Search, ChevronDown, ChevronUp, Wallet, Award, GitBranch } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { format } from "date-fns";
@@ -113,6 +113,60 @@ export default function DownlinePage() {
     }
   };
 
+  const fetchAllTeam = useCallback(async () => {
+    try {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const url = `${API_BASE_URL}/api/team/list`;
+      
+      const response = await authenticatedFetch(url);
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setAllTeam(result.data || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching team list:', err);
+    }
+  }, []);
+
+  const fetchDownline = useCallback(async (teamUserId?: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const params = new URLSearchParams();
+      // Always fetch nested for industry-level MLM view (default behavior)
+      // nested=true is the default, so we don't need to explicitly set it
+      
+      if (teamUserId && isAdmin) {
+        params.append('staffUserId', teamUserId);
+      }
+
+      const url = `${API_BASE_URL}/api/team/downline?${params.toString()}`;
+      const response = await authenticatedFetch(url);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch downline: ${response.status} ${errorText}`);
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        setData(result.data);
+      } else {
+        setError(result.error || 'Failed to fetch downline');
+      }
+    } catch (err: any) {
+      console.error('Error fetching downline:', err);
+      setError(err.message || 'Failed to fetch downline');
+    } finally {
+      setLoading(false);
+    }
+  }, [isAdmin]);
+
   useEffect(() => {
     const loadData = async () => {
       const session = getTeamSession();
@@ -155,33 +209,14 @@ export default function DownlinePage() {
     };
 
     loadData();
-  }, []);
+  }, [fetchDownline, fetchAllTeam]);
 
   useEffect(() => {
     if (selectedTeamId && isAdmin) {
       fetchDownline(selectedTeamId);
     }
-  }, [selectedTeamId, isAdmin]);
+  }, [selectedTeamId, isAdmin, fetchDownline]);
 
-  const fetchAllTeam = async () => {
-    try {
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const url = `${API_BASE_URL}/api/team/list`;
-      
-      const response = await authenticatedFetch(url);
-      
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setAllTeam(result.data || []);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching team list:', err);
-    }
-  };
-
-  const fetchDownline = async (teamUserId?: string) => {
     try {
       setLoading(true);
       setError(null);
@@ -215,10 +250,10 @@ export default function DownlinePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin]);
 
   // Recursive search function
-  const searchInUser = (user: DownlineUser, query: string): boolean => {
+  const searchInUser = useCallback((user: DownlineUser, query: string): boolean => {
     const lowerQuery = query.toLowerCase();
     const matches = 
       user.fullName?.toLowerCase().includes(lowerQuery) ||
@@ -235,10 +270,10 @@ export default function DownlinePage() {
     }
 
     return false;
-  };
+  }, []);
 
   // Recursive filter function
-  const filterNestedDownlines = (downlines: DownlineUser[], query: string): DownlineUser[] => {
+  const filterNestedDownlines = useCallback((downlines: DownlineUser[], query: string): DownlineUser[] => {
     if (!query) return downlines;
 
     return downlines
@@ -253,14 +288,14 @@ export default function DownlinePage() {
         return filteredUser;
       })
       .filter((user): user is DownlineUser => user !== null);
-  };
+  }, [searchInUser]);
 
   // Filter and search downlines
   const filteredDownlines = useMemo(() => {
     if (!data?.downline) return [];
     if (!searchQuery) return data.downline;
     return filterNestedDownlines(data.downline, searchQuery);
-  }, [data?.downline, searchQuery]);
+  }, [data?.downline, searchQuery, filterNestedDownlines]);
 
   // Recursive render function for nested downlines
   const renderDownlineUser = (user: DownlineUser, depth: number = 0) => {

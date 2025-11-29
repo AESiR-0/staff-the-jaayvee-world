@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { FileText, Plus, Edit2, Trash2, Search, X, Save, CheckSquare, Users, User, Calendar, GripVertical } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { API_BASE_URL } from "@/lib/api";

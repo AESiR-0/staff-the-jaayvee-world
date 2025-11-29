@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Users, Shield, Settings, Plus, X, Edit, Trash2, Save, Check, X as XIcon } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
@@ -88,7 +88,7 @@ export default function RBACPage() {
     checkAuthorization();
   }, [router]);
 
-  const fetchRBACData = async () => {
+  const fetchRBACData = useCallback(async () => {
     try {
       const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=all`);
       if (response.ok) {
@@ -111,7 +111,7 @@ export default function RBACPage() {
       console.error("Failed to fetch RBAC data:", err);
       setError("Failed to load RBAC data");
     }
-  };
+  }, []);
   
   // Helper function to find permission ID in database by resource and action
   const findPermissionId = (resource: string, action: string): string | null => {

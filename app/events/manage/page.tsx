@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Upload, Image as ImageIcon, Search, Filter, ChevronDown, ChevronUp, FileText, Download, Loader2, Calendar, Send, Eye, EyeOff } from "lucide-react";
 import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 import { utcToDateTimeLocal } from "@/lib/utils/timezone";
+import { CategoryCombobox } from "@/components/CategoryCombobox";
+import { getEventCategories } from "@/lib/constants/event-categories";
 
 // This page requires 'events' resource access or super admin
 
@@ -55,6 +57,8 @@ interface Event {
   startDate: string;
   endDate: string | null;
   banner: string | null;
+  thumbnail: string | null;
+  category: string | null;
   venue: string | null;
   city: string | null;
   state: string | null;
@@ -93,6 +97,8 @@ export default function ManageEventsPage() {
     startDate: "",
     endDate: "",
     banner: "",
+    thumbnail: "",
+    category: "",
     venue: "",
     city: "",
     state: "",
@@ -122,8 +128,13 @@ export default function ManageEventsPage() {
   const [updatingTicketTypes, setUpdatingTicketTypes] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for create form
   const [selectedEditFile, setSelectedEditFile] = useState<File | null>(null); // Store selected file for edit form
+  const [selectedThumbnailFile, setSelectedThumbnailFile] = useState<File | null>(null); // Store selected thumbnail file for create form
+  const [selectedEditThumbnailFile, setSelectedEditThumbnailFile] = useState<File | null>(null); // Store selected thumbnail file for edit form
   const [previewUrl, setPreviewUrl] = useState<string | null>(null); // Preview URL for create form
   const [previewEditUrl, setPreviewEditUrl] = useState<string | null>(null); // Preview URL for edit form
+  const [previewThumbnailUrl, setPreviewThumbnailUrl] = useState<string | null>(null); // Preview URL for thumbnail create form
+  const [previewEditThumbnailUrl, setPreviewEditThumbnailUrl] = useState<string | null>(null); // Preview URL for thumbnail edit form
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]); // Available categories from events and global list
   const [shareMessages, setShareMessages] = useState<Record<string, { id?: string; message: string; platform: string | null }>>({
     general: { message: '', platform: null },
     whatsapp: { message: '', platform: 'whatsapp' },
@@ -141,11 +152,29 @@ export default function ManageEventsPage() {
   const [scheduledPublishTime, setScheduledPublishTime] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  const editThumbnailInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   // Use relative path for same-origin requests, or API_BASE_URL if set
   // Default to talaash API if not set (ticket type APIs are in jaayvee-world/talaash)
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+
+  // Load available categories
+  useEffect(() => {
+    const loadCategories = () => {
+      const globalCategories = getEventCategories();
+      const eventCategories = new Set<string>();
+      events.forEach(event => {
+        if (event.category) {
+          eventCategories.add(event.category);
+        }
+      });
+      const allCategories = Array.from(new Set([...globalCategories, ...Array.from(eventCategories)])).sort();
+      setAvailableCategories(allCategories);
+    };
+    loadCategories();
+  }, [events]);
 
   // Cleanup preview URLs on unmount
   useEffect(() => {
@@ -156,8 +185,14 @@ export default function ManageEventsPage() {
       if (previewEditUrl) {
         URL.revokeObjectURL(previewEditUrl);
       }
+      if (previewThumbnailUrl) {
+        URL.revokeObjectURL(previewThumbnailUrl);
+      }
+      if (previewEditThumbnailUrl) {
+        URL.revokeObjectURL(previewEditThumbnailUrl);
+      }
     };
-  }, [previewUrl, previewEditUrl]);
+  }, [previewUrl, previewEditUrl, previewThumbnailUrl, previewEditThumbnailUrl]);
 
   useEffect(() => {
     // Check if user is authorized
@@ -273,15 +308,32 @@ export default function ManageEventsPage() {
 
     try {
       let bannerUrl = createForm.banner || null;
+      let thumbnailUrl = createForm.thumbnail || null;
 
-      // Upload image if a file was selected
+      // Upload banner image if a file was selected
       if (selectedFile) {
         try {
           bannerUrl = await uploadImageFile(selectedFile);
-          setUploadProgress('Image uploaded successfully!');
+          setUploadProgress('Banner image uploaded successfully!');
         } catch (err: any) {
-          console.error('Image upload error:', err);
-          setError(err.message || 'Failed to upload image');
+          console.error('Banner image upload error:', err);
+          setError(err.message || 'Failed to upload banner image');
+          setUploadingImage(false);
+          setUploadProgress(null);
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      // Upload thumbnail image if a file was selected
+      if (selectedThumbnailFile) {
+        try {
+          setUploadProgress('Uploading thumbnail image...');
+          thumbnailUrl = await uploadImageFile(selectedThumbnailFile);
+          setUploadProgress('Thumbnail image uploaded successfully!');
+        } catch (err: any) {
+          console.error('Thumbnail image upload error:', err);
+          setError(err.message || 'Failed to upload thumbnail image');
           setUploadingImage(false);
           setUploadProgress(null);
           setSubmitting(false);
@@ -314,6 +366,8 @@ export default function ManageEventsPage() {
           startDate: createForm.startDate,
           endDate: createForm.endDate || null,
           banner: bannerUrl,
+          thumbnail: thumbnailUrl,
+          category: createForm.category || null,
           venue: createForm.venue || null,
           city: createForm.city || null,
           state: createForm.state || null,
@@ -407,6 +461,9 @@ export default function ManageEventsPage() {
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
       }
+      if (previewThumbnailUrl) {
+        URL.revokeObjectURL(previewThumbnailUrl);
+      }
       
       setCreateForm({
         title: "",
@@ -414,6 +471,8 @@ export default function ManageEventsPage() {
         startDate: "",
         endDate: "",
         banner: "",
+        thumbnail: "",
+        category: "",
         venue: "",
         city: "",
         state: "",
@@ -431,7 +490,9 @@ export default function ManageEventsPage() {
         selectedTemplateId: "",
       });
       setSelectedFile(null);
+      setSelectedThumbnailFile(null);
       setPreviewUrl(null);
+      setPreviewThumbnailUrl(null);
       setTemplateCustomizations({});
       setShowTemplateCustomization(false);
       setCreating(false);
@@ -480,11 +541,13 @@ export default function ManageEventsPage() {
 
     try {
       let bannerUrl = editForm.banner || null;
+      let thumbnailUrl = editForm.thumbnail || null;
+      const originalThumbnail = editForm.thumbnail || null;
 
-      // Upload new image if a file was selected
+      // Upload new banner image if a file was selected
       if (selectedEditFile) {
         try {
-          setUploadProgress('Uploading new image...');
+          setUploadProgress('Uploading new banner image...');
           bannerUrl = await uploadImageFile(selectedEditFile);
           
           // Delete old image if it exists and is a Supabase URL
@@ -492,10 +555,10 @@ export default function ManageEventsPage() {
             await deleteImage(originalBanner);
           }
           
-          setUploadProgress('Image uploaded successfully!');
+          setUploadProgress('Banner image uploaded successfully!');
         } catch (err: any) {
-          console.error('Image upload error:', err);
-          setError(err.message || 'Failed to upload image');
+          console.error('Banner image upload error:', err);
+          setError(err.message || 'Failed to upload banner image');
           setUploadingImage(false);
           setUploadProgress(null);
           return;
@@ -508,9 +571,38 @@ export default function ManageEventsPage() {
         if (bannerWasRemoved) {
           // Only delete if it's a Supabase storage URL (to avoid deleting external URLs)
           if (originalBanner && originalBanner.includes('supabase.co/storage')) {
-            setUploadProgress('Removing old image...');
+            setUploadProgress('Removing old banner image...');
             await deleteImage(originalBanner);
           }
+        }
+      }
+
+      // Upload new thumbnail image if a file was selected
+      if (selectedEditThumbnailFile) {
+        try {
+          setUploadProgress('Uploading new thumbnail image...');
+          thumbnailUrl = await uploadImageFile(selectedEditThumbnailFile);
+          
+          // Delete old thumbnail if it exists and is a Supabase URL
+          if (originalThumbnail && originalThumbnail.trim() !== '' && originalThumbnail.includes('supabase.co/storage')) {
+            await deleteImage(originalThumbnail);
+          }
+          
+          setUploadProgress('Thumbnail image uploaded successfully!');
+        } catch (err: any) {
+          console.error('Thumbnail image upload error:', err);
+          setError(err.message || 'Failed to upload thumbnail image');
+          setUploadingImage(false);
+          setUploadProgress(null);
+          return;
+        }
+      } else {
+        // Check if thumbnail was removed
+        const thumbnailWasRemoved = originalThumbnail && originalThumbnail.trim() !== '' && (!editForm.thumbnail || editForm.thumbnail.trim() === '');
+        
+        if (thumbnailWasRemoved && originalThumbnail.includes('supabase.co/storage')) {
+          setUploadProgress('Removing old thumbnail image...');
+          await deleteImage(originalThumbnail);
         }
       }
 
@@ -538,6 +630,7 @@ export default function ManageEventsPage() {
         body: JSON.stringify({
           ...editForm,
           banner: bannerUrl,
+          thumbnail: thumbnailUrl,
           attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
         }),
       });
@@ -961,7 +1054,7 @@ export default function ManageEventsPage() {
     }
   };
 
-  const handleImageSelect = (file: File, isEdit: boolean = false) => {
+  const handleImageSelect = (file: File, isEdit: boolean = false, isThumbnail: boolean = false) => {
     if (!file) return;
 
     // Validate file type
@@ -971,10 +1064,15 @@ export default function ManageEventsPage() {
       return;
     }
 
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024;
+    // Validate file size (5-8 MB for banner, 1-5 MB for thumbnail)
+    const minSize = isThumbnail ? 1 * 1024 * 1024 : 5 * 1024 * 1024; // 1 MB for thumbnail, 5 MB for banner
+    const maxSize = isThumbnail ? 5 * 1024 * 1024 : 8 * 1024 * 1024; // 5 MB for thumbnail, 8 MB for banner
+    if (file.size < minSize) {
+      setError(`File size must be at least ${minSize / (1024 * 1024)} MB.`);
+      return;
+    }
     if (file.size > maxSize) {
-      setError('File size exceeds 10MB limit.');
+      setError(`File size must not exceed ${maxSize / (1024 * 1024)} MB.`);
       return;
     }
 
@@ -984,15 +1082,25 @@ export default function ManageEventsPage() {
     const preview = URL.createObjectURL(file);
 
     if (isEdit) {
-      setSelectedEditFile(file);
-      setPreviewEditUrl(preview);
-      // Clear the banner URL field since we have a new file
-      setEditForm({ ...editForm, banner: '' });
+      if (isThumbnail) {
+        setSelectedEditThumbnailFile(file);
+        setPreviewEditThumbnailUrl(preview);
+        setEditForm({ ...editForm, thumbnail: '' });
+      } else {
+        setSelectedEditFile(file);
+        setPreviewEditUrl(preview);
+        setEditForm({ ...editForm, banner: '' });
+      }
     } else {
-      setSelectedFile(file);
-      setPreviewUrl(preview);
-      // Clear the banner URL field since we have a new file
-      setCreateForm({ ...createForm, banner: '' });
+      if (isThumbnail) {
+        setSelectedThumbnailFile(file);
+        setPreviewThumbnailUrl(preview);
+        setCreateForm({ ...createForm, thumbnail: '' });
+      } else {
+        setSelectedFile(file);
+        setPreviewUrl(preview);
+        setCreateForm({ ...createForm, banner: '' });
+      }
     }
   };
 
@@ -1893,7 +2001,8 @@ export default function ManageEventsPage() {
                   disabled={submitting}
                   value={createForm.description}
                   onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-y bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed whitespace-pre-wrap"
+                  placeholder="Enter event description. Line breaks and whitespace will be preserved."
                 />
               </div>
               {/* Template Selection */}
@@ -2268,10 +2377,11 @@ export default function ManageEventsPage() {
                               <div>
                                 <label className="block text-sm font-medium text-primary-fg mb-2">Description</label>
                                 <textarea
-                                  rows={3}
+                                  rows={4}
                                   value={editForm.description || ""}
                                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg"
+                                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-y bg-primary-bg text-primary-fg whitespace-pre-wrap"
+                                  placeholder="Enter event description. Line breaks and whitespace will be preserved."
                                 />
                               </div>
 
