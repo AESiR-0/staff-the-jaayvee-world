@@ -117,19 +117,41 @@ export default function DownlinePage() {
     const loadData = async () => {
       const session = getTeamSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = require('@/lib/rbac');
-      const admin = await isSuperAdmin(userEmail);
-      setIsAdmin(admin);
+      
+      if (!userEmail) {
+        setLoading(false);
+        return;
+      }
 
-      // If admin, fetch all team list first, then downline
-      if (admin) {
-        await fetchAllTeam();
-        // After fetching team list, fetch own downline
+      const { getAuthToken } = require('@/lib/auth-utils');
+      const { checkHasAccessClient } = require('@/lib/permissions');
+      const token = getAuthToken();
+      
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      
+      // Check if user has access to downline resource
+      const result = await checkHasAccessClient(userEmail, 'downline', token);
+      const hasAccess = result.hasAccess;
+      
+      // Super admins can see all team downlines
+      const isSuperAdminUser = result.reason === 'super_admin';
+      setIsAdmin(isSuperAdminUser);
+
+      if (hasAccess) {
+        // If admin, fetch all team list first, then downline
+        if (isSuperAdminUser) {
+          await fetchAllTeam();
+        }
+        // Fetch own downline
         await fetchDownline();
       } else {
-        // Regular team members fetch their own downline
-        await fetchDownline();
+        setError('You do not have permission to access this page');
       }
+      
+      setLoading(false);
     };
 
     loadData();

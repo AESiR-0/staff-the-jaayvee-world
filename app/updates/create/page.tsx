@@ -5,13 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Send, AlertCircle, UserPlus, X } from "lucide-react";
 import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 
-// Allowed emails for creating updates
-const ALLOWED_EMAIL = [
-  "sm2.thejaayveeworld@gmail.com",
-  "sm13.thejaayveeworld@gmail.com",
-  "md.thejaayveeworld@gmail.com",
-  "thejaayveeworldofficial@gmail.com"
-];
+// Updates creation requires specific permissions or super admin
 
 export default function CreateUpdatePage() {
   const router = useRouter();
@@ -52,9 +46,20 @@ export default function CreateUpdatePage() {
         const data = await response.json();
         const userEmail = data.data?.user?.email || data.data?.email || data.email;
 
-        // Check if user is super admin first
+        // Check permissions - updates creation is special (hardcoded emails or super admin)
+        // For now, check super admin first, then check hardcoded list
         const { isSuperAdmin } = require('@/lib/rbac');
+        const { checkHasAccessClient } = require('@/lib/permissions');
         const adminCheck = await isSuperAdmin(userEmail);
+        
+        // Allowed emails for creating updates (legacy support)
+        const ALLOWED_EMAIL = [
+          "sm2.thejaayveeworld@gmail.com",
+          "sm13.thejaayveeworld@gmail.com",
+          "md.thejaayveeworld@gmail.com",
+          "thejaayveeworldofficial@gmail.com"
+        ];
+        
         if (adminCheck || ALLOWED_EMAIL.includes(userEmail?.toLowerCase() || '')) {
           setAuthorized(true);
         } else {

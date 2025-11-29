@@ -2,8 +2,7 @@
 import { useState, useEffect } from "react";
 import { CheckCircle, UserPlus, Phone, User, Key, Users, Sparkles, Store, UserCheck, Shield, Eye, EyeOff, RefreshCw, Building2, Globe, Instagram, Youtube, Copy, Check } from "lucide-react";
 import { fetchAPI, API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
-import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
-import { isSuperAdmin } from "@/lib/rbac";
+import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 
 type RoleType = 'affiliate' | 'agent' | 'seller' | 'influencer' | 'staff';
 
@@ -202,10 +201,16 @@ export default function CreateUserPage() {
       if (session?.email) {
         setCurrentUserEmail(session.email);
         
-        // Check if user can create staff accounts
+        // Check if user can create staff accounts (requires super admin)
         try {
-          const adminCheck = await isSuperAdmin(session.email);
-          setCanCreateStaff(adminCheck);
+          const token = getAuthToken();
+          if (token) {
+            const { checkHasAccessClient } = require('@/lib/permissions');
+            const result = await checkHasAccessClient(session.email, '', token, true);
+            setCanCreateStaff(result.hasAccess && result.reason === 'super_admin');
+          } else {
+            setCanCreateStaff(false);
+          }
         } catch (error) {
           console.error('Error checking admin status:', error);
           setCanCreateStaff(false);

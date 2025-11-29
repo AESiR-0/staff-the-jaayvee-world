@@ -72,45 +72,24 @@ export default function WhatsAppBulkPage() {
       const session = getTeamSession();
       const userEmail = session?.email;
       
-      // Check if user is admin first (admins can always access)
-      const { isSuperAdmin } = require('@/lib/rbac');
-      const adminCheck = await isSuperAdmin(userEmail);
-      
-      if (adminCheck) {
-        setCanAccess(true);
+      if (!userEmail) {
+        setCanAccess(false);
         setCheckingAccess(false);
         return;
       }
 
-      // For non-admins, check RBAC permission
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=users`);
+      const { getAuthToken } = require('@/lib/auth-utils');
+      const { checkHasAccessClient } = require('@/lib/permissions');
+      const token = getAuthToken();
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data?.users) {
-          if (userEmail) {
-            // Find current user in the users list
-            const currentUser = data.data.users.find((u: any) => 
-              u.email?.toLowerCase() === userEmail.toLowerCase()
-            );
-            
-            if (currentUser && currentUser.permissions) {
-              const hasWhatsAppPermission = currentUser.permissions.some(
-                (p: any) => p.permission?.resource === 'whatsapp-bulk' && 
-                           p.permission?.action === 'access' && 
-                           p.isActive
-              );
-              setCanAccess(hasWhatsAppPermission);
-              setCheckingAccess(false);
-              return;
-            }
-          }
-        }
+      if (!token) {
+        setCanAccess(false);
+        setCheckingAccess(false);
+        return;
       }
       
-      // Fallback: deny access
-      setCanAccess(false);
+      const result = await checkHasAccessClient(userEmail, 'whatsapp-bulk', token);
+      setCanAccess(result.hasAccess);
     } catch (err) {
       console.error('Error checking permissions:', err);
       setCanAccess(false);

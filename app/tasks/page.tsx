@@ -83,16 +83,34 @@ export default function TasksPage() {
     fetchTeamUsers();
     checkCreatePermission();
     
-    // Check if user is admin first, then fetch tasks
-    const checkAdminStatus = async () => {
+    // Check permissions and fetch tasks
+    const checkPermissions = async () => {
       const session = getTeamSession();
       const userEmail = session?.email;
-      const adminStatus = await isSuperAdmin(userEmail);
-      setIsAdmin(adminStatus);
-      // Fetch tasks after admin status is determined
+      
+      if (!userEmail) {
+        setIsAdmin(false);
+        fetchTasks();
+        return;
+      }
+
+      const { getAuthToken } = require('@/lib/auth-utils');
+      const { checkHasAccessClient } = require('@/lib/permissions');
+      const token = getAuthToken();
+      
+      if (!token) {
+        setIsAdmin(false);
+        fetchTasks();
+        return;
+      }
+      
+      // Check if user has access to tasks
+      const result = await checkHasAccessClient(userEmail, 'tasks', token);
+      setIsAdmin(result.hasAccess);
+      // Fetch tasks after permission check
       fetchTasks();
     };
-    checkAdminStatus();
+    checkPermissions();
   }, []);
 
   const checkCreatePermission = async () => {

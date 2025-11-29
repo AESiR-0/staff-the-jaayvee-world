@@ -23,6 +23,7 @@ export default function CareersPage() {
   const [careers, setCareers] = useState<CareerData[]>([]);
   const [loading, setLoading] = useState(true);
   const [canManage, setCanManage] = useState(false);
+  const [checkingPermission, setCheckingPermission] = useState(true);
   const [editingCareer, setEditingCareer] = useState<CareerData | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,50 +47,44 @@ export default function CareersPage() {
 
   const checkPermission = useCallback(async () => {
     try {
-      // Check RBAC permission
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=users`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data?.users) {
-          const session = getTeamSession();
-          const userEmail = session?.email;
-          
-          if (userEmail) {
-            // Find current user in the users list
-            const currentUser = data.data.users.find((u: any) => 
-              u.email?.toLowerCase() === userEmail.toLowerCase()
-            );
-            
-            if (currentUser && currentUser.permissions) {
-              const hasCareerPermission = currentUser.permissions.some(
-                (p: any) => p.permission?.resource === 'careers' && 
-                           p.permission?.action === 'access' && 
-                           p.isActive
-              );
-              setCanManage(hasCareerPermission);
-              return;
-            }
-          }
-        }
-      }
-      
-      // Fallback: check if user is admin
+      setCheckingPermission(true);
       const session = getTeamSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = require('@/lib/rbac');
-      const adminCheck = await isSuperAdmin(userEmail);
-      setCanManage(adminCheck);
+      
+      if (!userEmail) {
+        setCanManage(false);
+        setCheckingPermission(false);
+        return;
+      }
+
+      const { getAuthToken } = require('@/lib/auth-utils');
+      const { checkHasAccessClient } = require('@/lib/permissions');
+      const token = getAuthToken();
+      
+      if (!token) {
+        setCanManage(false);
+        setCheckingPermission(false);
+        return;
+      }
+      
+      const result = await checkHasAccessClient(userEmail, 'careers', token);
+      setCanManage(result.hasAccess);
     } catch (err) {
       console.error('Error checking permissions:', err);
       // Fallback: check if user is admin
       const session = getTeamSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = require('@/lib/rbac');
-      const adminCheck = await isSuperAdmin(userEmail);
-      setCanManage(adminCheck);
+      if (userEmail) {
+        const { isSuperAdmin } = require('@/lib/rbac');
+        const adminCheck = await isSuperAdmin(userEmail);
+        setCanManage(adminCheck);
+      } else {
+        setCanManage(false);
+      }
+    } finally {
+      setCheckingPermission(false);
     }
-  }, [API_BASE_URL]);
+  }, []);
 
   const fetchCareers = useCallback(async () => {
     try {
@@ -285,12 +280,12 @@ export default function CareersPage() {
     }
   };
 
-  if (loading) {
+  if (checkingPermission || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-          <p className="text-gray-600">Loading careers...</p>
+          <p className="text-gray-600">{checkingPermission ? 'Checking permissions...' : 'Loading careers...'}</p>
         </div>
       </div>
     );

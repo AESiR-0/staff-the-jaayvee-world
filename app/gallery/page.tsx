@@ -30,6 +30,7 @@ export default function GalleryPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [editingImage, setEditingImage] = useState<GalleryImage | null>(null);
   const [canManage, setCanManage] = useState(false);
+  const [checkingPermission, setCheckingPermission] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -66,31 +67,33 @@ export default function GalleryPage() {
 
   const checkPermission = async () => {
     try {
-      // Check if user is admin first (admins can always upload)
+      setCheckingPermission(true);
       const session = getTeamSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = require('@/lib/rbac');
-      const adminCheck = await isSuperAdmin(userEmail);
       
-      if (adminCheck) {
-        setCanManage(true);
+      if (!userEmail) {
+        setCanManage(false);
+        setCheckingPermission(false);
         return;
       }
 
-      // For non-admins, check RBAC permission
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`);
+      const { getAuthToken } = require('@/lib/auth-utils');
+      const { checkHasAccessClient } = require('@/lib/permissions');
+      const token = getAuthToken();
       
-      if (response.ok) {
-        const data = await response.json();
-        const userPermissions = data.data?.userPermissions || [];
-        const hasGalleryPermission = userPermissions.some(
-          (up: any) => up.permission?.resource === 'gallery' && up.isActive
-        );
-        setCanManage(hasGalleryPermission);
+      if (!token) {
+        setCanManage(false);
+        setCheckingPermission(false);
+        return;
       }
+      
+      const result = await checkHasAccessClient(userEmail, 'gallery', token);
+      setCanManage(result.hasAccess);
     } catch (err) {
       console.error('Error checking permissions:', err);
+      setCanManage(false);
+    } finally {
+      setCheckingPermission(false);
     }
   };
 
@@ -276,11 +279,25 @@ export default function GalleryPage() {
     }
   };
 
-  if (loading) {
+  if (checkingPermission || loading) {
     return (
       <div className="p-6">
         <div className="flex justify-center items-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <p className="ml-3 text-gray-600">{checkingPermission ? 'Checking permissions...' : 'Loading gallery...'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!canManage) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <h2 className="text-xl font-semibold text-red-800 mb-2">Access Denied</h2>
+            <p className="text-red-600">You don&apos;t have permission to access the gallery. Please contact an administrator.</p>
+          </div>
         </div>
       </div>
     );

@@ -300,8 +300,19 @@ export default function EventScenariosPage() {
         return;
       }
 
-      const adminCheck = await isSuperAdmin(session.email);
-      if (!adminCheck) {
+      const { getAuthToken } = require('@/lib/auth-utils');
+      const { checkHasAccessClient } = require('@/lib/permissions');
+      const token = getAuthToken();
+      
+      if (!token) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
+      
+      // Event scenarios require super admin
+      const result = await checkHasAccessClient(session.email, '', token, true);
+      if (!result.hasAccess || result.reason !== 'super_admin') {
         setAuthorized(false);
         setLoading(false);
         return;

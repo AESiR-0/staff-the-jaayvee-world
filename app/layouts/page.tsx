@@ -26,6 +26,7 @@ export default function LayoutsPage() {
   const [layouts, setLayouts] = useState<LayoutData[]>([]);
   const [loading, setLoading] = useState(true);
   const [canManage, setCanManage] = useState(false);
+  const [checkingPermission, setCheckingPermission] = useState(true);
   const [editingLayout, setEditingLayout] = useState<LayoutData | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -55,54 +56,35 @@ export default function LayoutsPage() {
 
   const checkPermission = useCallback(async () => {
     try {
-      // Check if user is admin first (admins can always access)
+      setCheckingPermission(true);
       const session = getTeamSession();
       const userEmail = session?.email;
-      const { isSuperAdmin } = require('@/lib/rbac');
-      const adminCheck = await isSuperAdmin(userEmail);
       
-      if (adminCheck) {
-        setCanManage(true);
+      if (!userEmail) {
+        setCanManage(false);
+        setCheckingPermission(false);
         return;
       }
 
-      // For non-admins, check RBAC permission
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=users`);
+      const { getAuthToken } = require('@/lib/auth-utils');
+      const { checkHasAccessClient } = require('@/lib/permissions');
+      const token = getAuthToken();
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data?.users) {
-          if (userEmail) {
-            // Find current user in the users list
-            const currentUser = data.data.users.find((u: any) => 
-              u.email?.toLowerCase() === userEmail.toLowerCase()
-            );
-            
-            if (currentUser && currentUser.permissions) {
-              const hasLayoutPermission = currentUser.permissions.some(
-                (p: any) => p.permission?.resource === 'layouts' && 
-                           p.permission?.action === 'access' && 
-                           p.isActive
-              );
-              setCanManage(hasLayoutPermission);
-              return;
-            }
-          }
-        }
+      if (!token) {
+        setCanManage(false);
+        setCheckingPermission(false);
+        return;
       }
       
-      // Fallback: deny access
-      setCanManage(false);
+      const result = await checkHasAccessClient(userEmail, 'layouts', token);
+      setCanManage(result.hasAccess);
     } catch (err) {
       console.error('Error checking permissions:', err);
-      // Fallback: check if user is admin
-      const session = getTeamSession();
-      const userEmail = session?.email;
-      const { isSuperAdmin } = require('@/lib/rbac');
-      const adminCheck = await isSuperAdmin(userEmail);
-      setCanManage(adminCheck);
+      setCanManage(false);
+    } finally {
+      setCheckingPermission(false);
     }
-  }, [API_BASE_URL]);
+  }, []);
 
   const fetchLayouts = useCallback(async () => {
     try {
@@ -331,12 +313,12 @@ export default function LayoutsPage() {
     }
   };
 
-  if (loading) {
+  if (checkingPermission || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-gray-600">Loading layouts...</p>
+          <p className="text-gray-600">{checkingPermission ? 'Checking permissions...' : 'Loading layouts...'}</p>
         </div>
       </div>
     );

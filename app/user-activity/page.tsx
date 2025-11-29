@@ -44,11 +44,21 @@ export default function UserActivityPage() {
 
   const checkAdminStatus = async () => {
     try {
-      const adminStatus = await isSuperAdmin(currentUserEmail);
-      setIsAdmin(adminStatus);
+      const { getAuthToken } = require('@/lib/auth-utils');
+      const { checkHasAccessClient } = require('@/lib/permissions');
+      const token = getAuthToken();
+      
+      if (!token || !currentUserEmail) {
+        setIsAdmin(false);
+        return;
+      }
+      
+      // User activity requires super admin
+      const result = await checkHasAccessClient(currentUserEmail, '', token, true);
+      setIsAdmin(result.hasAccess && result.reason === 'super_admin');
     } catch (err) {
       console.error('Error checking admin status:', err);
-      setIsAdmin(false); // Set to false on error
+      setIsAdmin(false);
     }
   };
 

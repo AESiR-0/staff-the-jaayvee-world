@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, MessageSquare, Plus, X, Save, Calendar } from "lucide-react";
-import { authenticatedFetch, getAuthToken } from "@/lib/auth-utils";
+import { ArrowLeft, MessageSquare, Plus, X, Save, Calendar, Loader2 } from "lucide-react";
+import { authenticatedFetch, getAuthToken, getTeamSession } from "@/lib/auth-utils";
 import { API_BASE_URL } from "@/lib/api";
 
 interface Event {
@@ -24,6 +24,8 @@ interface ShareMessage {
 export default function EventShareMessagesPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [shareMessages, setShareMessages] = useState<ShareMessage[]>([]);
@@ -38,8 +40,42 @@ export default function EventShareMessagesPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchEvents();
-  }, []);
+    const checkAuthorization = async () => {
+      try {
+        const session = getTeamSession();
+        const userEmail = session?.email;
+        
+        if (!userEmail) {
+          router.push("/login");
+          return;
+        }
+
+        const token = getAuthToken();
+        if (!token) {
+          router.push("/login");
+          return;
+        }
+
+        // Use centralized permission check - share messages requires events access
+        const { checkHasAccessClient } = require('@/lib/permissions');
+        const result = await checkHasAccessClient(userEmail, 'events', token);
+        
+        if (result.hasAccess) {
+          setAuthorized(true);
+          fetchEvents();
+        } else {
+          router.push("/dashboard");
+        }
+      } catch (err) {
+        console.error("Authorization check failed:", err);
+        router.push("/login");
+      } finally {
+        setCheckingAuth(false);
+      }
+    };
+
+    checkAuthorization();
+  }, [router]);
 
   useEffect(() => {
     if (selectedEventId) {
@@ -50,6 +86,7 @@ export default function EventShareMessagesPage() {
 
   const fetchEvents = async () => {
     try {
+      setLoading(true);
       const response = await authenticatedFetch(`${API_BASE_URL}/api/events?all=true`);
       const data = await response.json();
       
@@ -67,6 +104,30 @@ export default function EventShareMessagesPage() {
       setLoading(false);
     }
   };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-gray-600">Checking permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authorized) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <h2 className="text-xl font-semibold text-red-800 mb-2">Access Denied</h2>
+            <p className="text-red-600">You don&apos;t have permission to access this page. Please contact an administrator.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const fetchShareMessages = async (eventId: string) => {
     if (!eventId) return;

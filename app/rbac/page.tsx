@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Users, Shield, Settings, Plus, X, Edit, Trash2, Save, Check, X as XIcon } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
-import { TEAM_PERMISSIONS } from "@/lib/rbac";
+import { TEAM_PERMISSIONS, TEAM_PERMISSION_LIST } from "@/lib/rbac";
 
 // Only allow thejaayveeworldofficial@gmail.com
 const ALLOWED_EMAIL = "thejaayveeworldofficial@gmail.com";
@@ -41,6 +41,14 @@ export default function RBACPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  
+  // Get unique available permissions from TEAM_PERMISSIONS (source of truth)
+  const availablePermissions = TEAM_PERMISSION_LIST.map((perm, index) => ({
+    id: `perm-${perm.resource}-${perm.action}-${index}`, // Generate unique ID
+    action: perm.action,
+    resource: perm.resource,
+    description: perm.description,
+  }));
   const [activeTab, setActiveTab] = useState<'users' | 'groups'>('users');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
@@ -87,7 +95,15 @@ export default function RBACPage() {
         const data = await response.json();
         if (data.success) {
           setUsers(data.data.users || []);
-          setPermissions(data.data.permissions || []);
+          // Use database permissions but we'll use TEAM_PERMISSIONS as source of truth for dropdown
+          const dbPermissions = data.data.permissions || [];
+          // Remove duplicates from database permissions based on resource+action
+          const uniqueDbPermissions = Array.from(
+            new Map(
+              dbPermissions.map((p: Permission) => [`${p.resource}-${p.action}`, p])
+            ).values()
+          );
+          setPermissions(uniqueDbPermissions);
           setGroups(data.data.groups || []);
         }
       }
@@ -96,9 +112,62 @@ export default function RBACPage() {
       setError("Failed to load RBAC data");
     }
   };
+  
+  // Helper function to find permission ID in database by resource and action
+  const findPermissionId = (resource: string, action: string): string | null => {
+    const found = permissions.find(
+      p => p.resource === resource && p.action === action
+    );
+    return found?.id || null;
+  };
+  
+  // Helper function to check if user has a specific permission
+  const userHasPermission = (user: User, resource: string, action: string): boolean => {
+    if (!user.permissions) return false;
+    return user.permissions.some(
+      p => p.resource === resource && p.action === action
+    );
+  };
+  
+  // Helper function to get permission ID for assignment (create if doesn't exist)
+  const getOrCreatePermissionId = async (resource: string, action: string): Promise<string | null> => {
+    // First check if it exists in database permissions
+    const existing = findPermissionId(resource, action);
+    if (existing) return existing;
+    
+    // If not found, we need to create it or use a fallback
+    // For now, return null and let the API handle creation
+    return null;
+  };
 
-  const handleAssignPermissionToUser = async (userId: string, permissionId: string) => {
+  const handleAssignPermissionToUser = async (userId: string, resource: string, action: string) => {
     try {
+      // Find or get permission ID
+      let permissionId = findPermissionId(resource, action);
+      
+      // If permission doesn't exist in DB, try to create it or use resource+action
+      if (!permissionId) {
+        // Try to find by resource+action combination
+        const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "assignPermissionToUser",
+            data: { userId, resource, action }
+          }),
+        });
+        const result = await response.json();
+        if (result.success) {
+          setSuccess("Permission assigned successfully");
+          await fetchRBACData();
+          setTimeout(() => setSuccess(null), 3000);
+          return;
+        } else {
+          setError(result.error || "Failed to assign permission");
+          return;
+        }
+      }
+      
+      // Use existing permission ID
       const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`, {
         method: "POST",
         body: JSON.stringify({
@@ -243,8 +312,33 @@ export default function RBACPage() {
     }
   };
 
-  const handleAssignPermissionToGroup = async (groupId: string, permissionId: string) => {
+  const handleAssignPermissionToGroup = async (groupId: string, resource: string, action: string) => {
     try {
+      // Find or get permission ID
+      let permissionId = findPermissionId(resource, action);
+      
+      // If permission doesn't exist in DB, try to create it or use resource+action
+      if (!permissionId) {
+        const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`, {
+          method: "POST",
+          body: JSON.stringify({
+            action: "assignPermissionToGroup",
+            data: { groupId, resource, action }
+          }),
+        });
+        const result = await response.json();
+        if (result.success) {
+          setSuccess("Permission assigned to group successfully");
+          await fetchRBACData();
+          setTimeout(() => setSuccess(null), 3000);
+          return;
+        } else {
+          setError(result.error || "Failed to assign permission to group");
+          return;
+        }
+      }
+      
+      // Use existing permission ID
       const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac`, {
         method: "POST",
         body: JSON.stringify({
@@ -264,6 +358,14 @@ export default function RBACPage() {
     } catch (err: any) {
       setError(err.message || "Failed to assign permission to group");
     }
+  };
+  
+  // Helper function to check if group has a specific permission
+  const groupHasPermission = (group: Group, resource: string, action: string): boolean => {
+    if (!group.permissions) return false;
+    return group.permissions.some(
+      p => p.resource === resource && p.action === action
+    );
   };
 
   const handleRemovePermissionFromGroup = async (groupId: string, permissionId: string) => {
@@ -401,8 +503,14 @@ export default function RBACPage() {
             <h2 className="text-xl font-semibold text-primary-fg mb-4">Users & Permissions</h2>
             <div className="space-y-4">
               {users.map((user) => {
-                const userPermissionIds = new Set(user.permissions?.map(p => p.id) || []);
                 const isSuperAdmin = user.email?.toLowerCase() === 'thejaayveeworldofficial@gmail.com';
+                // Get unique permissions for this user (remove duplicates by resource+action)
+                const userUniquePermissions = Array.from(
+                  new Map(
+                    (user.permissions || []).map((p) => [`${p.resource}-${p.action}`, p])
+                  ).values()
+                );
+                
                 return (
                   <div key={user.id} className="border border-primary-border rounded-lg p-4">
                     <div className="flex items-start justify-between">
@@ -418,7 +526,7 @@ export default function RBACPage() {
                         <p className="text-sm text-primary-muted">{user.email}</p>
                         <div className="mt-2">
                           <p className="text-sm font-medium text-primary-fg mb-2">
-                            Current Permissions:
+                            Current Permissions ({userUniquePermissions.length}):
                             {isSuperAdmin && (
                               <span className="ml-2 text-xs text-yellow-600 font-normal">
                                 (Universal Access - All Permissions)
@@ -430,21 +538,26 @@ export default function RBACPage() {
                               <span className="px-3 py-1 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/50 text-yellow-600 rounded text-sm font-medium">
                                 All Permissions Enabled
                               </span>
-                            ) : user.permissions && user.permissions.length > 0 ? (
-                              user.permissions.map((permission) => (
-                                <span
-                                  key={permission.id}
-                                  className="px-2 py-1 bg-primary-accent-light text-primary-fg rounded text-sm flex items-center gap-1"
-                                >
-                                  {TEAM_PERMISSIONS[permission.resource as keyof typeof TEAM_PERMISSIONS]?.description || `${permission.action}:${permission.resource}`}
-                                  <button
-                                    onClick={() => handleRemovePermissionFromUser(user.id, permission.id)}
-                                    className="hover:text-red-500"
+                            ) : userUniquePermissions.length > 0 ? (
+                              userUniquePermissions.map((permission) => {
+                                const permKey = permission.resource as keyof typeof TEAM_PERMISSIONS;
+                                const permInfo = TEAM_PERMISSIONS[permKey];
+                                const description = permInfo?.description || `${permission.action}:${permission.resource}`;
+                                return (
+                                  <span
+                                    key={`${permission.resource}-${permission.action}`}
+                                    className="px-2 py-1 bg-primary-accent-light text-primary-fg rounded text-sm flex items-center gap-1"
                                   >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </span>
-                              ))
+                                    {description}
+                                    <button
+                                      onClick={() => handleRemovePermissionFromUser(user.id, permission.id)}
+                                      className="hover:text-red-500"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                );
+                              })
                             ) : (
                               <span className="text-primary-muted text-sm">No permissions assigned</span>
                             )}
@@ -458,23 +571,21 @@ export default function RBACPage() {
                             <select
                               onChange={(e) => {
                                 if (e.target.value) {
-                                  handleAssignPermissionToUser(user.id, e.target.value);
+                                  const [resource, action] = e.target.value.split('::');
+                                  handleAssignPermissionToUser(user.id, resource, action);
                                   e.target.value = "";
                                 }
                               }}
                               className="px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg text-sm flex-1"
                             >
                               <option value="">Select permission...</option>
-                              {permissions
-                                .filter(permission => !userPermissionIds.has(permission.id))
-                                .map((permission) => {
-                                  const permInfo = TEAM_PERMISSIONS[permission.resource as keyof typeof TEAM_PERMISSIONS];
-                                  return (
-                                    <option key={permission.id} value={permission.id}>
-                                      {permInfo?.description || `${permission.action}:${permission.resource}`}
-                                    </option>
-                                  );
-                                })}
+                              {availablePermissions
+                                .filter(perm => !userHasPermission(user, perm.resource, perm.action))
+                                .map((perm) => (
+                                  <option key={`${perm.resource}-${perm.action}`} value={`${perm.resource}::${perm.action}`}>
+                                    {perm.description}
+                                  </option>
+                                ))}
                             </select>
                             <button
                               onClick={() => handleAssignAllPermissionsToUser(user.id)}
@@ -623,28 +734,26 @@ export default function RBACPage() {
                       {/* Group Permissions */}
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium text-primary-fg">Permissions ({group.permissions?.length || 0})</h4>
+                          <h4 className="font-medium text-primary-fg">Permissions ({group.permissions ? Array.from(new Map(group.permissions.map((p) => [`${p.resource}-${p.action}`, p])).values()).length : 0})</h4>
                           <div className="flex gap-1">
                             <select
                               onChange={(e) => {
                                 if (e.target.value) {
-                                  handleAssignPermissionToGroup(group.id, e.target.value);
+                                  const [resource, action] = e.target.value.split('::');
+                                  handleAssignPermissionToGroup(group.id, resource, action);
                                   e.target.value = "";
                                 }
                               }}
                               className="text-xs px-2 py-1 border border-primary-border rounded bg-primary-bg text-primary-fg"
                             >
                               <option value="">Add permission...</option>
-                              {permissions
-                                .filter((permission) => !group.permissions?.some((p) => p.id === permission.id))
-                                .map((permission) => {
-                                  const permInfo = TEAM_PERMISSIONS[permission.resource as keyof typeof TEAM_PERMISSIONS];
-                                  return (
-                                    <option key={permission.id} value={permission.id}>
-                                      {permInfo?.description || `${permission.action}:${permission.resource}`}
-                                    </option>
-                                  );
-                                })}
+                              {availablePermissions
+                                .filter((perm) => !groupHasPermission(group, perm.resource, perm.action))
+                                .map((perm) => (
+                                  <option key={`${perm.resource}-${perm.action}`} value={`${perm.resource}::${perm.action}`}>
+                                    {perm.description}
+                                  </option>
+                                ))}
                             </select>
                             <button
                               onClick={() => handleAssignAllPermissionsToGroup(group.id)}
@@ -657,15 +766,21 @@ export default function RBACPage() {
                         </div>
                         <div className="space-y-1">
                           {group.permissions && group.permissions.length > 0 ? (
-                            group.permissions.map((permission) => {
-                              const permInfo = TEAM_PERMISSIONS[permission.resource as keyof typeof TEAM_PERMISSIONS];
+                            Array.from(
+                              new Map(
+                                group.permissions.map((p) => [`${p.resource}-${p.action}`, p])
+                              ).values()
+                            ).map((permission) => {
+                              const permKey = permission.resource as keyof typeof TEAM_PERMISSIONS;
+                              const permInfo = TEAM_PERMISSIONS[permKey];
+                              const description = permInfo?.description || `${permission.action}:${permission.resource}`;
                               return (
                                 <div
-                                  key={permission.id}
+                                  key={`${permission.resource}-${permission.action}`}
                                   className="flex items-center justify-between p-2 bg-primary-accent-light rounded text-sm"
                                 >
                                   <span className="text-primary-fg">
-                                    {permInfo?.description || `${permission.action}:${permission.resource}`}
+                                    {description}
                                   </span>
                                   <button
                                     onClick={() => handleRemovePermissionFromGroup(group.id, permission.id)}

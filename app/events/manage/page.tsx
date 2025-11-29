@@ -6,11 +6,7 @@ import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Uploa
 import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 import { utcToDateTimeLocal } from "@/lib/utils/timezone";
 
-// Only allow md and thejaayveeworldofficial
-const ALLOWED_EMAIL = [
-  "md.thejaayveeworld@gmail.com",
-  "thejaayveeworldofficial@gmail.com"
-];
+// This page requires 'events' resource access or super admin
 
 // Indian states and union territories
 const INDIAN_STATES = [
@@ -167,27 +163,25 @@ export default function ManageEventsPage() {
     // Check if user is authorized
     const checkAuthorization = async () => {
       try {
+        const session = getTeamSession();
+        const userEmail = session?.email;
+        
+        if (!userEmail) {
+          router.push("/login");
+          return;
+        }
+
         const token = getAuthToken();
         if (!token) {
           router.push("/login");
           return;
         }
 
-        // Verify user email from API
-        const response = await authenticatedFetch(`${API_BASE_URL}/api/auth/me`);
+        // Use centralized permission check
+        const { checkHasAccessClient } = require('@/lib/permissions');
+        const result = await checkHasAccessClient(userEmail, 'events', token);
         
-        if (!response.ok) {
-          router.push("/login");
-          return;
-        }
-
-        const data = await response.json();
-        const userEmail = data.data?.user?.email || data.data?.email || data.email;
-
-        // Check if user is super admin first
-        const { isSuperAdmin } = require('@/lib/rbac');
-        const adminCheck = await isSuperAdmin(userEmail);
-        if (adminCheck || ALLOWED_EMAIL.includes(userEmail?.toLowerCase() || '')) {
+        if (result.hasAccess) {
           setAuthorized(true);
           fetchEvents();
           fetchTemplates();
