@@ -380,7 +380,7 @@ export default function ManageEventsPage() {
           setError(`Event created but failed to add ticket types: ${ticketErr.message || 'Unknown error'}`);
         }
       } else {
-        setSuccess("Event created successfully!");
+      setSuccess("Event created successfully!");
       }
       
       // Apply template if selected
@@ -583,7 +583,7 @@ export default function ManageEventsPage() {
           } catch (deleteErr: any) {
             console.error(`Error deleting ticket type ${deletedType.id}:`, deleteErr);
             return { success: false, name: deletedType.name, error: deleteErr.message || 'Delete failed' };
-          }
+        }
         });
 
         // Wait for all deletions to complete
@@ -612,32 +612,32 @@ export default function ManageEventsPage() {
         // 3. Delete all existing ticket types that need updating (to recreate them)
         const existingTicketTypes = editTicketTypes.filter(tt => tt.id);
         const deleteExistingPromises = existingTicketTypes.map(async (ticketType) => {
-          try {
+            try {
             const deleteUrl = API_BASE_URL ? `${API_BASE_URL}/api/ticket-types/${ticketType.id}` : `/api/ticket-types/${ticketType.id}`;
             const deleteRes = await authenticatedFetch(deleteUrl, {
               method: "DELETE",
-            });
+              });
             if (!deleteRes.ok) {
               console.warn(`Failed to delete existing ticket type ${ticketType.id} for update`);
               return { success: false, name: ticketType.name, error: `HTTP ${deleteRes.status}` };
-            }
+              }
             return { success: true, name: ticketType.name };
           } catch (deleteErr: any) {
             console.error(`Error deleting existing ticket type ${ticketType.id}:`, deleteErr);
             return { success: false, name: ticketType.name, error: deleteErr.message || 'Delete failed' };
-          }
-        });
+            }
+          });
 
         // Wait for existing ticket type deletions
         const deleteExistingResults = await Promise.allSettled(deleteExistingPromises);
         const deleteExistingErrors: string[] = [];
         deleteExistingResults.forEach((result) => {
-          if (result.status === 'fulfilled' && !result.value.success) {
+            if (result.status === 'fulfilled' && !result.value.success) {
             deleteExistingErrors.push(`${result.value.name}: ${result.value.error}`);
-          } else if (result.status === 'rejected') {
+            } else if (result.status === 'rejected') {
             deleteExistingErrors.push(`Delete failed: ${result.reason?.message || 'Unknown error'}`);
-          }
-        });
+            }
+          });
 
         // 4. Create all ticket types in one batch (both updated and new)
         let createError: string | null = null;
@@ -694,10 +694,10 @@ export default function ManageEventsPage() {
             setTimeout(() => setError(null), 15000);
           } else {
             // Real errors (not just network issues)
-            const errorMessage = `Some ticket types failed to update:\n${allErrors.join('\n')}`;
-            console.warn(errorMessage);
-            setError(errorMessage);
-            setTimeout(() => setError(null), 10000);
+          const errorMessage = `Some ticket types failed to update:\n${allErrors.join('\n')}`;
+          console.warn(errorMessage);
+          setError(errorMessage);
+          setTimeout(() => setError(null), 10000);
           }
         } else {
           console.log('✅ All ticket types updated successfully');
@@ -1140,14 +1140,14 @@ export default function ManageEventsPage() {
         
         for (const pattern of patterns) {
           const match = normalized.match(pattern);
-          if (match) {
+        if (match) {
             const ticketIndex = parseInt(match[1] || '0', 10);
             const fieldType = (match[2] || '').toLowerCase() as 'name' | 'price' | 'quantity' | 'description';
-            if (ticketIndex > 0 && ['name', 'price', 'quantity', 'description'].includes(fieldType)) {
-              if (!ticketTypeIndices.has(ticketIndex)) {
-                ticketTypeIndices.set(ticketIndex, new Map());
-              }
-              ticketTypeIndices.get(ticketIndex)!.set(fieldType, index);
+          if (ticketIndex > 0 && ['name', 'price', 'quantity', 'description'].includes(fieldType)) {
+            if (!ticketTypeIndices.has(ticketIndex)) {
+              ticketTypeIndices.set(ticketIndex, new Map());
+            }
+            ticketTypeIndices.get(ticketIndex)!.set(fieldType, index);
               break; // Found a match, no need to check other patterns
             }
           }
@@ -1228,7 +1228,7 @@ export default function ManageEventsPage() {
             consecutiveEmpty++;
             // Only stop if we've hit many consecutive empty slots
             if (consecutiveEmpty >= maxConsecutiveEmpty) {
-              break;
+            break;
             }
           }
         }
@@ -2703,11 +2703,11 @@ export default function ManageEventsPage() {
                           </td>
                           <td className="py-3 px-4">
                             <div className="flex flex-col gap-1">
-                              <span className={`text-xs px-2 py-1 rounded-full ${
-                                event.published ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                              }`}>
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              event.published ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            }`}>
                                 {event.published ? 'Published' : event.scheduledPublishAt ? 'Scheduled' : 'Draft'}
-                              </span>
+                            </span>
                               {event.scheduledPublishAt && !event.published && (
                                 <span className="text-xs text-primary-muted">
                                   {new Date(event.scheduledPublishAt).toLocaleString()}

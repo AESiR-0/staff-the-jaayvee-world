@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, Send, Loader2, CheckCircle, XCircle, Plus, Filter, X } from 'lucide-react';
 import WhatsAppQRCode from '@/components/WhatsAppQRCode';
 import WhatsAppRichTextEditor from '@/components/WhatsAppRichTextEditor';
 import CSVUploadModal from '@/components/CSVUploadModal';
 import CSVListTable, { type CSVListItem } from '@/components/CSVListTable';
 import CSVPreviewTable, { type Contact } from '@/components/CSVPreviewTable';
-import { authenticatedFetch } from '@/lib/auth-utils';
+import { authenticatedFetch, getTeamSession } from '@/lib/auth-utils';
 import { parseCSV } from '@/lib/csv-parser';
 
 interface JobStatus {
@@ -37,6 +37,10 @@ export default function WhatsAppBulkPage() {
   const [error, setError] = useState<string | null>(null);
   const [serviceConfigured, setServiceConfigured] = useState<boolean | null>(null);
   const statusIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // RBAC state
+  const [canAccess, setCanAccess] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
   // CSV Database state
   const [csvLists, setCsvLists] = useState<CSVListItem[]>([]);
@@ -62,7 +66,61 @@ export default function WhatsAppBulkPage() {
   const [legacyContacts, setLegacyContacts] = useState<Contact[]>([]);
   const [csvError, setCsvError] = useState<string | null>(null);
 
+  const checkAccess = useCallback(async () => {
+    try {
+      setCheckingAccess(true);
+      const session = getTeamSession();
+      const userEmail = session?.email;
+      
+      // Check if user is admin first (admins can always access)
+      const { isSuperAdmin } = require('@/lib/rbac');
+      const adminCheck = await isSuperAdmin(userEmail);
+      
+      if (adminCheck) {
+        setCanAccess(true);
+        setCheckingAccess(false);
+        return;
+      }
+
+      // For non-admins, check RBAC permission
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=users`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data?.users) {
+          if (userEmail) {
+            // Find current user in the users list
+            const currentUser = data.data.users.find((u: any) => 
+              u.email?.toLowerCase() === userEmail.toLowerCase()
+            );
+            
+            if (currentUser && currentUser.permissions) {
+              const hasWhatsAppPermission = currentUser.permissions.some(
+                (p: any) => p.permission?.resource === 'whatsapp-bulk' && 
+                           p.permission?.action === 'access' && 
+                           p.isActive
+              );
+              setCanAccess(hasWhatsAppPermission);
+              setCheckingAccess(false);
+              return;
+            }
+          }
+        }
+      }
+      
+      // Fallback: deny access
+      setCanAccess(false);
+    } catch (err) {
+      console.error('Error checking permissions:', err);
+      setCanAccess(false);
+    } finally {
+      setCheckingAccess(false);
+    }
+  }, []);
+
   useEffect(() => {
+    checkAccess();
     checkServiceHealth();
     checkAuthStatus();
     fetchCsvLists();
@@ -71,7 +129,7 @@ export default function WhatsAppBulkPage() {
         clearInterval(statusIntervalRef.current);
       }
     };
-  }, []);
+  }, [checkAccess]);
 
   useEffect(() => {
     if (jobId && sending) {
@@ -458,6 +516,30 @@ export default function WhatsAppBulkPage() {
   };
 
   const activeContacts = combinedContacts.length > 0 ? combinedContacts : legacyContacts;
+
+  if (checkingAccess) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-gray-600">Checking permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!canAccess) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto p-8">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <h2 className="text-xl font-semibold text-red-800 mb-2">Access Denied</h2>
+            <p className="text-red-600">You don&apos;t have permission to access WhatsApp bulk messaging. Please contact an administrator.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

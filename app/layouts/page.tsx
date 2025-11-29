@@ -55,15 +55,23 @@ export default function LayoutsPage() {
 
   const checkPermission = useCallback(async () => {
     try {
-      // Check RBAC permission
+      // Check if user is admin first (admins can always access)
+      const session = getTeamSession();
+      const userEmail = session?.email;
+      const { isSuperAdmin } = require('@/lib/rbac');
+      const adminCheck = await isSuperAdmin(userEmail);
+      
+      if (adminCheck) {
+        setCanManage(true);
+        return;
+      }
+
+      // For non-admins, check RBAC permission
       const response = await authenticatedFetch(`${API_BASE_URL}/api/rbac?type=users`);
       
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.data?.users) {
-          const session = getTeamSession();
-          const userEmail = session?.email;
-          
           if (userEmail) {
             // Find current user in the users list
             const currentUser = data.data.users.find((u: any) => 
@@ -83,12 +91,8 @@ export default function LayoutsPage() {
         }
       }
       
-      // Fallback: check if user is admin
-      const session = getTeamSession();
-      const userEmail = session?.email;
-      const { isSuperAdmin } = require('@/lib/rbac');
-      const adminCheck = await isSuperAdmin(userEmail);
-      setCanManage(adminCheck);
+      // Fallback: deny access
+      setCanManage(false);
     } catch (err) {
       console.error('Error checking permissions:', err);
       // Fallback: check if user is admin

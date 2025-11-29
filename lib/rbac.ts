@@ -1,6 +1,6 @@
 // Simple mail-based RBAC for team dashboard tabs
 
-export type TabKey = 'dashboard' | 'wallet' | 'qr' | 'referrals' | 'events' | 'coupons' | 'sellers' | 'downline' | 'tasks' | 'gallery' | 'layouts' | 'careers';
+export type TabKey = 'dashboard' | 'wallet' | 'qr' | 'referrals' | 'events' | 'coupons' | 'sellers' | 'downline' | 'tasks' | 'gallery' | 'layouts' | 'careers' | 'whatsapp-bulk';
 
 // Permission type from API
 export interface Permission {
@@ -95,6 +95,12 @@ export const TEAM_PERMISSIONS = {
     description: 'Access to career management',
     tab: 'careers' as TabKey,
   },
+  'whatsapp-bulk': {
+    action: 'access',
+    resource: 'whatsapp-bulk',
+    description: 'Access to WhatsApp bulk messaging',
+    tab: 'whatsapp-bulk' as TabKey,
+  },
   'event-financials': {
     action: 'access',
     resource: 'event-financials',
@@ -136,6 +142,7 @@ export const routeToTabKey: Record<string, TabKey> = {
   '/gallery': 'gallery',
   '/layouts': 'layouts',
   '/careers': 'careers',
+  '/whatsapp-bulk': 'whatsapp-bulk',
 };
 
 // Access control list: list of emails allowed per tab.
@@ -153,6 +160,7 @@ export const ACCESS_CONTROL: Record<TabKey, string[] | ['*']> = {
   gallery: ['*'],
   layouts: ['*'],
   careers: ['*'],
+  'whatsapp-bulk': ['*'],
 };
 
 // Super admin emails - these have access to everything
