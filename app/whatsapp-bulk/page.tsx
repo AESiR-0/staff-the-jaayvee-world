@@ -184,7 +184,7 @@ export default function WhatsAppBulkPage() {
     } finally {
       setLoadingCsvLists(false);
     }
-  };
+  }, [categoryFilter, searchQuery, sortBy, sortOrder, currentPage]);
 
   const combineCsvLists = async () => {
     if (selectedCsvIds.length === 0) {

@@ -78,7 +78,7 @@ export default function SalesPage() {
     } finally {
       setLoadingCsvLists(false);
     }
-  };
+  }, [categoryFilter, searchQuery, sortBy, sortOrder, currentPage]);
 
   const fetchCsvContacts = async (csvId: string) => {
     setLoadingContacts(true);

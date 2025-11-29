@@ -6,7 +6,6 @@ import { ArrowLeft, Plus, Edit, Trash2, Save, X, AlertCircle, CheckCircle, Uploa
 import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 import { utcToDateTimeLocal } from "@/lib/utils/timezone";
 import { CategoryCombobox } from "@/components/CategoryCombobox";
-import { getEventCategories } from "@/lib/constants/event-categories";
 
 // This page requires 'events' resource access or super admin
 
@@ -160,17 +159,16 @@ export default function ManageEventsPage() {
   // Default to talaash API if not set (ticket type APIs are in jaayvee-world/talaash)
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
 
-  // Load available categories
+  // Load available categories from database
   useEffect(() => {
     const loadCategories = () => {
-      const globalCategories = getEventCategories();
       const eventCategories = new Set<string>();
       events.forEach(event => {
         if (event.category) {
           eventCategories.add(event.category);
         }
       });
-      const allCategories = Array.from(new Set([...globalCategories, ...Array.from(eventCategories)])).sort();
+      const allCategories = Array.from(eventCategories).sort();
       setAvailableCategories(allCategories);
     };
     loadCategories();
@@ -1087,19 +1085,19 @@ export default function ManageEventsPage() {
         setPreviewEditThumbnailUrl(preview);
         setEditForm({ ...editForm, thumbnail: '' });
       } else {
-        setSelectedEditFile(file);
-        setPreviewEditUrl(preview);
-        setEditForm({ ...editForm, banner: '' });
+      setSelectedEditFile(file);
+      setPreviewEditUrl(preview);
+      setEditForm({ ...editForm, banner: '' });
       }
     } else {
       if (isThumbnail) {
         setSelectedThumbnailFile(file);
         setPreviewThumbnailUrl(preview);
         setCreateForm({ ...createForm, thumbnail: '' });
-      } else {
-        setSelectedFile(file);
-        setPreviewUrl(preview);
-        setCreateForm({ ...createForm, banner: '' });
+    } else {
+      setSelectedFile(file);
+      setPreviewUrl(preview);
+      setCreateForm({ ...createForm, banner: '' });
       }
     }
   };
@@ -1857,8 +1855,8 @@ export default function ManageEventsPage() {
                             <label className="block text-xs font-medium text-primary-fg mb-1">
                               Description (Optional)
                             </label>
-                            <input
-                              type="text"
+                            <textarea
+                              rows={3}
                               disabled={submitting}
                               value={ticketType.description || ""}
                               onChange={(e) => {
@@ -1867,7 +1865,7 @@ export default function ManageEventsPage() {
                                 setCreateForm({ ...createForm, ticketTypes: newTicketTypes });
                               }}
                               placeholder="Brief description of this ticket type"
-                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50"
+                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg disabled:opacity-50 whitespace-pre-line"
                             />
                           </div>
                         </div>
@@ -2001,8 +1999,7 @@ export default function ManageEventsPage() {
                   disabled={submitting}
                   value={createForm.description}
                   onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-y bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed whitespace-pre-wrap"
-                  placeholder="Enter event description. Line breaks and whitespace will be preserved."
+                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
               {/* Template Selection */}
@@ -2067,6 +2064,8 @@ export default function ManageEventsPage() {
                       startDate: "",
                       endDate: "",
                       banner: "",
+                      thumbnail: "",
+                      category: "",
                       venue: "",
                       city: "",
                       state: "",
@@ -2377,11 +2376,10 @@ export default function ManageEventsPage() {
                               <div>
                                 <label className="block text-sm font-medium text-primary-fg mb-2">Description</label>
                                 <textarea
-                                  rows={4}
+                                  rows={3}
                                   value={editForm.description || ""}
                                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-y bg-primary-bg text-primary-fg whitespace-pre-wrap"
-                                  placeholder="Enter event description. Line breaks and whitespace will be preserved."
+                                  className="w-full px-4 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg"
                                 />
                               </div>
 
@@ -2520,8 +2518,8 @@ export default function ManageEventsPage() {
                                             <label className="block text-xs font-medium text-primary-fg mb-1">
                                               Description (Optional)
                                             </label>
-                                            <input
-                                              type="text"
+                                            <textarea
+                                              rows={3}
                                               value={ticketType.description || ""}
                                               onChange={(e) => {
                                                 const newTicketTypes = [...editTicketTypes];
@@ -2530,7 +2528,7 @@ export default function ManageEventsPage() {
                                               }}
                                               placeholder="Brief description of this ticket type"
                                               disabled={updatingTicketTypes === event.id}
-                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed"
+                                              className="w-full px-3 py-2 text-sm border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent resize-none bg-primary-bg text-primary-fg disabled:opacity-50 disabled:cursor-not-allowed whitespace-pre-line"
                                             />
                                           </div>
                                         </div>
@@ -2789,7 +2787,7 @@ export default function ManageEventsPage() {
                           <td className="py-3 px-4">
                             <div className="font-medium text-primary-fg">{event.title}</div>
                             {event.description && (
-                              <div className="text-sm text-primary-muted mt-1 line-clamp-1">{event.description}</div>
+                              <div className="text-sm text-primary-muted mt-1 line-clamp-1 whitespace-pre-line">{event.description}</div>
                             )}
                           </td>
                           <td className="py-3 px-4 text-sm text-primary-fg">

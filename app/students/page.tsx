@@ -79,7 +79,7 @@ export default function StudentsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, statusFilter, search]);
 
   useEffect(() => {
     fetchVerifications();

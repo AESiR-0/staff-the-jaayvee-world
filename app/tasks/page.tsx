@@ -79,54 +79,6 @@ export default function TasksPage() {
   const session = getTeamSession();
   const currentUserId = session?.userId || session?.teamId || session?.staffId; // Backward compatibility
 
-  useEffect(() => {
-    fetchTeamUsers();
-    checkCreatePermission();
-    
-    // Check permissions and fetch tasks
-    const checkPermissions = async () => {
-      const session = getTeamSession();
-      const userEmail = session?.email;
-      
-      if (!userEmail) {
-        setIsAdmin(false);
-        fetchTasks();
-        return;
-      }
-
-      const { getAuthToken } = require('@/lib/auth-utils');
-      const { checkHasAccessClient } = require('@/lib/permissions');
-      const token = getAuthToken();
-      
-      if (!token) {
-        setIsAdmin(false);
-        fetchTasks();
-        return;
-      }
-      
-      // Check if user has access to tasks
-      const result = await checkHasAccessClient(userEmail, 'tasks', token);
-      setIsAdmin(result.hasAccess);
-      // Fetch tasks after permission check
-      fetchTasks();
-    };
-    checkPermissions();
-  }, [fetchTasks]);
-
-  const checkCreatePermission = async () => {
-    try {
-      setLoadingPermissions(true);
-      // Everyone can create tasks now
-      setCanCreate(true);
-    } catch (err) {
-      console.error('Error checking permissions:', err);
-      // Default to allowing creation even on error
-      setCanCreate(true);
-    } finally {
-      setLoadingPermissions(false);
-    }
-  };
-
   const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
@@ -172,6 +124,54 @@ export default function TasksPage() {
       setError(err.message || 'Failed to fetch tasks');
     } finally {
       setLoading(false);
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    fetchTeamUsers();
+    checkCreatePermission();
+    
+    // Check permissions and fetch tasks
+    const checkPermissions = async () => {
+      const session = getTeamSession();
+      const userEmail = session?.email;
+      
+      if (!userEmail) {
+        setIsAdmin(false);
+        fetchTasks();
+        return;
+      }
+
+      const { getAuthToken } = require('@/lib/auth-utils');
+      const { checkHasAccessClient } = require('@/lib/permissions');
+      const token = getAuthToken();
+      
+      if (!token) {
+        setIsAdmin(false);
+        fetchTasks();
+        return;
+      }
+      
+      // Check if user has access to tasks
+      const result = await checkHasAccessClient(userEmail, 'tasks', token);
+      setIsAdmin(result.hasAccess);
+      // Fetch tasks after permission check
+      fetchTasks();
+    };
+    checkPermissions();
+  }, [fetchTasks]);
+
+  const checkCreatePermission = async () => {
+    try {
+      setLoadingPermissions(true);
+      // Everyone can create tasks now
+      setCanCreate(true);
+    } catch (err) {
+      console.error('Error checking permissions:', err);
+      // Default to allowing creation even on error
+      setCanCreate(true);
+    } finally {
+      setLoadingPermissions(false);
     }
   };
 

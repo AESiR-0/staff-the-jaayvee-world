@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 interface CategoryComboboxProps {
   value: string;
@@ -101,24 +100,23 @@ export function CategoryCombobox({
 
   return (
     <div ref={comboboxRef} className={`relative ${className}`}>
-      <Button
+      <button
         type="button"
-        variant="outline"
         role="combobox"
         aria-expanded={open}
-        className="w-full justify-between"
+        className="w-full flex items-center justify-between px-3 py-2 text-sm border border-primary-border rounded-lg bg-primary-bg text-primary-fg hover:bg-primary-bg/80 focus:outline-none focus:ring-2 focus:ring-primary-accent"
         onClick={() => setOpen(!open)}
       >
-        <span className={value ? "" : "text-muted-foreground"}>
+        <span className={value ? "" : "text-primary-muted"}>
           {value || placeholder}
         </span>
         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-      </Button>
+      </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg">
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-primary-border bg-primary-bg shadow-lg">
           {/* Search Input */}
-          <div className="flex items-center border-b px-3">
+          <div className="flex items-center border-b border-primary-border px-3">
             <input
               ref={inputRef}
               type="text"
@@ -126,13 +124,13 @@ export function CategoryCombobox({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Search or create category..."
-              className="flex-1 border-0 bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
+              className="flex-1 border-0 bg-transparent py-2 text-sm text-primary-fg outline-none placeholder:text-primary-muted"
             />
             {inputValue && (
               <button
                 type="button"
                 onClick={() => setInputValue("")}
-                className="ml-2 text-muted-foreground hover:text-foreground"
+                className="ml-2 text-primary-muted hover:text-primary-fg"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -149,8 +147,8 @@ export function CategoryCombobox({
                     key={category}
                     type="button"
                     onClick={() => handleSelect(category)}
-                    className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground ${
-                      value === category ? "bg-accent" : ""
+                    className={`relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm text-primary-fg outline-none hover:bg-primary-bg/80 ${
+                      value === category ? "bg-primary-bg/80" : ""
                     }`}
                   >
                     <Check
@@ -161,7 +159,7 @@ export function CategoryCombobox({
                     {category}
                   </button>
                 ))}
-                {isNewCategory && <div className="border-t my-1" />}
+                {isNewCategory && <div className="border-t border-primary-border my-1" />}
               </>
             )}
 
@@ -171,7 +169,7 @@ export function CategoryCombobox({
                 type="button"
                 onClick={handleCreate}
                 disabled={isCreating}
-                className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground text-primary"
+                className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm text-primary-fg outline-none hover:bg-primary-bg/80 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 {isCreating
@@ -184,14 +182,14 @@ export function CategoryCombobox({
             {!isNewCategory &&
               filteredCategories.length === 0 &&
               inputValue && (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                <div className="px-2 py-1.5 text-sm text-primary-muted">
                   No categories found. Type to create a new one.
                 </div>
               )}
 
             {/* Empty State */}
             {!inputValue && filteredCategories.length === 0 && (
-              <div className="px-2 py-1.5 text-sm text-muted-foreground">
+              <div className="px-2 py-1.5 text-sm text-primary-muted">
                 No categories available. Type to create one.
               </div>
             )}

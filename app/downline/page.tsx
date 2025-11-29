@@ -217,41 +217,6 @@ export default function DownlinePage() {
     }
   }, [selectedTeamId, isAdmin, fetchDownline]);
 
-    try {
-      setLoading(true);
-      setError(null);
-
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const params = new URLSearchParams();
-      // Always fetch nested for industry-level MLM view (default behavior)
-      // nested=true is the default, so we don't need to explicitly set it
-      
-      if (teamUserId && isAdmin) {
-        params.append('staffUserId', teamUserId);
-      }
-
-      const url = `${API_BASE_URL}/api/team/downline?${params.toString()}`;
-      const response = await authenticatedFetch(url);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to fetch downline: ${response.status} ${errorText}`);
-      }
-
-      const result = await response.json();
-      if (result.success) {
-        setData(result.data);
-      } else {
-        setError(result.error || 'Failed to fetch downline');
-      }
-    } catch (err: any) {
-      console.error('Error fetching downline:', err);
-      setError(err.message || 'Failed to fetch downline');
-    } finally {
-      setLoading(false);
-    }
-  }, [isAdmin]);
-
   // Recursive search function
   const searchInUser = useCallback((user: DownlineUser, query: string): boolean => {
     const lowerQuery = query.toLowerCase();

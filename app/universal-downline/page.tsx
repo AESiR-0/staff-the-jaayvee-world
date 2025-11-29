@@ -144,7 +144,7 @@ export default function UniversalDownlinePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [roleFilter, partnerCodeFilter, searchQuery, dateFrom, dateTo, minCheckouts, maxCheckouts, minEarnings, maxEarnings, expandedCategories, expandAll]);
 
   const clearFilters = () => {
     setSearchQuery("");
