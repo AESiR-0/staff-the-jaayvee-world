@@ -180,7 +180,7 @@ export default function ManageEventsPage() {
         // Use centralized permission check
         const { checkHasAccessClient } = require('@/lib/permissions');
         const result = await checkHasAccessClient(userEmail, 'events', token);
-        
+
         if (result.hasAccess) {
           setAuthorized(true);
           fetchEvents();

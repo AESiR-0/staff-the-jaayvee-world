@@ -98,11 +98,11 @@ export default function RBACPage() {
           // Use database permissions but we'll use TEAM_PERMISSIONS as source of truth for dropdown
           const dbPermissions = data.data.permissions || [];
           // Remove duplicates from database permissions based on resource+action
-          const uniqueDbPermissions = Array.from(
+          const uniqueDbPermissions: Permission[] = Array.from(
             new Map(
               dbPermissions.map((p: Permission) => [`${p.resource}-${p.action}`, p])
             ).values()
-          );
+          ) as Permission[];
           setPermissions(uniqueDbPermissions);
           setGroups(data.data.groups || []);
         }
