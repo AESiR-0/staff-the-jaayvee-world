@@ -42,15 +42,20 @@ export async function checkHasAccess(
   requireSuperAdmin: boolean = false
 ): Promise<HasAccessResult> {
   try {
-    // First check if user is super admin
+    // First check if user is super admin (admins have access to everything)
     const isAdmin = await checkIsSuperAdmin(email);
     
     if (isAdmin) {
       return { hasAccess: true, reason: 'super_admin' };
     }
     
-    // If page requires super admin, deny access
+    // If page requires super admin and user is not admin, deny access
     if (requireSuperAdmin) {
+      return { hasAccess: false, reason: 'no_permission' };
+    }
+
+    // If resource is empty and not requiring super admin, deny access
+    if (!resource || resource.trim() === '') {
       return { hasAccess: false, reason: 'no_permission' };
     }
 
@@ -86,6 +91,15 @@ export async function checkHasAccess(
     return { hasAccess: false, reason: 'no_permission' };
   } catch (error) {
     console.error('Error checking access:', error);
+    // On error, check if user is admin as fallback
+    try {
+      const isAdmin = await checkIsSuperAdmin(email);
+      if (isAdmin) {
+        return { hasAccess: true, reason: 'super_admin' };
+      }
+    } catch (fallbackError) {
+      console.error('Error in fallback admin check:', fallbackError);
+    }
     return { hasAccess: false, reason: 'no_permission' };
   }
 }
@@ -106,7 +120,7 @@ export async function checkHasAccessClient(
   requireSuperAdmin: boolean = false
 ): Promise<HasAccessResult> {
   try {
-    // First check if user is super admin
+    // First check if user is super admin (admins have access to everything)
     const { isSuperAdmin } = await import('@/lib/rbac');
     const isAdmin = await isSuperAdmin(email);
     
@@ -114,8 +128,13 @@ export async function checkHasAccessClient(
       return { hasAccess: true, reason: 'super_admin' };
     }
     
-    // If page requires super admin, deny access
+    // If page requires super admin and user is not admin, deny access
     if (requireSuperAdmin) {
+      return { hasAccess: false, reason: 'no_permission' };
+    }
+
+    // If resource is empty and not requiring super admin, deny access
+    if (!resource || resource.trim() === '') {
       return { hasAccess: false, reason: 'no_permission' };
     }
 
@@ -149,6 +168,16 @@ export async function checkHasAccessClient(
     return { hasAccess: false, reason: 'no_permission' };
   } catch (error) {
     console.error('Error checking access:', error);
+    // On error, check if user is admin as fallback
+    try {
+      const { isSuperAdmin } = await import('@/lib/rbac');
+      const isAdmin = await isSuperAdmin(email);
+      if (isAdmin) {
+        return { hasAccess: true, reason: 'super_admin' };
+      }
+    } catch (fallbackError) {
+      console.error('Error in fallback admin check:', fallbackError);
+    }
     return { hasAccess: false, reason: 'no_permission' };
   }
 }

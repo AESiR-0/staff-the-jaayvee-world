@@ -202,11 +202,19 @@ const ACCESS_DENY: Partial<Record<TabKey, string[]>> = {
 };
 
 /**
- * Check if an email is a super admin (database-only)
- * This function now checks the database for the "Super Admin" role
+ * Check if an email is a super admin (database + hardcoded fallback)
+ * This function checks the database for the "Super Admin" role first,
+ * then falls back to hardcoded emails if API call fails
  */
 export async function isSuperAdmin(email?: string | null): Promise<boolean> {
   if (!email) return false;
+  
+  const normalizedEmail = email.toLowerCase().trim();
+  
+  // First check hardcoded super admin emails (fastest check)
+  if (SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(normalizedEmail)) {
+    return true;
+  }
   
   try {
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
@@ -223,10 +231,12 @@ export async function isSuperAdmin(email?: string | null): Promise<boolean> {
     }
   } catch (error) {
     console.error('Error checking super admin status:', error);
-    // Fallback: return false on error (fail secure)
+    // Fallback: check hardcoded emails on error
+    return SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(normalizedEmail);
   }
   
-  return false;
+  // Final fallback: check hardcoded emails
+  return SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(normalizedEmail);
 }
 
 /**
