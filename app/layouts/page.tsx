@@ -1,14 +1,22 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Layout, Upload, Edit2, Save, X, Loader2, Image as ImageIcon } from "lucide-react";
-import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
-import RichTextEditor from "@/components/RichTextEditor";
+import { authenticatedFetch } from "@/lib/auth-utils";
+import { hasPermission } from "@/lib/rbac/actions";
+import { SectionSidebar, SECTIONS, type SectionConfig } from "@/components/layouts/SectionSidebar";
+import { LayoutForm } from "@/components/layouts/LayoutForm";
+import { LayoutHeader } from "@/components/layouts/LayoutHeader";
+import { MessageBanner } from "@/components/layouts/MessageBanner";
+import { LayoutInfo } from "@/components/layouts/LayoutInfo";
+import { LoadingState } from "@/components/layouts/LoadingState";
+import { AccessDenied } from "@/components/layouts/AccessDenied";
 
 interface LayoutData {
   id: string;
-  name: string;
-  section: string;
+  name?: string;
+  section?: string;
+  pageName?: string;
+  sectionName?: string;
   logoUrl: string | null;
   description: string | null;
   backgroundImageUrl: string | null;
@@ -16,24 +24,30 @@ interface LayoutData {
   button1Link: string | null;
   button2Text: string | null;
   button2Link: string | null;
+  isVisible?: boolean;
+  displayOrder?: number;
+  settings?: any;
   isActive: boolean;
-  metadata: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+type PageName = 'home' | 'event-detail';
+type SectionName = 'hero' | 'events' | 'top-events' | 'about' | 'stats' | 'testimonials' | 'work-with-us' | 'marketing' | 'subscription-cta' | 'tickets';
+
 export default function LayoutsPage() {
+  const [selectedPage, setSelectedPage] = useState<PageName>('home');
+  const [selectedSection, setSelectedSection] = useState<SectionName>('hero');
   const [layouts, setLayouts] = useState<LayoutData[]>([]);
   const [loading, setLoading] = useState(true);
   const [canManage, setCanManage] = useState(false);
   const [checkingPermission, setCheckingPermission] = useState(true);
-  const [editingLayout, setEditingLayout] = useState<LayoutData | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
-  // File upload state
+  // File upload state - files are stored but only uploaded on save
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -41,15 +55,25 @@ export default function LayoutsPage() {
   
   // Form state
   const [formData, setFormData] = useState({
-    name: 'home-hero',
-    section: 'hero',
+    pageName: 'home' as PageName,
+    sectionName: 'hero' as SectionName,
     logoUrl: '',
     description: '',
     backgroundImageUrl: '',
+    backgroundType: 'image',
+    backgroundColor: '',
+    backgroundGradient: '',
+    textAlignment: 'center',
+    sectionHeight: 'full',
+    animationType: 'fade',
+    overlayOpacity: 0.5,
+    customCss: '',
+    displayOrder: 0,
     button1Text: 'Explore Events',
     button1Link: '/events',
     button2Text: 'Learn More',
     button2Link: '/about',
+    isVisible: true,
   });
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
@@ -57,27 +81,8 @@ export default function LayoutsPage() {
   const checkPermission = useCallback(async () => {
     try {
       setCheckingPermission(true);
-      const session = getTeamSession();
-      const userEmail = session?.email;
-      
-      if (!userEmail) {
-        setCanManage(false);
-        setCheckingPermission(false);
-        return;
-      }
-
-      const { getAuthToken } = require('@/lib/auth-utils');
-      const { checkHasAccessClient } = require('@/lib/permissions');
-      const token = getAuthToken();
-      
-      if (!token) {
-        setCanManage(false);
-        setCheckingPermission(false);
-        return;
-      }
-      
-      const result = await checkHasAccessClient(userEmail, 'layouts', token);
-      setCanManage(result.hasAccess);
+      const hasAccess = await hasPermission('layouts', 'access');
+      setCanManage(hasAccess);
     } catch (err) {
       console.error('Error checking permissions:', err);
       setCanManage(false);
@@ -86,88 +91,187 @@ export default function LayoutsPage() {
     }
   }, []);
 
-  const fetchLayouts = useCallback(async () => {
+  const fetchLayouts = useCallback(async (page: PageName, section: SectionName) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/layouts?name=home-hero&section=hero`);
+      console.log(`[Layouts] Fetching layout for page: ${page}, section: ${section}`);
+      
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/layouts/sections?page=${page}&section=${section}`);
+      
+      console.log(`[Layouts] Response status: ${response.status}`);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('[Layouts] Error response:', errorData);
         throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch layouts`);
       }
       
       const result = await response.json();
+      console.log('[Layouts] Response data:', result);
+      
       if (result.success) {
-        setLayouts(result.data || []);
-        // If there's an active layout, pre-fill the form
-        const activeLayout = result.data?.find((l: LayoutData) => l.isActive);
-        if (activeLayout) {
+        // Handle both array and single object responses
+        let layoutData = null;
+        if (Array.isArray(result.data)) {
+          layoutData = result.data.length > 0 ? result.data[0] : null;
+        } else if (result.data) {
+          layoutData = result.data;
+        }
+        
+        console.log('[Layouts] Layout data:', layoutData);
+        setLayouts(layoutData ? [layoutData] : []);
+        
+        // Pre-fill form with existing layout data
+        if (layoutData) {
+          const settings = layoutData.settings || {};
+          console.log('[Layouts] Settings:', settings);
           setFormData({
-            name: activeLayout.name,
-            section: activeLayout.section,
-            logoUrl: activeLayout.logoUrl || '',
-            description: activeLayout.description || '',
-            backgroundImageUrl: activeLayout.backgroundImageUrl || '',
-            button1Text: activeLayout.button1Text || 'Explore Events',
-            button1Link: activeLayout.button1Link || '/events',
-            button2Text: activeLayout.button2Text || 'Learn More',
-            button2Link: activeLayout.button2Link || '/about',
+            pageName: layoutData.pageName || page,
+            sectionName: layoutData.sectionName || section,
+            logoUrl: layoutData.logoUrl || '',
+            description: layoutData.description || '',
+            backgroundImageUrl: layoutData.backgroundImageUrl || '',
+            backgroundType: layoutData.backgroundType || settings.backgroundType || 'image',
+            backgroundColor: layoutData.backgroundColor || settings.backgroundColor || '',
+            backgroundGradient: layoutData.backgroundGradient || settings.backgroundGradient || '',
+            textAlignment: layoutData.textAlignment || settings.textAlignment || 'center',
+            sectionHeight: layoutData.sectionHeight || settings.sectionHeight || 'full',
+            animationType: layoutData.animationType || settings.animationType || 'fade',
+            overlayOpacity: layoutData.overlayOpacity ? parseFloat(String(layoutData.overlayOpacity)) : (settings.overlayOpacity || 0.5),
+            customCss: layoutData.customCss || '',
+            displayOrder: layoutData.displayOrder || 0,
+            button1Text: layoutData.button1Text || 'Explore Events',
+            button1Link: layoutData.button1Link || '/events',
+            button2Text: layoutData.button2Text || 'Learn More',
+            button2Link: layoutData.button2Link || '/about',
+            isVisible: layoutData.isVisible !== false,
           });
-          // Clear any existing file selections when loading existing layout
-          setLogoFile(null);
-          setBackgroundFile(null);
-          if (logoPreview) {
-            URL.revokeObjectURL(logoPreview);
-            setLogoPreview(null);
-          }
-          if (backgroundPreview) {
-            URL.revokeObjectURL(backgroundPreview);
-            setBackgroundPreview(null);
-          }
+          console.log('[Layouts] Form data updated with layout data');
+        } else {
+          console.log('[Layouts] No layout data found, using defaults');
+          // Reset form for new section
+          setFormData({
+            pageName: page,
+            sectionName: section,
+            logoUrl: '',
+            description: '',
+            backgroundImageUrl: '',
+            backgroundType: 'image',
+            backgroundColor: '',
+            backgroundGradient: '',
+            textAlignment: 'center',
+            sectionHeight: 'full',
+            animationType: 'fade',
+            overlayOpacity: 0.5,
+            customCss: '',
+            displayOrder: 0,
+            button1Text: 'Explore Events',
+            button1Link: '/events',
+            button2Text: 'Learn More',
+            button2Link: '/about',
+            isVisible: true,
+          });
+        }
+        
+        // Clear file selections and previews when loading existing data
+        setLogoFile(null);
+        setBackgroundFile(null);
+        if (logoPreview) {
+          URL.revokeObjectURL(logoPreview);
+          setLogoPreview(null);
+        }
+        if (backgroundPreview) {
+          URL.revokeObjectURL(backgroundPreview);
+          setBackgroundPreview(null);
         }
       } else {
         throw new Error(result.error || 'Failed to load layouts');
       }
     } catch (error: any) {
-      console.error('Error fetching layouts:', error);
-      setError(error.message || 'Failed to load layouts. Please make sure the database migration has been run.');
+      console.error('[Layouts] Error fetching layouts:', error);
+      setError(error.message || 'Failed to load layouts.');
     } finally {
       setLoading(false);
     }
-  }, [API_BASE_URL]);
+  }, [API_BASE_URL, logoPreview, backgroundPreview]);
 
   useEffect(() => {
     checkPermission();
-    fetchLayouts();
-  }, [checkPermission, fetchLayouts]);
+  }, [checkPermission]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'background') => {
-    const file = e.target.files?.[0];
+  useEffect(() => {
+    if (canManage) {
+      fetchLayouts(selectedPage, selectedSection);
+    }
+  }, [canManage, selectedPage, selectedSection]);
+
+  const handleSectionSelect = (page: PageName, section: SectionName) => {
+    setSelectedPage(page);
+    setSelectedSection(section);
+  };
+
+  const handleLogoSelect = (file: File | null) => {
+    setLogoFile(file);
     if (file) {
       if (!file.type.startsWith('image/')) {
         setError('Please select an image file');
         return;
       }
-      
-      if (type === 'logo') {
-        setLogoFile(file);
-        const url = URL.createObjectURL(file);
-        setLogoPreview(url);
-      } else {
-        setBackgroundFile(file);
-        const url = URL.createObjectURL(file);
-        setBackgroundPreview(url);
+      // Create blob preview
+      if (logoPreview) {
+        URL.revokeObjectURL(logoPreview);
       }
+      const newUrl = URL.createObjectURL(file);
+      setLogoPreview(newUrl);
+    } else {
+      if (logoPreview) {
+        URL.revokeObjectURL(logoPreview);
+      }
+      setLogoPreview(null);
     }
   };
 
-  const handleSave = async () => {
-    if (!formData.name || !formData.section) {
-      setError('Name and section are required');
-      return;
+  const handleBackgroundSelect = (file: File | null) => {
+    setBackgroundFile(file);
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        setError('Please select an image file');
+        return;
+      }
+      // Create blob preview
+      if (backgroundPreview) {
+        URL.revokeObjectURL(backgroundPreview);
+      }
+      const newUrl = URL.createObjectURL(file);
+      setBackgroundPreview(newUrl);
+    } else {
+      if (backgroundPreview) {
+        URL.revokeObjectURL(backgroundPreview);
+      }
+      setBackgroundPreview(null);
     }
+  };
 
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    if (logoPreview) {
+      URL.revokeObjectURL(logoPreview);
+    }
+    setLogoPreview(null);
+    setFormData({ ...formData, logoUrl: '' });
+  };
+
+  const handleRemoveBackground = () => {
+    setBackgroundFile(null);
+    if (backgroundPreview) {
+      URL.revokeObjectURL(backgroundPreview);
+    }
+    setBackgroundPreview(null);
+    setFormData({ ...formData, backgroundImageUrl: '' });
+  };
+
+  const handleSave = async () => {
     try {
       setSaving(true);
       setUploading(true);
@@ -177,7 +281,7 @@ export default function LayoutsPage() {
       let logoUrl = formData.logoUrl;
       let backgroundImageUrl = formData.backgroundImageUrl;
 
-      // Upload logo if file is selected
+      // Upload logo if file is selected (only uploads on save)
       if (logoFile) {
         const logoFormData = new FormData();
         logoFormData.append('file', logoFile);
@@ -201,7 +305,7 @@ export default function LayoutsPage() {
         }
       }
 
-      // Upload background image if file is selected
+      // Upload background image if file is selected (only uploads on save)
       if (backgroundFile) {
         const bgFormData = new FormData();
         bgFormData.append('file', backgroundFile);
@@ -227,9 +331,46 @@ export default function LayoutsPage() {
 
       setUploading(false);
 
-      // Check if we're editing an existing layout
       const activeLayout = layouts.find(l => l.isActive);
       
+      // Use JSONB settings for section-specific data
+      const settings: any = {
+        backgroundType: formData.backgroundType,
+        backgroundColor: formData.backgroundColor,
+        backgroundGradient: formData.backgroundGradient,
+        textAlignment: formData.textAlignment,
+        sectionHeight: formData.sectionHeight,
+        animationType: formData.animationType,
+        overlayOpacity: formData.overlayOpacity,
+      };
+
+      const layoutPayload: any = {
+        pageName: formData.pageName,
+        sectionName: formData.sectionName,
+        // Also include old format for backward compatibility
+        name: `${formData.pageName}-${formData.sectionName}`,
+        section: formData.sectionName,
+        logoUrl: logoUrl || null,
+        description: formData.description || null,
+        backgroundImageUrl: backgroundImageUrl || null,
+        backgroundType: formData.backgroundType,
+        backgroundColor: formData.backgroundColor || null,
+        backgroundGradient: formData.backgroundGradient || null,
+        textAlignment: formData.textAlignment,
+        sectionHeight: formData.sectionHeight,
+        animationType: formData.animationType,
+        overlayOpacity: formData.overlayOpacity,
+        customCss: formData.customCss || null,
+        displayOrder: formData.displayOrder,
+        button1Text: formData.button1Text || null,
+        button1Link: formData.button1Link || null,
+        button2Text: formData.button2Text || null,
+        button2Link: formData.button2Link || null,
+        isVisible: formData.isVisible,
+        isActive: true,
+        settings: settings, // Store section-specific settings in JSONB
+      };
+
       if (activeLayout) {
         // Update existing layout
         const response = await authenticatedFetch(`${API_BASE_URL}/api/layouts`, {
@@ -239,16 +380,7 @@ export default function LayoutsPage() {
           },
           body: JSON.stringify({
             id: activeLayout.id,
-            name: formData.name,
-            section: formData.section,
-            logoUrl: logoUrl || null,
-            description: formData.description || null,
-            backgroundImageUrl: backgroundImageUrl || null,
-            button1Text: formData.button1Text || null,
-            button1Link: formData.button1Link || null,
-            button2Text: formData.button2Text || null,
-            button2Link: formData.button2Link || null,
-            isActive: true,
+            ...layoutPayload,
           }),
         });
 
@@ -258,6 +390,14 @@ export default function LayoutsPage() {
         }
 
         setSuccess('Layout updated successfully!');
+        
+        // Trigger layout update event for homepage refresh
+        if (typeof window !== 'undefined') {
+          // Dispatch custom event for same-tab refresh
+          window.dispatchEvent(new Event('layout-updated'));
+          // Also set localStorage for cross-tab refresh
+          localStorage.setItem('layout-updated', Date.now().toString());
+        }
       } else {
         // Create new layout
         const response = await authenticatedFetch(`${API_BASE_URL}/api/layouts`, {
@@ -265,18 +405,7 @@ export default function LayoutsPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            name: formData.name,
-            section: formData.section,
-            logoUrl: logoUrl || null,
-            description: formData.description || null,
-            backgroundImageUrl: backgroundImageUrl || null,
-            button1Text: formData.button1Text || null,
-            button1Link: formData.button1Link || null,
-            button2Text: formData.button2Text || null,
-            button2Link: formData.button2Link || null,
-            isActive: true,
-          }),
+          body: JSON.stringify(layoutPayload),
         });
 
         if (!response.ok) {
@@ -285,9 +414,15 @@ export default function LayoutsPage() {
         }
 
         setSuccess('Layout created successfully!');
+        
+        // Trigger layout update event for homepage refresh
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('layout-updated'));
+          localStorage.setItem('layout-updated', Date.now().toString());
+        }
       }
 
-      // Clear file selections and previews
+      // Clear file selections after successful save
       setLogoFile(null);
       setBackgroundFile(null);
       if (logoPreview) {
@@ -300,9 +435,8 @@ export default function LayoutsPage() {
       }
 
       // Refresh layouts
-      await fetchLayouts();
+      await fetchLayouts(selectedPage, selectedSection);
       
-      // Clear success message after 3 seconds
       setTimeout(() => setSuccess(null), 3000);
     } catch (error: any) {
       console.error('Error saving layout:', error);
@@ -314,246 +448,69 @@ export default function LayoutsPage() {
   };
 
   if (checkingPermission || loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-gray-600">{checkingPermission ? 'Checking permissions...' : 'Loading layouts...'}</p>
-        </div>
-      </div>
-    );
+    return <LoadingState message={checkingPermission ? 'Checking permissions...' : 'Loading layouts...'} />;
   }
 
   if (!canManage) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-8">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-            <h2 className="text-xl font-semibold text-red-800 mb-2">Access Denied</h2>
-            <p className="text-red-600">You don&apos;t have permission to manage layouts. Admin access required.</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <AccessDenied />;
   }
 
   const activeLayout = layouts.find(l => l.isActive);
+  const currentSection = SECTIONS.find(s => s.name === selectedSection && s.page === selectedPage);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Layout className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold text-gray-900">Layout Management</h1>
-          </div>
-          <p className="text-gray-600">Manage home page hero section (logo, description, background image)</p>
-        </div>
+    <div className="min-h-screen bg-gray-50">
+      <div className="flex h-screen">
+        {/* Sidebar */}
+        <SectionSidebar
+          selectedPage={selectedPage}
+          selectedSection={selectedSection}
+          onSectionSelect={handleSectionSelect}
+        />
 
-        {/* Messages */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <p className="text-red-800">{error}</p>
-          </div>
-        )}
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {/* Header */}
+            <LayoutHeader currentSection={currentSection} selectedPage={selectedPage} />
 
-        {success && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
-            <p className="text-green-800">{success}</p>
-          </div>
-        )}
+            {/* Messages */}
+            {error && <MessageBanner type="error" message={error} onDismiss={() => setError(null)} />}
+            {success && <MessageBanner type="success" message={success} onDismiss={() => setSuccess(null)} />}
 
-        {/* Form */}
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">
-            {activeLayout ? 'Edit Home Hero Layout' : 'Create Home Hero Layout'}
-          </h2>
+            {/* Form */}
+            <LayoutForm
+              currentSection={currentSection}
+              formData={formData}
+              logoFile={logoFile}
+              backgroundFile={backgroundFile}
+              logoPreview={logoPreview}
+              backgroundPreview={backgroundPreview}
+              saving={saving}
+              uploading={uploading}
+              activeLayout={!!activeLayout}
+              onFormChange={(data) => {
+                const updatedData: any = { ...data };
+                // Ensure sectionName is properly typed if provided
+                if (updatedData.sectionName && typeof updatedData.sectionName === 'string') {
+                  updatedData.sectionName = updatedData.sectionName as SectionName;
+                }
+                setFormData({ ...formData, ...updatedData });
+              }}
+              onLogoSelect={handleLogoSelect}
+              onBackgroundSelect={handleBackgroundSelect}
+              onRemoveLogo={handleRemoveLogo}
+              onRemoveBackground={handleRemoveBackground}
+              onSave={handleSave}
+            />
 
-          <div className="space-y-6">
-            {/* Logo Upload */}
-            <div>
-              <label htmlFor="logoFile" className="block text-sm font-medium text-gray-700 mb-2">
-                Logo Image
-              </label>
-              <div className="space-y-2">
-                <input
-                  type="file"
-                  id="logoFile"
-                  accept="image/*"
-                  onChange={(e) => handleFileSelect(e, 'logo')}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-                {(logoPreview || formData.logoUrl) && (
-                  <div className="mt-2">
-                    <p className="text-sm text-gray-600 mb-2">Preview:</p>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img 
-                      src={logoPreview || formData.logoUrl || ''} 
-                      alt="Logo preview" 
-                      className="max-h-20 object-contain border border-gray-200 rounded"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                    {logoFile && (
-                      <p className="text-xs text-gray-500 mt-1">New file selected: {logoFile.name}</p>
-                    )}
-                  </div>
-                )}
-                {formData.logoUrl && !logoFile && (
-                  <p className="text-xs text-gray-500">Current logo: {formData.logoUrl}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                Description (Rich Text)
-              </label>
-              <RichTextEditor
-                value={formData.description}
-                onChange={(value) => setFormData({ ...formData, description: value })}
-                placeholder="Enter hero section description..."
-              />
-              <p className="mt-2 text-xs text-gray-500">
-                Use the toolbar to format your text with bold, italic, lists, and alignment.
-              </p>
-            </div>
-
-            {/* Background Image Upload */}
-            <div>
-              <label htmlFor="backgroundFile" className="block text-sm font-medium text-gray-700 mb-2">
-                Background Image
-              </label>
-              <div className="space-y-2">
-                <input
-                  type="file"
-                  id="backgroundFile"
-                  accept="image/*"
-                  onChange={(e) => handleFileSelect(e, 'background')}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-                {(backgroundPreview || formData.backgroundImageUrl) && (
-                  <div className="mt-2">
-                    <p className="text-sm text-gray-600 mb-2">Preview:</p>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img 
-                      src={backgroundPreview || formData.backgroundImageUrl || ''} 
-                      alt="Background preview" 
-                      className="max-h-48 w-full object-cover border border-gray-200 rounded"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                    {backgroundFile && (
-                      <p className="text-xs text-gray-500 mt-1">New file selected: {backgroundFile.name}</p>
-                    )}
-                  </div>
-                )}
-                {formData.backgroundImageUrl && !backgroundFile && (
-                  <p className="text-xs text-gray-500">Current background: {formData.backgroundImageUrl}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Button 1 Configuration */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="button1Text" className="block text-sm font-medium text-gray-700 mb-2">
-                  Button 1 Text
-                </label>
-                <input
-                  type="text"
-                  id="button1Text"
-                  value={formData.button1Text}
-                  onChange={(e) => setFormData({ ...formData, button1Text: e.target.value })}
-                  placeholder="Explore Events"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label htmlFor="button1Link" className="block text-sm font-medium text-gray-700 mb-2">
-                  Button 1 Link
-                </label>
-                <input
-                  type="text"
-                  id="button1Link"
-                  value={formData.button1Link}
-                  onChange={(e) => setFormData({ ...formData, button1Link: e.target.value })}
-                  placeholder="/events"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            {/* Button 2 Configuration */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="button2Text" className="block text-sm font-medium text-gray-700 mb-2">
-                  Button 2 Text
-                </label>
-                <input
-                  type="text"
-                  id="button2Text"
-                  value={formData.button2Text}
-                  onChange={(e) => setFormData({ ...formData, button2Text: e.target.value })}
-                  placeholder="Learn More"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label htmlFor="button2Link" className="block text-sm font-medium text-gray-700 mb-2">
-                  Button 2 Link
-                </label>
-                <input
-                  type="text"
-                  id="button2Link"
-                  value={formData.button2Link}
-                  onChange={(e) => setFormData({ ...formData, button2Link: e.target.value })}
-                  placeholder="/about"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            {/* Save Button */}
-            <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
-              <button
-                onClick={handleSave}
-                disabled={saving || uploading}
-                className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-              >
-                {(saving || uploading) ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    {uploading ? 'Uploading images...' : 'Saving...'}
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-5 w-5" />
-                    {activeLayout ? 'Update Layout' : 'Create Layout'}
-                  </>
-                )}
-              </button>
-            </div>
+            {/* Current Layout Info */}
+            {activeLayout && (
+              <LayoutInfo createdAt={activeLayout.createdAt} updatedAt={activeLayout.updatedAt} />
+            )}
           </div>
         </div>
-
-        {/* Current Layout Info */}
-        {activeLayout && (
-          <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Active Layout</h3>
-            <div className="space-y-2 text-sm text-gray-600">
-              <p><span className="font-medium">Created:</span> {new Date(activeLayout.createdAt).toLocaleString()}</p>
-              <p><span className="font-medium">Last Updated:</span> {new Date(activeLayout.updatedAt).toLocaleString()}</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 }
-
-

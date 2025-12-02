@@ -21,6 +21,14 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'talaash.thejaayveeworld.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'thejaayveeworld.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.thejaayveeworld.com',
+      },
     ],
   },
 };

@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Copy, Check, Tag, Percent, Calendar, Users, Hash } from 'lucide-react';
+import { Copy, Check, Tag, Percent, Calendar, Users, Hash, Edit, X } from 'lucide-react';
 import { fetchAPI, API_ENDPOINTS, API_BASE_URL } from '@/lib/api';
 
 interface Coupon {
+  id?: string;
   code: string;
   name: string;
   discount: number;
@@ -16,10 +17,14 @@ interface Coupon {
   applicableTo: 'all' | 'event' | 'category';
   eventId?: string;
   category?: string;
+  onlyForStudent?: boolean;
+  status?: string;
 }
 
 export default function CouponGeneratorPage() {
   const [generatedCoupons, setGeneratedCoupons] = useState<Coupon[]>([]);
+  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Load existing coupons on mount
   useEffect(() => {
@@ -190,6 +195,48 @@ export default function CouponGeneratorPage() {
     }
   };
 
+  const handleEdit = (coupon: Coupon) => {
+    setEditingCoupon(coupon);
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdate = async () => {
+    if (!editingCoupon || !editingCoupon.id) return;
+
+    try {
+      const updateData = {
+        id: editingCoupon.id,
+        name: editingCoupon.name,
+        discount: editingCoupon.discount,
+        discountType: editingCoupon.discountType,
+        usageLimit: editingCoupon.usageLimit,
+        validFrom: editingCoupon.validFrom,
+        validUntil: editingCoupon.validUntil,
+        applicableTo: editingCoupon.applicableTo,
+        eventId: editingCoupon.eventId || null,
+        category: editingCoupon.category || null,
+        onlyForStudent: editingCoupon.onlyForStudent || false,
+      };
+
+      const response = await fetchAPI(API_ENDPOINTS.COUPONS, {
+        method: 'PUT',
+        body: JSON.stringify(updateData),
+      });
+
+      if (response.success) {
+        // Update the coupon in the list
+        setGeneratedCoupons(generatedCoupons.map(c => 
+          c.id === editingCoupon.id ? response.data : c
+        ));
+        setIsEditModalOpen(false);
+        setEditingCoupon(null);
+      }
+    } catch (error) {
+      console.error('Failed to update coupon:', error);
+      alert('Failed to update coupon. Please try again.');
+    }
+  };
+
   const handleExport = () => {
     const csv = [
       ['Code', 'Discount', 'Type', 'Usage Limit', 'Valid From', 'Valid Until', 'Applicable To'],
@@ -274,13 +321,24 @@ export default function CouponGeneratorPage() {
                         )}
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleCopy(coupon.code)}
-                      className="p-2 hover:bg-primary-accent-light rounded-lg transition-colors"
-                      title="Copy code"
-                    >
-                      <Copy size={16} className="text-primary-muted" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {coupon.id && (
+                        <button
+                          onClick={() => handleEdit(coupon)}
+                          className="p-2 hover:bg-primary-accent-light rounded-lg transition-colors"
+                          title="Edit coupon"
+                        >
+                          <Edit size={16} className="text-primary-muted" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleCopy(coupon.code)}
+                        className="p-2 hover:bg-primary-accent-light rounded-lg transition-colors"
+                        title="Copy code"
+                      >
+                        <Copy size={16} className="text-primary-muted" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-sm">
@@ -500,6 +558,189 @@ export default function CouponGeneratorPage() {
         </div>
 
       </div>
+
+      {/* Edit Modal */}
+      {isEditModalOpen && editingCoupon && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-primary-bg rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-primary-fg flex items-center gap-2">
+                <Edit className="text-primary-accent" size={24} />
+                Edit Coupon
+              </h2>
+              <button
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingCoupon(null);
+                }}
+                className="p-2 hover:bg-primary-accent-light rounded-lg transition-colors"
+              >
+                <X size={20} className="text-primary-muted" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Coupon Code (Read-only) */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Coupon Code
+                </label>
+                <input
+                  type="text"
+                  value={editingCoupon.code}
+                  disabled
+                  className="w-full px-4 py-2 border border-primary-border rounded-xl bg-primary-bg/50 text-primary-muted cursor-not-allowed"
+                />
+                <p className="text-xs text-primary-muted mt-1">Coupon code cannot be changed</p>
+              </div>
+
+              {/* Coupon Name */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Coupon Name
+                </label>
+                <input
+                  type="text"
+                  value={editingCoupon.name}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                  placeholder="Enter coupon name"
+                />
+              </div>
+
+              {/* Discount Amount */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Discount Amount
+                </label>
+                <input
+                  type="number"
+                  value={editingCoupon.discount}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, discount: parseFloat(e.target.value) || 0 })}
+                  className="w-full px-4 py-2 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                  placeholder="Enter discount amount"
+                  min="0"
+                />
+              </div>
+
+              {/* Discount Type */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Discount Type
+                </label>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setEditingCoupon({ ...editingCoupon, discountType: 'percentage' })}
+                    className={`flex-1 px-4 py-2 rounded-xl border transition-colors ${
+                      editingCoupon.discountType === 'percentage'
+                        ? 'bg-primary-accent text-white'
+                        : 'border-primary-border text-primary-fg'
+                    }`}
+                  >
+                    <Percent size={16} className="inline mr-2" />
+                    Percentage
+                  </button>
+                  <button
+                    onClick={() => setEditingCoupon({ ...editingCoupon, discountType: 'fixed' })}
+                    className={`flex-1 px-4 py-2 rounded-xl border transition-colors ${
+                      editingCoupon.discountType === 'fixed'
+                        ? 'bg-primary-accent text-white'
+                        : 'border-primary-border text-primary-fg'
+                    }`}
+                  >
+                    <Hash size={16} className="inline mr-2" />
+                    Fixed Amount
+                  </button>
+                </div>
+              </div>
+
+              {/* Usage Limit */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Usage Limit
+                </label>
+                <input
+                  type="number"
+                  value={editingCoupon.usageLimit}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, usageLimit: parseInt(e.target.value) || 0 })}
+                  className="w-full px-4 py-2 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                  placeholder="100"
+                  min="1"
+                />
+                <p className="text-xs text-primary-muted mt-1">
+                  Current usage: {editingCoupon.usedCount} / {editingCoupon.usageLimit}
+                </p>
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-primary-fg mb-2">
+                    Valid From
+                  </label>
+                  <input
+                    type="date"
+                    value={typeof editingCoupon.validFrom === 'string' 
+                      ? editingCoupon.validFrom.split('T')[0] 
+                      : new Date(editingCoupon.validFrom).toISOString().split('T')[0]}
+                    onChange={(e) => setEditingCoupon({ ...editingCoupon, validFrom: e.target.value })}
+                    className="w-full px-4 py-2 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-primary-fg mb-2">
+                    Valid Until
+                  </label>
+                  <input
+                    type="date"
+                    value={typeof editingCoupon.validUntil === 'string' 
+                      ? editingCoupon.validUntil.split('T')[0] 
+                      : new Date(editingCoupon.validUntil).toISOString().split('T')[0]}
+                    onChange={(e) => setEditingCoupon({ ...editingCoupon, validUntil: e.target.value })}
+                    className="w-full px-4 py-2 border border-primary-border rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                    min={typeof editingCoupon.validFrom === 'string' 
+                      ? editingCoupon.validFrom.split('T')[0] 
+                      : new Date(editingCoupon.validFrom).toISOString().split('T')[0]}
+                  />
+                </div>
+              </div>
+
+              {/* Only for Student Checkbox */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="editOnlyForStudent"
+                  checked={editingCoupon.onlyForStudent || false}
+                  onChange={(e) => setEditingCoupon({ ...editingCoupon, onlyForStudent: e.target.checked })}
+                  className="w-5 h-5 border border-primary-border rounded focus:ring-2 focus:ring-primary-accent text-primary-accent"
+                />
+                <label htmlFor="editOnlyForStudent" className="text-sm font-medium text-primary-fg cursor-pointer">
+                  Only for Student (requires student ID verification)
+                </label>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingCoupon(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-primary-border rounded-xl text-primary-fg hover:bg-primary-accent-light transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdate}
+                  className="flex-1 px-4 py-2 bg-primary-accent text-white rounded-xl hover:bg-primary-accent-dark transition-colors"
+                >
+                  Update Coupon
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

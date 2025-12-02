@@ -45,6 +45,28 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PUT - Update coupon
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    
+    // Proxy the request to the central API
+    const response = await fetchAPI(API_ENDPOINTS.COUPONS, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    
+    return NextResponse.json(response);
+    
+  } catch (error) {
+    console.error('Failed to update coupon:', error);
+    return NextResponse.json(
+      { error: 'Failed to update coupon' },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE - Delete a coupon
 export async function DELETE(request: NextRequest) {
   try {

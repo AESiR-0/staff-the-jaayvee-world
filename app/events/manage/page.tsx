@@ -1062,13 +1062,8 @@ export default function ManageEventsPage() {
       return;
     }
 
-    // Validate file size (5-8 MB for banner, 1-5 MB for thumbnail)
-    const minSize = isThumbnail ? 1 * 1024 * 1024 : 5 * 1024 * 1024; // 1 MB for thumbnail, 5 MB for banner
+    // Validate file size (max 8 MB for banner, max 5 MB for thumbnail)
     const maxSize = isThumbnail ? 5 * 1024 * 1024 : 8 * 1024 * 1024; // 5 MB for thumbnail, 8 MB for banner
-    if (file.size < minSize) {
-      setError(`File size must be at least ${minSize / (1024 * 1024)} MB.`);
-      return;
-    }
     if (file.size > maxSize) {
       setError(`File size must not exceed ${maxSize / (1024 * 1024)} MB.`);
       return;

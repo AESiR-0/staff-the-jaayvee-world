@@ -757,7 +757,7 @@ export default function TasksPage() {
         >
           <div className="flex items-center gap-2 mb-4 pb-3 border-b border-primary-border">
             <Clock className="h-5 w-5 text-gray-500" />
-            <h2 className="font-semibold text-primary-fg">Not Started</h2>
+            <h2 className="font-semibold text-primary-fg">Assigned</h2>
             <span className="ml-auto px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">
               {tasksByStatus.not_started.length}
             </span>
@@ -902,7 +902,7 @@ export default function TasksPage() {
                       : 'bg-gray-100 text-gray-700'
                   }`}>
                     {viewingTask.status === 'completed' ? 'Completed' : 
-                     viewingTask.status === 'in_progress' ? 'In Progress' : 'Not Started'}
+                     viewingTask.status === 'in_progress' ? 'In Progress' : 'Assigned'}
                   </span>
                 </div>
 
@@ -1165,6 +1165,9 @@ export default function TasksPage() {
                   className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg"
                 >
                   <option value="">Unassigned</option>
+                  <option value={currentUserId}>
+                    Me ({session?.email || 'Self'})
+                  </option>
                   {teamUsers.map((user) => (
                     <option key={user.id} value={user.id}>
                       {user.fullName} ({user.email})
@@ -1260,7 +1263,10 @@ function TaskCard({
   const overdue = isOverdue(task);
 
   const getStatusButtons = () => {
-    if (task.status === 'not_started') {
+    const isAssignedToCurrentUser = task.assignedTo === currentUserId;
+    
+    // Show Start button if task is assigned to current user and status is not_started
+    if (task.status === 'not_started' && isAssignedToCurrentUser) {
       return (
         <button
           onClick={(e) => {
@@ -1273,7 +1279,7 @@ function TaskCard({
           Start
         </button>
       );
-    } else if (task.status === 'in_progress') {
+    } else if (task.status === 'in_progress' && isAssignedToCurrentUser) {
       return (
         <button
           onClick={(e) => {
@@ -1312,7 +1318,16 @@ function TaskCard({
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2 flex-1">
           <GripVertical className="h-4 w-4 text-gray-400 cursor-move" />
-          <h3 className="font-semibold text-primary-fg text-sm flex-1">{task.title}</h3>
+          <div className="flex-1">
+            <h3 className="font-semibold text-primary-fg text-sm">{task.title}</h3>
+            {/* Show Created By outside the card */}
+            {task.createdByName && (
+              <p className="text-xs text-primary-muted mt-0.5">
+                Created by: {task.createdByName}
+                {task.createdByEmail && ` (${task.createdByEmail})`}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex gap-1">
           {isCreator && (

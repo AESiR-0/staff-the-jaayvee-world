@@ -76,6 +76,8 @@ interface SidebarGroup {
 interface SidebarData {
   groups: SidebarGroup[];
   commonItems: SidebarItem[];
+  allItems?: SidebarItem[];
+  ungroupedItems?: SidebarItem[];
 }
 
 export default function Sidebar() {
@@ -219,6 +221,10 @@ export default function Sidebar() {
                 allItems.push(item);
               });
             });
+            // Also include ungrouped items for admins
+            if (data.data.ungroupedItems) {
+              allItems.push(...data.data.ungroupedItems);
+            }
             const accessibleSet = new Set<string>(allItems.map(item => item.href || ''));
             accessibleSet.add('/feedback');
             accessibleSet.add('/user-activity');
@@ -242,12 +248,17 @@ export default function Sidebar() {
 
           // For non-admins, check access for items (but only if admin status is determined)
           if (isUserAdmin === false) {
-            const allItems: SidebarItem[] = [];
+            // Get all items from groups
+            const itemsFromGroups: SidebarItem[] = [];
             data.data.groups.forEach((group: SidebarGroup) => {
               group.items.forEach((item: SidebarItem) => {
-                allItems.push(item);
+                itemsFromGroups.push(item);
               });
             });
+
+            // Also get ungrouped items (items with permissions but not in groups)
+            const ungroupedItems: SidebarItem[] = data.data.ungroupedItems || [];
+            const allItems: SidebarItem[] = [...itemsFromGroups, ...ungroupedItems];
 
             // Check access in parallel batches
             const accessibleSet = new Set<string>();
@@ -668,50 +679,127 @@ export default function Sidebar() {
               })()}
               
               {/* All groups including common (accordion style) */}
-              {sidebarData.groups
-                .filter(group => group.items.length > 0)
-                .map((group) => {
-                  const visibleItems = group.items.filter(item => canAccessItemSync(item));
-                  if (visibleItems.length === 0) return null;
+              {sidebarData.groups && sidebarData.groups.length > 0 && sidebarData.groups.some((g: SidebarGroup) => g.items && g.items.length > 0) ? (
+                sidebarData.groups
+                  .filter(group => group.items && group.items.length > 0)
+                  .map((group) => {
+                    const visibleItems = group.items.filter(item => canAccessItemSync(item));
+                    if (visibleItems.length === 0) return null;
 
-                  const isExpanded = expandedGroups.has(group.id);
+                    const isExpanded = expandedGroups.has(group.id);
+
+                    return (
+                      <div key={group.id} className="mb-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(group.id)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-fg hover:bg-primary-bg/50 rounded-lg transition-colors"
+                        >
+                          <span>{group.displayName.slice(0, 1).toUpperCase() + group.displayName.slice(1).toLowerCase()}</span>
+                          {isExpanded ? (
+                            <ChevronUp size={16} className="text-primary-muted" />
+                          ) : (
+                            <ChevronDown size={16} className="text-primary-muted" />
+                          )}
+                        </button>
+                        {isExpanded && (
+                          <div className="ml-2 mt-1 space-y-1 border-l-2 border-primary-border pl-2">
+                            {visibleItems.map((item) => {
+                              const Icon = iconMap[item.iconName] || FileText;
+                              const isActive = isItemActive(item.href);
+                              return (
+                                <Link
+                                  key={item.id}
+                                  href={item.href}
+                                  className={`sidebar-item ${isActive ? "active" : ""}`}
+                                  onClick={() => setIsOpen(false)}
+                                >
+                                  <Icon size={20} />
+                                  <span className="font-medium">{item.name}</span>
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+              ) : isUserAdmin === true ? (
+                // For admins: Show all items if groups are empty or have no items
+                (() => {
+                  // Get all items from allItems or ungroupedItems
+                  const allAvailableItems: SidebarItem[] = sidebarData.allItems || sidebarData.ungroupedItems || [];
+                  const sortedItems = [...allAvailableItems].sort((a, b) => a.order - b.order);
+                  
+                  if (sortedItems.length === 0) {
+                    return (
+                      <div className="text-center py-8 text-primary-muted text-sm">
+                        <p className="mb-2">No sidebar items found.</p>
+                        <p className="text-xs">Please run the seed script:</p>
+                        <code className="bg-primary-accent-light px-2 py-1 rounded text-xs mt-1 inline-block">npm run seed:sidebar</code>
+                      </div>
+                    );
+                  }
 
                   return (
-                    <div key={group.id} className="mb-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleGroup(group.id)}
-                        className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-fg hover:bg-primary-bg/50 rounded-lg transition-colors"
-                      >
-                        <span>{group.displayName.slice(0, 1).toUpperCase() + group.displayName.slice(1).toLowerCase()}</span>
-                        {isExpanded ? (
-                          <ChevronUp size={16} className="text-primary-muted" />
-                        ) : (
-                          <ChevronDown size={16} className="text-primary-muted" />
-                        )}
-                      </button>
-                      {isExpanded && (
-                        <div className="ml-2 mt-1 space-y-1 border-l-2 border-primary-border pl-2">
-                          {visibleItems.map((item) => {
-                            const Icon = iconMap[item.iconName] || FileText;
-                            const isActive = isItemActive(item.href);
-                            return (
-                              <Link
-                                key={item.id}
-                                href={item.href}
-                                className={`sidebar-item ${isActive ? "active" : ""}`}
-                                onClick={() => setIsOpen(false)}
-                              >
-                                <Icon size={20} />
-                                <span className="font-medium">{item.name}</span>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      )}
+                    <div className="mb-2">
+                      <div className="px-3 py-2 text-xs font-semibold text-primary-muted uppercase tracking-wider">
+                        Navigation
+                      </div>
+                      <div className="ml-2 mt-1 space-y-1 border-l-2 border-primary-border pl-2">
+                        {sortedItems.map((item) => {
+                          const Icon = iconMap[item.iconName] || FileText;
+                          const isActive = isItemActive(item.href);
+                          return (
+                            <Link
+                              key={item.id}
+                              href={item.href}
+                              className={`sidebar-item ${isActive ? "active" : ""}`}
+                              onClick={() => setIsOpen(false)}
+                            >
+                              <Icon size={20} />
+                              <span className="font-medium">{item.name}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
-                })}
+                })()
+              ) : null}
+
+              {/* Ungrouped items (items with permissions but not in any group) - show for non-admins */}
+              {isUserAdmin !== true && (() => {
+                const ungroupedItems: SidebarItem[] = sidebarData.ungroupedItems || [];
+                const visibleUngroupedItems = ungroupedItems.filter(item => canAccessItemSync(item));
+                
+                if (visibleUngroupedItems.length === 0) return null;
+
+                return (
+                  <div className="mb-2">
+                    <div className="px-3 py-2 text-xs font-semibold text-primary-muted uppercase tracking-wider">
+                      Other
+                    </div>
+                    <div className="ml-2 mt-1 space-y-1 border-l-2 border-primary-border pl-2">
+                      {visibleUngroupedItems.map((item) => {
+                        const Icon = iconMap[item.iconName] || FileText;
+                        const isActive = isItemActive(item.href);
+                        return (
+                          <Link
+                            key={item.id}
+                            href={item.href}
+                            className={`sidebar-item ${isActive ? "active" : ""}`}
+                            onClick={() => setIsOpen(false)}
+                          >
+                            <Icon size={20} />
+                            <span className="font-medium">{item.name}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <div className="text-center py-8 text-primary-muted text-sm">
@@ -769,8 +857,8 @@ export default function Sidebar() {
                     </a>
                   );
                 })}
-              </div>
-            )}
+            </div>
+          )}
           </div>
 
           {/* Logout */}

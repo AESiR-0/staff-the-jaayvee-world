@@ -4,7 +4,7 @@ import { CheckCircle, UserPlus, Phone, User, Key, Users, Sparkles, Store, UserCh
 import { fetchAPI, API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
 import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 
-type RoleType = 'affiliate' | 'agent' | 'seller' | 'influencer' | 'staff';
+type RoleType = 'affiliate' | 'agent' | 'seller' | 'influencer' | 'staff' | 'team';
 
 interface BaseFormData {
   email: string;
@@ -93,6 +93,7 @@ function ReferralCodeDisplay({ code, role }: { code: string; role: string }) {
                    role === 'influencer' ? 'Influencer Referral Code' :
                    role === 'seller' ? 'Seller Referral Code' :
                    role === 'staff' ? 'Staff Referral Code' :
+                   role === 'team' ? 'Team Referral Code' :
                    'Referral Code';
 
   return (
@@ -194,6 +195,14 @@ export default function CreateUserPage() {
     confirmPassword: ''
   });
 
+  const [teamFormData, setTeamFormData] = useState<BaseFormData>({
+    email: '',
+    fullName: '',
+    phone: '',
+    password: '',
+    confirmPassword: ''
+  });
+
   // Get current user info and referral code
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -241,7 +250,10 @@ export default function CreateUserPage() {
     { id: 'agent' as RoleType, name: 'Agent', icon: Users },
     { id: 'seller' as RoleType, name: 'Seller', icon: Store },
     { id: 'influencer' as RoleType, name: 'Influencer', icon: Sparkles },
-    ...(canCreateStaff ? [{ id: 'staff' as RoleType, name: 'Team', icon: Shield }] : []),
+    ...(canCreateStaff ? [
+      { id: 'staff' as RoleType, name: 'Staff', icon: Shield },
+      { id: 'team' as RoleType, name: 'Team', icon: Shield }
+    ] : []),
   ];
 
   const handleInputChange = (
@@ -266,6 +278,9 @@ export default function CreateUserPage() {
       case 'staff':
         setStaffFormData(prev => ({ ...prev, [name]: value }));
         break;
+      case 'team':
+        setTeamFormData(prev => ({ ...prev, [name]: value }));
+        break;
     }
   };
 
@@ -288,6 +303,9 @@ export default function CreateUserPage() {
       case 'staff':
         setStaffFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }));
         break;
+      case 'team':
+        setTeamFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }));
+        break;
     }
   };
 
@@ -309,6 +327,7 @@ export default function CreateUserPage() {
         break;
       case 'agent':
       case 'staff':
+      case 'team':
         const resetData = {
           email: '',
           fullName: '',
@@ -318,6 +337,7 @@ export default function CreateUserPage() {
         };
         if (roleType === 'agent') setAgentFormData(resetData);
         if (roleType === 'staff') setStaffFormData(resetData);
+        if (roleType === 'team') setTeamFormData(resetData);
         break;
       case 'affiliate':
         setAffiliateFormData({
@@ -479,6 +499,29 @@ export default function CreateUserPage() {
           password: formData.password,
         };
         break;
+
+      case 'team':
+        formData = teamFormData;
+        endpoint = `${API_BASE_URL}/api/team/auth/register`;
+        
+        if (formData.password !== formData.confirmPassword) {
+          setError('Passwords do not match');
+          setIsLoading(false);
+          return;
+        }
+        if (formData.password.length < 6) {
+          setError('Password must be at least 6 characters long');
+          setIsLoading(false);
+          return;
+        }
+
+        payload = {
+          email: formData.email,
+          fullName: formData.fullName,
+          phone: formData.phone || undefined,
+          password: formData.password,
+        };
+        break;
     }
 
     try {
@@ -540,6 +583,8 @@ export default function CreateUserPage() {
         return influencerFormData;
       case 'staff':
         return staffFormData;
+      case 'team':
+        return teamFormData;
     }
   };
 
@@ -879,7 +924,7 @@ export default function CreateUserPage() {
         </div>
 
         {/* Auto-detected referrer info */}
-        {currentUserReferralCode && roleType !== 'staff' && (
+        {currentUserReferralCode && roleType !== 'staff' && roleType !== 'team' && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <p className="text-xs text-blue-800">
               <strong>Note:</strong> Your referral code ({currentUserReferralCode}) will be automatically set as the referrer for this {roleType}.
@@ -916,6 +961,7 @@ export default function CreateUserPage() {
 
   if (success && createdUser) {
     const roleNames: Record<RoleType, string> = {
+      team: 'Team',
       affiliate: 'Affiliate',
       agent: 'Agent',
       seller: 'Seller',
