@@ -186,20 +186,14 @@ export default function TasksPage() {
         if (data.success && data.data?.users) {
           const staffList = data.data.users;
           
-          // Filter out admins and MD from assignee list
-          const filteredUsers = [];
-          for (const user of staffList) {
-            const userIsAdmin = await isSuperAdmin(user.email);
-            if (!userIsAdmin) {
-              filteredUsers.push({
-                id: user.id,
-                email: user.email,
-                fullName: user.fullName || user.email,
-              });
-            }
-          }
+          // Include all users in assignee list (including admins and self)
+          const allUsers = staffList.map((user: any) => ({
+            id: user.id,
+            email: user.email,
+            fullName: user.fullName || user.email,
+          }));
           
-          setTeamUsers(filteredUsers);
+          setTeamUsers(allUsers);
         }
       } else {
         console.warn('RBAC API returned non-OK status:', response.status);
@@ -1165,12 +1159,9 @@ export default function TasksPage() {
                   className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg"
                 >
                   <option value="">Unassigned</option>
-                  <option value={currentUserId}>
-                    Me ({session?.email || 'Self'})
-                  </option>
                   {teamUsers.map((user) => (
                     <option key={user.id} value={user.id}>
-                      {user.fullName} ({user.email})
+                      {user.id === currentUserId ? `Me - ${user.fullName} (${user.email})` : `${user.fullName} (${user.email})`}
                     </option>
                   ))}
                 </select>
