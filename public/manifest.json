@@ -12,13 +12,13 @@
   "categories": ["business", "productivity", "utilities"],
   "icons": [
     {
-      "src": "/static/logos/staff/staff_icon_192.png",
+      "src": "https://www.thejaayveeworld.com/static/logo%28icon%29%20white/jaayvee%20world%20icon-03.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/static/logos/staff/staff_icon_512.png",
+      "src": "https://www.thejaayveeworld.com/static/logo%28icon%29%20white/jaayvee%20world%20icon-03.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -32,7 +32,7 @@
       "url": "/dashboard",
       "icons": [
         {
-          "src": "/static/logos/staff/staff_icon_192.png",
+          "src": "https://www.thejaayveeworld.com/static/logo%28icon%29%20white/jaayvee%20world%20icon-03.png",
           "sizes": "192x192"
         }
       ]
@@ -44,7 +44,7 @@
       "url": "/kyc",
       "icons": [
         {
-          "src": "/static/logos/staff/staff_icon_192.png",
+          "src": "https://www.thejaayveeworld.com/static/logo%28icon%29%20white/jaayvee%20world%20icon-03.png",
           "sizes": "192x192"
         }
       ]
