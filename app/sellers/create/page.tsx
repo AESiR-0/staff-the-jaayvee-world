@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
-import { CheckCircle, UserPlus, Phone, User, Key, Users, Sparkles, Store, UserCheck, Shield, Eye, EyeOff, RefreshCw, Building2, Globe, Instagram, Youtube, Copy, Check } from "lucide-react";
+import { CheckCircle, UserPlus, Phone, User, Key, Users, Sparkles, Store, UserCheck, Shield, Eye, EyeOff, RefreshCw, Building2, Globe, Instagram, Youtube, Copy, Check, GraduationCap } from "lucide-react";
 import { fetchAPI, API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
 import { authenticatedFetch, getTeamSession, getAuthToken } from "@/lib/auth-utils";
 
-type RoleType = 'affiliate' | 'agent' | 'seller' | 'influencer' | 'staff' | 'team';
+type RoleType = 'affiliate' | 'agent' | 'seller' | 'influencer' | 'staff' | 'team' | 'trainee';
 
 interface BaseFormData {
   email: string;
@@ -94,6 +94,7 @@ function ReferralCodeDisplay({ code, role }: { code: string; role: string }) {
                    role === 'seller' ? 'Seller Referral Code' :
                    role === 'staff' ? 'Staff Referral Code' :
                    role === 'team' ? 'Team Referral Code' :
+                   role === 'trainee' ? 'Trainee Referral Code' :
                    'Referral Code';
 
   return (
@@ -203,6 +204,14 @@ export default function CreateUserPage() {
     confirmPassword: ''
   });
 
+  const [traineeFormData, setTraineeFormData] = useState<BaseFormData>({
+    email: '',
+    fullName: '',
+    phone: '',
+    password: '',
+    confirmPassword: ''
+  });
+
   // Get current user info and referral code
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -251,8 +260,8 @@ export default function CreateUserPage() {
     { id: 'seller' as RoleType, name: 'Seller', icon: Store },
     { id: 'influencer' as RoleType, name: 'Influencer', icon: Sparkles },
     ...(canCreateStaff ? [
-      { id: 'staff' as RoleType, name: 'Staff', icon: Shield },
-      { id: 'team' as RoleType, name: 'Team', icon: Shield }
+      { id: 'team' as RoleType, name: 'Team', icon: Shield },
+      { id: 'trainee' as RoleType, name: 'Trainee', icon: GraduationCap }
     ] : []),
   ];
 
@@ -281,6 +290,9 @@ export default function CreateUserPage() {
       case 'team':
         setTeamFormData(prev => ({ ...prev, [name]: value }));
         break;
+      case 'trainee':
+        setTraineeFormData(prev => ({ ...prev, [name]: value }));
+        break;
     }
   };
 
@@ -306,6 +318,9 @@ export default function CreateUserPage() {
       case 'team':
         setTeamFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }));
         break;
+      case 'trainee':
+        setTraineeFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }));
+        break;
     }
   };
 
@@ -328,6 +343,7 @@ export default function CreateUserPage() {
       case 'agent':
       case 'staff':
       case 'team':
+      case 'trainee':
         const resetData = {
           email: '',
           fullName: '',
@@ -338,6 +354,7 @@ export default function CreateUserPage() {
         if (roleType === 'agent') setAgentFormData(resetData);
         if (roleType === 'staff') setStaffFormData(resetData);
         if (roleType === 'team') setTeamFormData(resetData);
+        if (roleType === 'trainee') setTraineeFormData(resetData);
         break;
       case 'affiliate':
         setAffiliateFormData({
@@ -502,7 +519,30 @@ export default function CreateUserPage() {
 
       case 'team':
         formData = teamFormData;
-        endpoint = `${API_BASE_URL}/api/team/auth/register`;
+        endpoint = `${API_BASE_URL}/api/team/users/create`;
+        
+        if (formData.password !== formData.confirmPassword) {
+          setError('Passwords do not match');
+          setIsLoading(false);
+          return;
+        }
+        if (formData.password.length < 6) {
+          setError('Password must be at least 6 characters long');
+          setIsLoading(false);
+          return;
+        }
+
+        payload = {
+          email: formData.email,
+          fullName: formData.fullName,
+          phone: formData.phone || undefined,
+          password: formData.password,
+        };
+        break;
+
+      case 'trainee':
+        formData = traineeFormData;
+        endpoint = `${API_BASE_URL}/api/team/trainees/create`;
         
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
@@ -585,6 +625,8 @@ export default function CreateUserPage() {
         return staffFormData;
       case 'team':
         return teamFormData;
+      case 'trainee':
+        return traineeFormData;
     }
   };
 
