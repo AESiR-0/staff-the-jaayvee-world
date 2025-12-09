@@ -34,6 +34,8 @@ export default function GalleryPage() {
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [events, setEvents] = useState<Array<{ id: string; title: string }>>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
   
   // Upload form state
   const [uploadForm, setUploadForm] = useState({
@@ -45,6 +47,7 @@ export default function GalleryPage() {
     photographer: '',
     tags: '',
     isFeatured: false,
+    eventId: '',
   });
 
   // Edit form state
@@ -63,7 +66,27 @@ export default function GalleryPage() {
   useEffect(() => {
     checkPermission();
     fetchImages();
+    fetchEvents();
   }, []);
+
+  const fetchEvents = async () => {
+    try {
+      setLoadingEvents(true);
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/events?all=true`);
+      
+      if (!response.ok) throw new Error('Failed to fetch events');
+      
+      const result = await response.json();
+      if (result.success) {
+        setEvents(result.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
 
   const checkPermission = async () => {
     try {
@@ -188,6 +211,7 @@ export default function GalleryPage() {
           ...uploadForm,
           imageUrl,
           thumbnailUrl: thumbnailUrl || imageUrl,
+          eventId: uploadForm.eventId || null,
         }),
       });
 
@@ -212,6 +236,7 @@ export default function GalleryPage() {
         photographer: '',
         tags: '',
         isFeatured: false,
+        eventId: '',
       });
     } catch (error: any) {
       alert(error.message || 'Failed to upload image');
@@ -473,6 +498,26 @@ export default function GalleryPage() {
                     <p className="text-xs text-gray-500 mt-1">Using uploaded file</p>
                   )}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Event (Optional)
+                </label>
+                <select
+                  value={uploadForm.eventId}
+                  onChange={(e) => setUploadForm({ ...uploadForm, eventId: e.target.value })}
+                  className="w-full px-3 py-2 border border-primary-border rounded-lg"
+                  disabled={loadingEvents}
+                >
+                  <option value="">Select an event (optional)</option>
+                  {events.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.title}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Select an event to associate this image with a specific event</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
