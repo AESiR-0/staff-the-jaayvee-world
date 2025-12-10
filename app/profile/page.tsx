@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { User, MessageSquare } from "lucide-react";
+import { User, MessageSquare, FileText } from "lucide-react";
 import { authenticatedFetch } from "@/lib/auth-utils";
 import { FeedbackForm } from "@/components/FeedbackForm";
+import { PaperworkView } from "@/components/PaperworkView";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
 
@@ -18,7 +19,7 @@ interface UserProfile {
 export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'profile' | 'feedback'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'paperwork' | 'feedback'>('profile');
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -79,6 +80,20 @@ export default function ProfilePage() {
               Profile
             </button>
             <button
+              onClick={() => setActiveTab('paperwork')}
+              className={`
+                flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors
+                ${
+                  activeTab === 'paperwork'
+                    ? 'border-b-2 border-primary-accent text-primary-accent'
+                    : 'text-primary-muted hover:text-primary-fg'
+                }
+              `}
+            >
+              <FileText className="h-4 w-4" />
+              Documents
+            </button>
+            <button
               onClick={() => setActiveTab('feedback')}
               className={`
                 flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors
@@ -102,6 +117,10 @@ export default function ProfilePage() {
               Feedback
             </h2>
             <FeedbackForm source="staff" />
+          </div>
+        ) : activeTab === 'paperwork' ? (
+          <div className="bg-primary-bg border border-primary-border rounded-lg p-6">
+            {profile?.id && <PaperworkView userId={profile.id} />}
           </div>
         ) : (
           <div className="bg-primary-bg border border-primary-border rounded-lg p-6">

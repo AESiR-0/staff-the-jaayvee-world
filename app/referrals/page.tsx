@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { QrCode, Users, MousePointer, TrendingUp, Copy, ExternalLink, Calendar } from "lucide-react";
+import { QrCode, Users, MousePointer, TrendingUp, Copy, ExternalLink, Calendar, Home, LogIn, CalendarDays, FileText } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { API_ENDPOINTS, API_BASE_URL } from "@/lib/api";
 import { EventReferralLink } from "@/components/EventReferralLink";
@@ -125,6 +125,16 @@ export default function ReferralsPage() {
     // You could add a toast notification here
   };
 
+  const copyLink = (link: string, label: string) => {
+    navigator.clipboard.writeText(link);
+    // You could add a toast notification here
+  };
+
+  const baseUrl = 'https://talaash.thejaayveeworld.com';
+  const signupLink = `${baseUrl}/auth/register?ref=${stats.referralCode}`;
+  const homepageLink = baseUrl;
+  const eventsPageLink = `${baseUrl}/talaash`;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -227,6 +237,129 @@ export default function ReferralsPage() {
                 Copy Link
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Quick Links Section */}
+        <div className="card">
+          <h2 className="text-lg font-semibold text-primary-fg mb-4">Quick Links</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Signup Link */}
+            <div className="border border-primary-border rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary-accent-light rounded-xl flex items-center justify-center">
+                  <LogIn className="text-primary-accent" size={20} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-primary-fg">Signup Link</h3>
+                  <p className="text-xs text-primary-muted">Registration with referral code</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-primary-fg font-mono break-all bg-primary-bg p-2 rounded">
+                  {signupLink}
+                </p>
+                <button
+                  onClick={() => copyLink(signupLink, "Signup Link")}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-primary-border text-primary-fg rounded-lg hover:bg-primary-accent-light transition-colors"
+                >
+                  <Copy size={16} />
+                  Copy Link
+                </button>
+              </div>
+            </div>
+
+            {/* Homepage Link */}
+            <div className="border border-primary-border rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary-accent-light rounded-xl flex items-center justify-center">
+                  <Home className="text-primary-accent" size={20} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-primary-fg">Homepage</h3>
+                  <p className="text-xs text-primary-muted">Direct homepage link</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-primary-fg font-mono break-all bg-primary-bg p-2 rounded">
+                  {homepageLink}
+                </p>
+                <button
+                  onClick={() => copyLink(homepageLink, "Homepage Link")}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-primary-border text-primary-fg rounded-lg hover:bg-primary-accent-light transition-colors"
+                >
+                  <Copy size={16} />
+                  Copy Link
+                </button>
+              </div>
+            </div>
+
+            {/* Events Page Link */}
+            <div className="border border-primary-border rounded-xl p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-primary-accent-light rounded-xl flex items-center justify-center">
+                  <CalendarDays className="text-primary-accent" size={20} />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-primary-fg">Events Page</h3>
+                  <p className="text-xs text-primary-muted">Browse all events</p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-primary-fg font-mono break-all bg-primary-bg p-2 rounded">
+                  {eventsPageLink}
+                </p>
+                <button
+                  onClick={() => copyLink(eventsPageLink, "Events Page Link")}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-primary-border text-primary-fg rounded-lg hover:bg-primary-accent-light transition-colors"
+                >
+                  <Copy size={16} />
+                  Copy Link
+                </button>
+              </div>
+            </div>
+
+            {/* Event Details Links */}
+            {events.length > 0 && (
+              <div className="border border-primary-border rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary-accent-light rounded-xl flex items-center justify-center">
+                    <FileText className="text-primary-accent" size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-medium text-primary-fg">Event Details</h3>
+                    <p className="text-xs text-primary-muted">View specific event pages</p>
+                  </div>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {events.slice(0, 3).map((event) => {
+                    const eventDetailsLink = `${baseUrl}/events/${event.id}${stats.referralCode ? `?ref=${stats.referralCode}` : ''}`;
+                    return (
+                      <div key={event.id} className="space-y-1">
+                        <p className="text-xs font-medium text-primary-fg">{event.name}</p>
+                        <div className="flex gap-2">
+                          <p className="text-xs text-primary-muted font-mono break-all flex-1 bg-primary-bg p-1.5 rounded">
+                            {eventDetailsLink}
+                          </p>
+                          <button
+                            onClick={() => copyLink(eventDetailsLink, `Event: ${event.name}`)}
+                            className="px-2 py-1 border border-primary-border text-primary-fg rounded hover:bg-primary-accent-light transition-colors"
+                            title="Copy link"
+                          >
+                            <Copy size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {events.length > 3 && (
+                    <p className="text-xs text-primary-muted text-center pt-2">
+                      +{events.length - 3} more events below
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

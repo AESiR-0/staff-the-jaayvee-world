@@ -26,7 +26,8 @@ import {
   GraduationCap,
   ChevronUp,
   LucideIcon,
-  AlertCircle
+  AlertCircle,
+  FolderOpen
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -53,6 +54,7 @@ const iconMap: Record<string, LucideIcon> = {
   Briefcase,
   Bell,
   Shield,
+  FolderOpen,
 };
 
 interface SidebarItem {
@@ -647,6 +649,7 @@ export default function Sidebar() {
                 }
                 if (isUserAdmin === true) {
                   adminItems.push({ id: 'event-templates-admin', name: 'Event Templates', href: '/event-templates', iconName: 'FileText', order: 2, isActive: true });
+                  adminItems.push({ id: 'paperwork-admin', name: 'Paperwork', href: '/paperwork', iconName: 'FolderOpen', order: 3, isActive: true });
                 }
                 
                 if (adminItems.length > 0) {
