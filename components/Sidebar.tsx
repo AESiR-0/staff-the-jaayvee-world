@@ -27,7 +27,8 @@ import {
   ChevronUp,
   LucideIcon,
   AlertCircle,
-  FolderOpen
+  FolderOpen,
+  ClipboardList
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -55,6 +56,7 @@ const iconMap: Record<string, LucideIcon> = {
   Bell,
   Shield,
   FolderOpen,
+  ClipboardList,
 };
 
 interface SidebarItem {
@@ -637,6 +639,42 @@ export default function Sidebar() {
                 </Link>
               </div>
 
+              {/* Requirements Link - Always visible */}
+              <div className="mb-2">
+                <Link
+                  href="/requirements"
+                  className={`sidebar-item ${isItemActive('/requirements') ? "active" : ""}`}
+                  onClick={() => setIsOpen(false)}
+                >
+                  <ClipboardList size={20} />
+                  <span className="font-medium">Requirements</span>
+                </Link>
+              </div>
+
+              {/* Plan of Action Link - Always visible */}
+              <div className="mb-2">
+                <Link
+                  href="/plan-of-action"
+                  className={`sidebar-item ${isItemActive('/plan-of-action') ? "active" : ""}`}
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Calendar size={20} />
+                  <span className="font-medium">Plan of Action</span>
+                </Link>
+              </div>
+
+              {/* Notes Link - Always visible */}
+              <div className="mb-2">
+                <Link
+                  href="/notes"
+                  className={`sidebar-item ${isItemActive('/notes') ? "active" : ""}`}
+                  onClick={() => setIsOpen(false)}
+                >
+                  <FileText size={20} />
+                  <span className="font-medium">Notes</span>
+                </Link>
+              </div>
+
               {/* Hardcoded Admin Items */}
               {(() => {
                 const adminItems: SidebarItem[] = [];
@@ -650,6 +688,9 @@ export default function Sidebar() {
                 if (isUserAdmin === true) {
                   adminItems.push({ id: 'event-templates-admin', name: 'Event Templates', href: '/event-templates', iconName: 'FileText', order: 2, isActive: true });
                   adminItems.push({ id: 'paperwork-admin', name: 'Paperwork', href: '/paperwork', iconName: 'FolderOpen', order: 3, isActive: true });
+                  adminItems.push({ id: 'requirements-admin', name: 'Requirements (Admin)', href: '/requirements/admin', iconName: 'ClipboardList', order: 4, isActive: true });
+                  adminItems.push({ id: 'task-flow-admin', name: 'Task Flow', href: '/admin/task-flow', iconName: 'GitBranch', order: 5, isActive: true });
+                  adminItems.push({ id: 'influencer-tasks-admin', name: 'Influencer Tasks', href: '/admin/influencer-tasks', iconName: 'Users', order: 6, isActive: true });
                 }
                 
                 if (adminItems.length > 0) {

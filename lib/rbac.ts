@@ -77,6 +77,12 @@ export const TEAM_PERMISSIONS = {
     description: 'Permission to create tasks',
     tab: 'tasks' as TabKey,
   },
+  'tasks.edit_deadlines': {
+    action: 'edit',
+    resource: 'tasks',
+    description: 'Permission to edit task deadlines (admin only)',
+    tab: 'tasks' as TabKey,
+  },
   gallery: {
     action: 'access',
     resource: 'gallery',

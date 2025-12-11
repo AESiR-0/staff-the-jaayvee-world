@@ -5,6 +5,8 @@ import Sidebar from "./Sidebar";
 import NotificationPanel from "./NotificationPanel";
 import NotificationManager from "./NotificationManager";
 import { FeedbackModal } from "./FeedbackModal";
+import LogoutGuard from "./auth/LogoutGuard";
+import TaskNotificationBell from "./tasks/TaskNotificationBell";
 
 interface ConditionalLayoutProps {
   children: React.ReactNode;
@@ -69,7 +71,8 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
       <Sidebar />
       <main className="lg:ml-64">
         {/* Header with Notifications */}
-        <div className="sticky top-0 z-30 bg-white border-b border-primary-border px-6 py-4 flex items-center justify-end">
+        <div className="sticky top-0 z-30 bg-white border-b border-primary-border px-6 py-4 flex items-center justify-end gap-4">
+          <TaskNotificationBell />
           <NotificationPanel />
         </div>
         <div className="p-6">
@@ -80,6 +83,8 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
       <NotificationManager />
       {/* Feedback Modal */}
       <FeedbackModal source="staff" />
+      {/* Logout Guard */}
+      <LogoutGuard />
     </div>
   );
 }

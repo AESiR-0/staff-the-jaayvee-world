@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CheckSquare, Plus, Clock, PlayCircle, X, User, Calendar, Edit2, Trash2, GripVertical, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Send } from "lucide-react";
+import { CheckSquare, Plus, Clock, PlayCircle, X, User, Calendar, Edit2, Trash2, GripVertical, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, Send, FileText, GitBranch } from "lucide-react";
 import { authenticatedFetch, getTeamSession } from "@/lib/auth-utils";
 import { format, differenceInHours, differenceInDays, differenceInMinutes } from "date-fns";
 import { isSuperAdmin } from "@/lib/rbac";
+import { API_BASE_URL } from "@/lib/api";
+import Link from "next/link";
 
 interface Task {
   id: string;
@@ -57,9 +59,16 @@ export default function TasksPage() {
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
+  const [filterEventId, setFilterEventId] = useState<string>('');
+  const [events, setEvents] = useState<any[]>([]);
+  const [taskDependencies, setTaskDependencies] = useState<Record<string, { parentTasks: string[], childTasks: string[] }>>({});
   const [sortBy, setSortBy] = useState<'createdAt' | 'updatedAt' | 'deadline' | 'assignedAt'>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isAdmin, setIsAdmin] = useState(false);
+  
+  // Get eventId from URL params
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const eventIdFromUrl = searchParams?.get('eventId') || '';
   
   // Task remarks state
   const [taskRemarks, setTaskRemarks] = useState<TaskRemark[]>([]);
@@ -79,12 +88,55 @@ export default function TasksPage() {
   const session = getTeamSession();
   const currentUserId = session?.userId || session?.teamId || session?.staffId; // Backward compatibility
 
+  const fetchEvents = async () => {
+    try {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/plan-of-action`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setEvents(data.data || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching events:', error);
+    }
+  };
+
+  const fetchTaskDependencies = async () => {
+    try {
+      const depsMap: Record<string, { parentTasks: string[], childTasks: string[] }> = {};
+      
+      for (const task of tasks) {
+        const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks/${task.id}/dependencies`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            depsMap[task.id] = {
+              parentTasks: data.data.parentTasks.map((p: any) => p.taskId),
+              childTasks: data.data.childTasks.map((c: any) => c.taskId),
+            };
+          }
+        }
+      }
+      
+      setTaskDependencies(depsMap);
+    } catch (error) {
+      console.error('Error fetching task dependencies:', error);
+    }
+  };
+
   const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/team/tasks`);
+      let url = `${API_BASE_URL}/api/team/tasks`;
+      
+      // If event filter is set, fetch tasks for that event
+      if (filterEventId) {
+        url = `${API_BASE_URL}/api/team/events/${filterEventId}/tasks`;
+      }
+      
+      const response = await authenticatedFetch(url);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -94,7 +146,31 @@ export default function TasksPage() {
 
       const result = await response.json();
       if (result.success) {
-        const allTasks = result.data || [];
+        let allTasks = result.data || [];
+        
+        // If fetching from event tasks endpoint, map to task format
+        if (filterEventId && result.data) {
+          allTasks = result.data.map((et: any) => ({
+            id: et.taskId,
+            title: et.task.title,
+            description: et.task.description,
+            status: et.status,
+            assignedTo: et.assignedToUserId,
+            assignedToName: et.assignedUser?.fullName || null,
+            assignedToEmail: et.assignedUser?.email || null,
+            assignedAt: null,
+            submissionDeadline: et.deadline,
+            deadline: et.deadline,
+            createdBy: et.task.createdBy || '',
+            createdByName: null,
+            createdByEmail: null,
+            createdAt: et.createdAt,
+            updatedAt: et.updatedAt,
+            completedAt: et.completedAt,
+            eventId: et.eventId,
+            dependencies: et.dependencies || [],
+          }));
+        }
         
         // Check admin status directly to avoid race condition
         const session = getTeamSession();
@@ -106,7 +182,7 @@ export default function TasksPage() {
         // 1. Tasks created by current user
         // 2. Tasks assigned to current user
         let filteredTasks = allTasks;
-        if (!userIsAdmin) {
+        if (!userIsAdmin && !filterEventId) {
           filteredTasks = allTasks.filter((task: Task) => {
             const isCreatedByUser = task.createdBy === currentUserId;
             const isAssignedToUser = task.assignedTo === currentUserId;
@@ -125,7 +201,7 @@ export default function TasksPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentUserId]);
+  }, [currentUserId, filterEventId]);
 
   useEffect(() => {
     fetchTeamUsers();
@@ -670,10 +746,38 @@ export default function TasksPage() {
           )}
         </div>
 
-        {/* Admin Filters and Sort */}
-        {isAdmin && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Filter by Assignee */}
+        {/* Filters and Sort */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Filter by Event */}
+          <div>
+            <label className="block text-sm font-medium text-primary-fg mb-2">
+              <Calendar className="h-4 w-4 inline mr-1" />
+              Filter by Event
+            </label>
+            <select
+              value={filterEventId}
+              onChange={(e) => {
+                setFilterEventId(e.target.value);
+                // Update URL without reload
+                if (e.target.value) {
+                  window.history.pushState({}, '', `/tasks?eventId=${e.target.value}`);
+                } else {
+                  window.history.pushState({}, '', '/tasks');
+                }
+              }}
+              className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+            >
+              <option value="">All Events</option>
+              {events.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter by Assignee (Admin only) */}
+          {isAdmin && (
             <div>
               <label className="block text-sm font-medium text-primary-fg mb-2">
                 <Filter className="h-4 w-4 inline mr-1" />
@@ -692,44 +796,59 @@ export default function TasksPage() {
                 ))}
               </select>
             </div>
+          )}
 
-            {/* Sort By */}
-            <div>
-              <label className="block text-sm font-medium text-primary-fg mb-2">
-                <ArrowUpDown className="h-4 w-4 inline mr-1" />
-                Sort By
-              </label>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'createdAt' | 'updatedAt' | 'deadline' | 'assignedAt')}
-                className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
-              >
-                <option value="createdAt">Created Date</option>
-                <option value="updatedAt">Updated Date</option>
-                <option value="deadline">Deadline</option>
-                <option value="assignedAt">Assigned Date</option>
-              </select>
-            </div>
+          {/* Sort By */}
+          {isAdmin && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  <ArrowUpDown className="h-4 w-4 inline mr-1" />
+                  Sort By
+                </label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'createdAt' | 'updatedAt' | 'deadline' | 'assignedAt')}
+                  className="w-full px-3 py-2 border border-primary-border rounded-lg bg-primary-bg text-primary-fg focus:outline-none focus:ring-2 focus:ring-primary-accent"
+                >
+                  <option value="createdAt">Created Date</option>
+                  <option value="updatedAt">Updated Date</option>
+                  <option value="deadline">Deadline</option>
+                  <option value="assignedAt">Assigned Date</option>
+                </select>
+              </div>
 
-            {/* Sort Order Toggle */}
-            <div>
-              <label className="block text-sm font-medium text-primary-fg mb-2">
-                Order
-              </label>
-              <button
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="w-full px-3 py-2 border border-primary-border rounded-lg transition-colors flex items-center justify-center bg-primary-bg text-primary-fg hover:bg-primary-accent-light hover:border-primary-accent"
-                title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
-              >
-                {sortOrder === 'asc' ? (
-                  <ArrowUp className="h-5 w-5" />
-                ) : (
-                  <ArrowDown className="h-5 w-5" />
-                )}
-              </button>
-            </div>
-          </div>
-        )}
+              {/* Sort Order Toggle */}
+              <div>
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Order
+                </label>
+                <button
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="w-full px-3 py-2 border border-primary-border rounded-lg transition-colors flex items-center justify-center bg-primary-bg text-primary-fg hover:bg-primary-accent-light hover:border-primary-accent"
+                  title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
+                >
+                  {sortOrder === 'asc' ? (
+                    <ArrowUp className="h-5 w-5" />
+                  ) : (
+                    <ArrowDown className="h-5 w-5" />
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Create from Note Link */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/notes"
+            className="flex items-center gap-2 px-4 py-2 text-primary-accent hover:text-primary-accent-dark transition-colors"
+          >
+            <FileText className="h-4 w-4" />
+            <span>Create Task from Note</span>
+          </Link>
+        </div>
 
         {/* Results Count */}
         {(searchQuery || (isAdmin && filterAssignee)) && (
@@ -771,6 +890,7 @@ export default function TasksPage() {
                 isOverdue={isOverdue}
                 draggedTask={draggedTask}
                 currentUserId={currentUserId}
+                dependencies={taskDependencies[task.id]}
               />
             ))}
             {tasksByStatus.not_started.length === 0 && (
@@ -807,6 +927,7 @@ export default function TasksPage() {
                 isOverdue={isOverdue}
                 draggedTask={draggedTask}
                 currentUserId={currentUserId}
+                dependencies={taskDependencies[task.id]}
               />
             ))}
             {tasksByStatus.in_progress.length === 0 && (
@@ -843,6 +964,7 @@ export default function TasksPage() {
                 isOverdue={isOverdue}
                 draggedTask={draggedTask}
                 currentUserId={currentUserId}
+                dependencies={taskDependencies[task.id]}
               />
             ))}
             {tasksByStatus.completed.length === 0 && (
@@ -1237,6 +1359,7 @@ function TaskCard({
   isOverdue,
   draggedTask,
   currentUserId,
+  dependencies,
 }: {
   task: Task;
   onStatusChange: (taskId: string, status: 'not_started' | 'in_progress' | 'completed') => void;
@@ -1249,6 +1372,7 @@ function TaskCard({
   isOverdue: (task: Task) => boolean;
   draggedTask?: Task | null;
   currentUserId?: string;
+  dependencies?: { parentTasks: string[], childTasks: string[] };
 }) {
   const timeTaken = getTimeTaken(task);
   const overdue = isOverdue(task);
@@ -1352,6 +1476,32 @@ function TaskCard({
 
       {task.description && (
         <p className="text-xs text-primary-muted mb-2 line-clamp-2">{task.description}</p>
+      )}
+
+      {/* Dependencies Indicator */}
+      {dependencies && (dependencies.parentTasks.length > 0 || dependencies.childTasks.length > 0) && (
+        <div className="mb-2 flex items-center gap-2">
+          {dependencies.parentTasks.length > 0 && (
+            <Link
+              href={`/tasks/${task.id}/dependencies`}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+            >
+              <GitBranch className="h-3 w-3" />
+              <span>{dependencies.parentTasks.length} parent{dependencies.parentTasks.length !== 1 ? 's' : ''}</span>
+            </Link>
+          )}
+          {dependencies.childTasks.length > 0 && (
+            <Link
+              href={`/tasks/${task.id}/dependencies`}
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 text-xs text-green-600 hover:text-green-700"
+            >
+              <GitBranch className="h-3 w-3" />
+              <span>{dependencies.childTasks.length} child{dependencies.childTasks.length !== 1 ? 'ren' : ''}</span>
+            </Link>
+          )}
+        </div>
       )}
 
       <div className="space-y-1 text-xs text-primary-muted">
