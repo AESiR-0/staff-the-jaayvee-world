@@ -80,6 +80,20 @@ export async function POST(request: NextRequest) {
     });
     
     const data = await response.json();
+    
+    // Log detailed error information for 400 responses
+    if (response.status === 400) {
+      console.error('❌ CSV creation failed with 400:', {
+        status: response.status,
+        statusText: response.statusText,
+        data: data,
+        formDataEntries: Array.from(formData.entries()).map(([key, value]) => ({
+          key,
+          value: value instanceof File ? `File: ${value.name} (${value.size} bytes)` : value
+        }))
+      });
+    }
+    
     return NextResponse.json(data, { status: response.status });
   } catch (error: any) {
     console.error('CSV lists POST error:', error);

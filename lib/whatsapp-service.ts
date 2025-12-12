@@ -64,6 +64,15 @@ export interface SendBatchResponse {
   message?: string;
 }
 
+export interface ContactStatus {
+  phone: string;
+  name: string | null;
+  status: 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled';
+  error: string | null;
+  sentAt: string | null;
+  retryCount: number;
+}
+
 export interface JobStatus {
   jobId: string;
   status: 'pending' | 'running' | 'completed' | 'cancelled' | 'error';
@@ -75,7 +84,8 @@ export interface JobStatus {
     batchesCompleted: number;
     currentBatch: number;
   };
-  errors: string[];
+  contactStatuses?: ContactStatus[]; // Per-contact status tracking
+  errors: string[] | Array<{ phone: string; name: string; error: string; timestamp: string }>;
   startedAt?: string;
   completedAt?: string;
 }

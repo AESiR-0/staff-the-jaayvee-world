@@ -8,6 +8,7 @@ interface WhatsAppRichTextEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   rows?: number;
+  disabled?: boolean;
 }
 
 /**
@@ -23,11 +24,12 @@ export default function WhatsAppRichTextEditor({
   onChange,
   placeholder = 'Enter your message here. Use {name} as a placeholder for contact names.',
   rows = 6,
+  disabled = false,
 }: WhatsAppRichTextEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const insertMarkdown = (before: string, after: string = before) => {
-    if (!textareaRef.current) return;
+    if (!textareaRef.current || disabled) return;
 
     const textarea = textareaRef.current;
     const start = textarea.selectionStart;
@@ -59,7 +61,7 @@ export default function WhatsAppRichTextEditor({
   return (
     <div className="space-y-2">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 p-2 bg-gray-50 border border-primary-border rounded-lg">
+      <div className={`flex items-center gap-2 p-2 bg-gray-50 border border-primary-border rounded-lg ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
         <button
           type="button"
           onClick={() => insertMarkdown('*')}
@@ -100,7 +102,8 @@ export default function WhatsAppRichTextEditor({
           onChange(e.target.value);
         }}
         placeholder={placeholder}
-        className="w-full px-4 py-3 border border-primary-border rounded-lg focus:ring-2 focus:ring-primary-accent focus:border-primary-accent outline-none resize-none bg-white text-primary-fg font-mono text-sm"
+        disabled={disabled}
+        className="w-full px-4 py-3 border border-primary-border rounded-lg focus:ring-2 focus:ring-primary-accent focus:border-primary-accent outline-none resize-none bg-white text-primary-fg font-mono text-sm disabled:bg-gray-100 disabled:text-gray-500"
         rows={rows}
         style={{
           whiteSpace: 'pre-wrap', // Preserves newlines and spaces
@@ -114,5 +117,3 @@ export default function WhatsAppRichTextEditor({
     </div>
   );
 }
-
-

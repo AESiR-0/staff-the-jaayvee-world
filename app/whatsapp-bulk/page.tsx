@@ -7,6 +7,8 @@ import WhatsAppRichTextEditor from '@/components/WhatsAppRichTextEditor';
 import CSVUploadModal from '@/components/CSVUploadModal';
 import CSVListTable, { type CSVListItem } from '@/components/CSVListTable';
 import CSVPreviewTable, { type Contact } from '@/components/CSVPreviewTable';
+import CampaignManager from '@/components/CampaignManager';
+import ContactStatusTable from '@/components/ContactStatusTable';
 import { authenticatedFetch, getTeamSession } from '@/lib/auth-utils';
 import { parseCSV } from '@/lib/csv-parser';
 
@@ -37,7 +39,7 @@ export default function WhatsAppBulkPage() {
   const [error, setError] = useState<string | null>(null);
   const [serviceConfigured, setServiceConfigured] = useState<boolean | null>(null);
   const statusIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // RBAC state
   const [canAccess, setCanAccess] = useState(false);
   const [checkingAccess, setCheckingAccess] = useState(true);
@@ -66,12 +68,15 @@ export default function WhatsAppBulkPage() {
   const [legacyContacts, setLegacyContacts] = useState<Contact[]>([]);
   const [csvError, setCsvError] = useState<string | null>(null);
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'send-now' | 'scheduled'>('send-now');
+
   const checkAccess = useCallback(async () => {
     try {
       setCheckingAccess(true);
       const session = getTeamSession();
       const userEmail = session?.email;
-      
+
       if (!userEmail) {
         setCanAccess(false);
         setCheckingAccess(false);
@@ -81,13 +86,13 @@ export default function WhatsAppBulkPage() {
       const { getAuthToken } = require('@/lib/auth-utils');
       const { checkHasAccessClient } = require('@/lib/permissions');
       const token = getAuthToken();
-      
+
       if (!token) {
         setCanAccess(false);
         setCheckingAccess(false);
         return;
       }
-      
+
       const result = await checkHasAccessClient(userEmail, 'whatsapp-bulk', token);
       setCanAccess(result.hasAccess);
     } catch (err) {
@@ -527,289 +532,324 @@ export default function WhatsAppBulkPage() {
         <p className="text-primary-muted mt-1">Send messages to multiple contacts using saved CSV lists or upload a new CSV</p>
       </div>
 
-      {/* Service Configuration Warning */}
-      {serviceConfigured === false && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <p className="text-yellow-800 font-medium">⚠️ WhatsApp service not configured</p>
-          <p className="text-yellow-700 text-sm mt-1">
-            Please set <code className="bg-yellow-100 px-1 rounded">WHATSAPP_SERVICE_URL</code> in your Vercel environment variables.
-          </p>
-        </div>
-      )}
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('send-now')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'send-now'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+          >
+            Send Now
+          </button>
+          <button
+            onClick={() => setActiveTab('scheduled')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'scheduled'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+          >
+            8-Day Campaigns
+          </button>
+        </nav>
+      </div>
 
-      {/* Authentication Status */}
-      {serviceConfigured !== false && !isAuthenticated && (
-        <div className="bg-white border border-primary-border rounded-lg p-6">
-          <WhatsAppQRCode onAuthenticated={() => setIsAuthenticated(true)} />
-        </div>
-      )}
-
-      {isAuthenticated && (
+      {/* Tab Content */}
+      {activeTab === 'scheduled' ? (
+        <CampaignManager
+          csvLists={csvLists}
+          onRefreshCsvLists={fetchCsvLists}
+        />
+      ) : (
         <>
-          {/* Message Template */}
-          <div className="bg-white border border-primary-border rounded-lg p-6">
-            <label className="block text-sm font-medium text-primary-fg mb-2">
-              Message Template
-            </label>
-            <WhatsAppRichTextEditor
-              value={messageTemplate}
-              onChange={setMessageTemplate}
-              placeholder="Enter your message here. Use {name} as a placeholder for contact names."
-              rows={6}
-            />
-          </div>
 
-          {/* CSV Library Section */}
-          <div className="bg-white border border-primary-border rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-primary-fg">CSV Library</h2>
-              <button
-                onClick={() => setShowUploadModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                <Plus size={16} />
-                Upload CSV
-              </button>
+          {/* Service Configuration Warning */}
+          {serviceConfigured === false && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-yellow-800 font-medium">⚠️ WhatsApp service not configured</p>
+              <p className="text-yellow-700 text-sm mt-1">
+                Please set <code className="bg-yellow-100 px-1 rounded">WHATSAPP_SERVICE_URL</code> in your Vercel environment variables.
+              </p>
             </div>
+          )}
 
-            {/* Filters */}
-            <div className="flex flex-wrap gap-4 mb-4">
-              <div className="flex-1 min-w-[200px]">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search CSV lists..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-              <div className="min-w-[150px]">
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => {
-                    setCategoryFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">All Categories</option>
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="min-w-[150px]">
-                <select
-                  value={`${sortBy}-${sortOrder}`}
-                  onChange={(e) => {
-                    const [newSortBy, newSortOrder] = e.target.value.split('-') as [typeof sortBy, typeof sortOrder];
-                    setSortBy(newSortBy);
-                    setSortOrder(newSortOrder);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="createdAt-desc">Newest First</option>
-                  <option value="createdAt-asc">Oldest First</option>
-                  <option value="name-asc">Name A-Z</option>
-                  <option value="name-desc">Name Z-A</option>
-                  <option value="totalContacts-desc">Most Contacts</option>
-                  <option value="totalContacts-asc">Fewest Contacts</option>
-                </select>
-              </div>
-            </div>
-
-            {/* CSV List Table */}
-            <CSVListTable
-              csvLists={csvLists}
-              selectedIds={selectedCsvIds}
-              onSelect={handleSelectCsv}
-              onSelectAll={handleSelectAll}
-              onEdit={handleEditCsv}
-              onDelete={handleDeleteCsv}
-              onPreview={handlePreviewCsv}
-              loading={loadingCsvLists}
-            />
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4">
-                <div className="text-sm text-gray-700">
-                  Page {currentPage} of {totalPages}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Preview Section */}
-          {activeContacts.length > 0 && (
+          {/* Authentication Status */}
+          {serviceConfigured !== false && !isAuthenticated && (
             <div className="bg-white border border-primary-border rounded-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-primary-fg">
-                  Preview Contacts ({activeContacts.length.toLocaleString()} contacts)
-                  {selectedCsvIds.length > 0 && (
-                    <span className="ml-2 text-sm font-normal text-gray-600">
-                      from {selectedCsvIds.length} selected CSV{selectedCsvIds.length > 1 ? 's' : ''}
-                    </span>
-                  )}
-                </h3>
-                {selectedCsvIds.length > 0 && (
+              <WhatsAppQRCode onAuthenticated={() => setIsAuthenticated(true)} />
+            </div>
+          )}
+
+          {isAuthenticated && (
+            <>
+              {/* Message Template */}
+              <div className="bg-white border border-primary-border rounded-lg p-6">
+                <label className="block text-sm font-medium text-primary-fg mb-2">
+                  Message Template
+                </label>
+                <WhatsAppRichTextEditor
+                  value={messageTemplate}
+                  onChange={setMessageTemplate}
+                  placeholder="Enter your message here. Use {name} as a placeholder for contact names."
+                  rows={6}
+                />
+              </div>
+
+              {/* CSV Library Section */}
+              <div className="bg-white border border-primary-border rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-primary-fg">CSV Library</h2>
                   <button
-                    onClick={() => setSelectedCsvIds([])}
-                    className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
+                    onClick={() => setShowUploadModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                   >
-                    <X size={16} />
-                    Clear Selection
+                    <Plus size={16} />
+                    Upload CSV
                   </button>
+                </div>
+
+                {/* Filters */}
+                <div className="flex flex-wrap gap-4 mb-4">
+                  <div className="flex-1 min-w-[200px]">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Search CSV lists..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setCurrentPage(1);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="min-w-[150px]">
+                    <select
+                      value={categoryFilter}
+                      onChange={(e) => {
+                        setCategoryFilter(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">All Categories</option>
+                      {categories.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="min-w-[150px]">
+                    <select
+                      value={`${sortBy}-${sortOrder}`}
+                      onChange={(e) => {
+                        const [newSortBy, newSortOrder] = e.target.value.split('-') as [typeof sortBy, typeof sortOrder];
+                        setSortBy(newSortBy);
+                        setSortOrder(newSortOrder);
+                        setCurrentPage(1);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="createdAt-desc">Newest First</option>
+                      <option value="createdAt-asc">Oldest First</option>
+                      <option value="name-asc">Name A-Z</option>
+                      <option value="name-desc">Name Z-A</option>
+                      <option value="totalContacts-desc">Most Contacts</option>
+                      <option value="totalContacts-asc">Fewest Contacts</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* CSV List Table */}
+                <CSVListTable
+                  csvLists={csvLists}
+                  selectedIds={selectedCsvIds}
+                  onSelect={handleSelectCsv}
+                  onSelectAll={handleSelectAll}
+                  onEdit={handleEditCsv}
+                  onDelete={handleDeleteCsv}
+                  onPreview={handlePreviewCsv}
+                  loading={loadingCsvLists}
+                />
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-gray-700">
+                      Page {currentPage} of {totalPages}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        Previous
+                      </button>
+                      <button
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
-              {combinedContacts.length > 0 ? (
-                <CSVPreviewTable
-                  contacts={combinedContacts}
-                  onEdit={(index, contact) => {
-                    // For combined contacts, we need to find which CSV it belongs to
-                    // This is a simplified version - in a real scenario, you'd track the source CSV
-                    console.warn('Editing combined contacts is not fully supported yet');
-                  }}
-                  onDelete={(index) => {
-                    console.warn('Deleting from combined contacts is not fully supported yet');
-                  }}
-                  loading={loadingCombined}
-                />
-              ) : (
-                <div className="text-sm text-gray-600">
-                  <p>Showing {legacyContacts.length} contacts from uploaded CSV file</p>
-                  <div className="mt-4 max-h-60 overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-2 text-left">Phone</th>
-                          <th className="px-4 py-2 text-left">Name</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {legacyContacts.slice(0, 10).map((contact, index) => (
-                          <tr key={index} className="border-t">
-                            <td className="px-4 py-2">{contact.phone}</td>
-                            <td className="px-4 py-2">{contact.name || '(No name)'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {legacyContacts.length > 10 && (
-                      <p className="text-xs text-gray-500 mt-2 text-center">
-                        Showing first 10 of {legacyContacts.length} contacts
-                      </p>
+
+              {/* Preview Section */}
+              {activeContacts.length > 0 && (
+                <div className="bg-white border border-primary-border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-primary-fg">
+                      Preview Contacts ({activeContacts.length.toLocaleString()} contacts)
+                      {selectedCsvIds.length > 0 && (
+                        <span className="ml-2 text-sm font-normal text-gray-600">
+                          from {selectedCsvIds.length} selected CSV{selectedCsvIds.length > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </h3>
+                    {selectedCsvIds.length > 0 && (
+                      <button
+                        onClick={() => setSelectedCsvIds([])}
+                        className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
+                      >
+                        <X size={16} />
+                        Clear Selection
+                      </button>
                     )}
+                  </div>
+                  {combinedContacts.length > 0 ? (
+                    <CSVPreviewTable
+                      contacts={combinedContacts}
+                      onEdit={(index, contact) => {
+                        // For combined contacts, we need to find which CSV it belongs to
+                        // This is a simplified version - in a real scenario, you'd track the source CSV
+                        console.warn('Editing combined contacts is not fully supported yet');
+                      }}
+                      onDelete={(index) => {
+                        console.warn('Deleting from combined contacts is not fully supported yet');
+                      }}
+                      loading={loadingCombined}
+                    />
+                  ) : (
+                    <div className="text-sm text-gray-600">
+                      <p>Showing {legacyContacts.length} contacts from uploaded CSV file</p>
+                      <div className="mt-4 max-h-60 overflow-y-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left">Phone</th>
+                              <th className="px-4 py-2 text-left">Name</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {legacyContacts.slice(0, 10).map((contact, index) => (
+                              <tr key={index} className="border-t">
+                                <td className="px-4 py-2">{contact.phone}</td>
+                                <td className="px-4 py-2">{contact.name || '(No name)'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {legacyContacts.length > 10 && (
+                          <p className="text-xs text-gray-500 mt-2 text-center">
+                            Showing first 10 of {legacyContacts.length} contacts
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Legacy CSV Upload (Fallback) */}
+              <div className="bg-white border border-primary-border rounded-lg p-6">
+                <h3 className="text-sm font-medium text-primary-fg mb-2">Or Upload CSV File Directly</h3>
+                <div className="border-2 border-dashed border-primary-border rounded-lg p-6 text-center">
+                  <Upload className="h-8 w-8 text-primary-muted mx-auto mb-2" />
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="csv-upload"
+                  />
+                  <label
+                    htmlFor="csv-upload"
+                    className="cursor-pointer text-primary-accent hover:text-primary-accent/80 font-medium"
+                  >
+                    Click to upload CSV
+                  </label>
+                  <p className="text-xs text-primary-muted mt-2">
+                    CSV should have columns: phone, name (name is optional)
+                  </p>
+                </div>
+                {csvError && (
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-800 text-sm">
+                    {csvError}
+                  </div>
+                )}
+              </div>
+
+              {/* Error Display */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                  <XCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-red-800 font-medium">Error</p>
+                    <p className="text-red-700 text-sm">{error}</p>
                   </div>
                 </div>
               )}
-            </div>
+
+              {/* Send Button */}
+              <div className="flex gap-4">
+                <button
+                  onClick={handleSend}
+                  disabled={loading || sending || activeContacts.length === 0 || !messageTemplate.trim()}
+                  className="flex items-center gap-2 px-6 py-3 bg-primary-accent text-white rounded-lg hover:bg-primary-accent/90 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-5 w-5" />
+                      Send to {activeContacts.length.toLocaleString()} Contact{activeContacts.length !== 1 ? 's' : ''}
+                    </>
+                  )}
+                </button>
+                {sending && jobId && (
+                  <button
+                    onClick={handleCancel}
+                    className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+            </>
           )}
 
-          {/* Legacy CSV Upload (Fallback) */}
-          <div className="bg-white border border-primary-border rounded-lg p-6">
-            <h3 className="text-sm font-medium text-primary-fg mb-2">Or Upload CSV File Directly</h3>
-            <div className="border-2 border-dashed border-primary-border rounded-lg p-6 text-center">
-              <Upload className="h-8 w-8 text-primary-muted mx-auto mb-2" />
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileChange}
-                className="hidden"
-                id="csv-upload"
-              />
-              <label
-                htmlFor="csv-upload"
-                className="cursor-pointer text-primary-accent hover:text-primary-accent/80 font-medium"
-              >
-                Click to upload CSV
-              </label>
-              <p className="text-xs text-primary-muted mt-2">
-                CSV should have columns: phone, name (name is optional)
-              </p>
-            </div>
-            {csvError && (
-              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-red-800 text-sm">
-                {csvError}
-              </div>
-            )}
-          </div>
-
-          {/* Error Display */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-              <XCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-red-800 font-medium">Error</p>
-                <p className="text-red-700 text-sm">{error}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Send Button */}
-          <div className="flex gap-4">
-            <button
-              onClick={handleSend}
-              disabled={loading || sending || activeContacts.length === 0 || !messageTemplate.trim()}
-              className="flex items-center gap-2 px-6 py-3 bg-primary-accent text-white rounded-lg hover:bg-primary-accent/90 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Starting...
-                </>
-              ) : (
-                <>
-                  <Send className="h-5 w-5" />
-                  Send to {activeContacts.length.toLocaleString()} Contact{activeContacts.length !== 1 ? 's' : ''}
-                </>
-              )}
-            </button>
-            {sending && jobId && (
-              <button
-                onClick={handleCancel}
-                className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-
-          {/* Job Status */}
-          {jobStatus && (
+          {/* Enhanced Job Status with Contact Status Table */}
+          {jobStatus && jobId && (
             <div className="bg-white border border-primary-border rounded-lg p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-primary-fg">Sending Progress</h3>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  jobStatus.status === 'completed' ? 'bg-green-100 text-green-800' :
-                  jobStatus.status === 'error' ? 'bg-red-100 text-red-800' :
-                  jobStatus.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
-                  'bg-blue-100 text-blue-800'
-                }`}>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${jobStatus.status === 'completed' ? 'bg-green-100 text-green-800' :
+                    jobStatus.status === 'error' ? 'bg-red-100 text-red-800' :
+                      jobStatus.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
+                        'bg-blue-100 text-blue-800'
+                  }`}>
                   {jobStatus.status.toUpperCase()}
                 </span>
               </div>
@@ -848,13 +888,26 @@ export default function WhatsAppBulkPage() {
                 </div>
               </div>
 
+              {/* Per-Contact Status Table */}
+              <div className="mt-6">
+                <ContactStatusTable
+                  jobId={jobId}
+                  onResend={() => {
+                    // Refresh job status after resend
+                    fetchJobStatus();
+                  }}
+                />
+              </div>
+
               {/* Errors */}
               {jobStatus.errors.length > 0 && (
                 <div className="mt-4">
                   <p className="text-sm font-medium text-primary-fg mb-2">Errors:</p>
                   <div className="max-h-40 overflow-y-auto bg-red-50 border border-red-200 rounded p-3">
-                    {jobStatus.errors.map((err, index) => (
-                      <p key={index} className="text-xs text-red-800 mb-1">{err}</p>
+                    {jobStatus.errors.map((err: any, index: number) => (
+                      <p key={index} className="text-xs text-red-800 mb-1">
+                        {typeof err === 'string' ? err : `${err.phone || 'Unknown'}: ${err.error || 'Unknown error'}`}
+                      </p>
                     ))}
                   </div>
                 </div>

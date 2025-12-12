@@ -36,7 +36,7 @@ export default function GalleryPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [events, setEvents] = useState<Array<{ id: string; title: string }>>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
-  
+
   // Upload form state
   const [uploadForm, setUploadForm] = useState({
     title: '',
@@ -74,9 +74,9 @@ export default function GalleryPage() {
       setLoadingEvents(true);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
       const response = await authenticatedFetch(`${API_BASE_URL}/api/events?all=true`);
-      
+
       if (!response.ok) throw new Error('Failed to fetch events');
-      
+
       const result = await response.json();
       if (result.success) {
         setEvents(result.data || []);
@@ -93,7 +93,7 @@ export default function GalleryPage() {
       setCheckingPermission(true);
       const session = getTeamSession();
       const userEmail = session?.email;
-      
+
       if (!userEmail) {
         setCanManage(false);
         setCheckingPermission(false);
@@ -103,13 +103,13 @@ export default function GalleryPage() {
       const { getAuthToken } = require('@/lib/auth-utils');
       const { checkHasAccessClient } = require('@/lib/permissions');
       const token = getAuthToken();
-      
+
       if (!token) {
         setCanManage(false);
         setCheckingPermission(false);
         return;
       }
-      
+
       const result = await checkHasAccessClient(userEmail, 'gallery', token);
       setCanManage(result.hasAccess);
     } catch (err) {
@@ -125,9 +125,9 @@ export default function GalleryPage() {
       setLoading(true);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
       const response = await authenticatedFetch(`${API_BASE_URL}/api/gallery`);
-      
+
       if (!response.ok) throw new Error('Failed to fetch images');
-      
+
       const result = await response.json();
       if (result.success) {
         setImages(result.data || []);
@@ -166,7 +166,7 @@ export default function GalleryPage() {
     try {
       setUploading(true);
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://talaash.thejaayveeworld.com';
-      
+
       let imageUrl = uploadForm.imageUrl;
       let thumbnailUrl = uploadForm.thumbnailUrl;
 
@@ -609,6 +609,7 @@ export default function GalleryPage() {
                       photographer: '',
                       tags: '',
                       isFeatured: false,
+                      eventId: '',
                     });
                   }}
                   disabled={uploading}

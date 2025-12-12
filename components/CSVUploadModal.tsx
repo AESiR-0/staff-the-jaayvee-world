@@ -15,6 +15,7 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }: CSVUpload
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [isShared, setIsShared] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +63,7 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }: CSVUpload
       if (description.trim()) {
         formData.append('description', description.trim());
       }
+      formData.append('isShared', isShared.toString());
       formData.append('csv', csvFile);
 
       const response = await authenticatedFetch('/api/csv-lists', {
@@ -80,6 +82,7 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }: CSVUpload
       setCategory('');
       setDescription('');
       setCsvFile(null);
+      setIsShared(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -100,6 +103,7 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }: CSVUpload
       setCategory('');
       setDescription('');
       setCsvFile(null);
+      setIsShared(false);
       setError(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -198,6 +202,24 @@ export default function CSVUploadModal({ isOpen, onClose, onSuccess }: CSVUpload
                 Selected: {csvFile.name} ({(csvFile.size / 1024).toFixed(2)} KB)
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isShared}
+                onChange={(e) => setIsShared(e.target.checked)}
+                disabled={loading}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+              />
+              <span className="text-sm text-gray-700">
+                Share with all users (visible to everyone)
+              </span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1 ml-6">
+              When enabled, this CSV list will be visible to all users in the system
+            </p>
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

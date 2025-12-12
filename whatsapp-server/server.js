@@ -268,12 +268,13 @@ app.get('/auth/status', verifyApiKey, (req, res) => {
 
 // Send messages in batches
 app.post('/send/batch', verifyApiKey, async (req, res) => {
-  if (!isReady) {
-    return res.status(400).json({
-      success: false,
-      error: 'WhatsApp is not ready. Please authenticate first.',
-    });
-  }
+  try {
+    if (!isReady) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp is not ready. Please authenticate first.',
+      });
+    }
 
   const {
     contacts,
@@ -335,10 +336,23 @@ app.post('/send/batch', verifyApiKey, async (req, res) => {
       batchesCompleted: 0,
       currentBatch: 0,
     },
+    contactStatuses: new Map(), // Track per-contact status: { phone: { status, error, sentAt, retryCount } }
     errors: [],
     startedAt: new Date().toISOString(),
     cancelled: false,
   };
+
+  // Initialize all contacts as pending
+  contacts.forEach(contact => {
+    job.contactStatuses.set(contact.phone, {
+      phone: contact.phone,
+      name: contact.name || null,
+      status: 'pending',
+      error: null,
+      sentAt: null,
+      retryCount: 0,
+    });
+  });
 
   jobs.set(jobId, job);
 
@@ -364,54 +378,91 @@ app.post('/send/batch', verifyApiKey, async (req, res) => {
     }
   });
 
-  res.json({
-    success: true,
-    jobId,
-  });
+    res.json({
+      success: true,
+      jobId,
+    });
+  } catch (error) {
+    console.error('Error creating batch job:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to create batch job',
+    });
+  }
 });
 
 // Get job status
 app.get('/send/status/:jobId', verifyApiKey, (req, res) => {
-  const { jobId } = req.params;
-  const job = jobs.get(jobId);
+  try {
+    const { jobId } = req.params;
+    const job = jobs.get(jobId);
 
-  if (!job) {
-    return res.status(404).json({
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    // Convert contactStatuses Map to array for JSON serialization
+    const contactStatusesArray = Array.from(job.contactStatuses.values());
+    
+    res.json({
+      ...job,
+      contactStatuses: contactStatusesArray, // Convert Map to array
+    });
+  } catch (error) {
+    console.error('Error getting job status:', error);
+    res.status(500).json({
       success: false,
-      error: 'Job not found',
+      error: error.message || 'Failed to get job status',
     });
   }
-
-  res.json(job);
 });
 
 // Cancel job
 app.post('/send/cancel/:jobId', verifyApiKey, (req, res) => {
-  const { jobId } = req.params;
-  const job = jobs.get(jobId);
+  try {
+    const { jobId } = req.params;
+    const job = jobs.get(jobId);
 
-  if (!job) {
-    return res.status(404).json({
+    if (!job) {
+      return res.status(404).json({
+        success: false,
+        error: 'Job not found',
+      });
+    }
+
+    if (job.status === 'completed' || job.status === 'cancelled') {
+      return res.json({
+        success: false,
+        message: 'Job is already completed or cancelled',
+      });
+    }
+
+    job.cancelled = true;
+    job.status = 'cancelled';
+    job.completedAt = new Date().toISOString();
+    
+    // Mark all pending/sending contacts as cancelled
+    job.contactStatuses.forEach((status) => {
+      if (status.status === 'pending' || status.status === 'sending') {
+        status.status = 'cancelled';
+        status.error = 'Job was cancelled';
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Job cancelled',
+    });
+  } catch (error) {
+    console.error('Error cancelling job:', error);
+    res.status(500).json({
       success: false,
-      error: 'Job not found',
+      error: error.message || 'Failed to cancel job',
     });
   }
-
-  if (job.status === 'completed' || job.status === 'cancelled') {
-    return res.json({
-      success: false,
-      message: 'Job is already completed or cancelled',
-    });
-  }
-
-  job.cancelled = true;
-  job.status = 'cancelled';
-  job.completedAt = new Date().toISOString();
-
-  res.json({
-    success: true,
-    message: 'Job cancelled',
-  });
 });
 
 // Send messages in batches
@@ -422,9 +473,13 @@ async function sendBatchMessages(
   config
 ) {
   const job = jobs.get(jobId);
-  if (!job) return;
+  if (!job) {
+    console.error(`Job ${jobId} not found`);
+    return;
+  }
 
-  job.status = 'running';
+  try {
+    job.status = 'running';
 
   const batches = createBatches(contacts, config.batchSizeMin, config.batchSizeMax);
   let contactIndex = 0;
@@ -531,16 +586,29 @@ async function sendBatchMessages(
           // Continue anyway - sometimes getNumberId fails but sendMessage works
         }
 
-        // Try to send message with retry logic
+        // Update contact status to sending
+        const contactStatus = job.contactStatuses.get(contact.phone);
+        if (contactStatus) {
+          contactStatus.status = 'sending';
+        }
+
+        // Try to send message with retry logic and exponential backoff
         let lastError = null;
-        const maxRetries = 2;
+        const maxRetries = 3;
         let success = false;
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
             if (attempt > 1) {
-              console.log(`🔄 Retry attempt ${attempt} for ${contact.phone}`);
-              await sleep(3000); // Wait 3 seconds before retry
+              // Exponential backoff: 3s, 6s, 12s
+              const backoffDelay = 3000 * Math.pow(2, attempt - 2);
+              console.log(`🔄 Retry attempt ${attempt} for ${contact.phone} after ${backoffDelay}ms`);
+              await sleep(backoffDelay);
+              
+              // Update retry count
+              if (contactStatus) {
+                contactStatus.retryCount = attempt - 1;
+              }
             }
             
             // Small delay before sending to avoid rate limiting
@@ -638,6 +706,13 @@ async function sendBatchMessages(
             
             await Promise.race([sendPromise, timeoutPromise]);
             
+            // Update contact status to sent
+            if (contactStatus) {
+              contactStatus.status = 'sent';
+              contactStatus.sentAt = new Date().toISOString();
+              contactStatus.error = null;
+            }
+            
             // Log message preview for first contact to verify formatting
             if (contact.phone === contacts[0]?.phone && attempt === 1) {
               console.log(`✅ Message sent successfully to ${contact.phone}`);
@@ -653,20 +728,37 @@ async function sendBatchMessages(
             const errorMsg = retryError.message || retryError.toString() || 'Unknown error';
             console.warn(`⚠️ Attempt ${attempt} failed for ${contact.phone}:`, errorMsg);
             
-            // Log full error for debugging
-            if (errorMsg.includes('Evaluation failed')) {
-              console.error(`❌ Full error details:`, {
-                error: retryError,
-                stack: retryError.stack,
-                phone: contact.phone,
-                chatId: chatId,
-              });
+            // Update contact status with error (will be set to failed if all retries fail)
+            if (contactStatus && attempt === maxRetries) {
+              contactStatus.status = 'failed';
+              contactStatus.error = errorMsg;
             }
             
-            // Don't retry for certain errors
+            // Log full error for debugging with context
+            const errorContext = {
+              timestamp: new Date().toISOString(),
+              phone: contact.phone,
+              name: contact.name || 'Unknown',
+              chatId: chatId,
+              attempt: attempt,
+              error: errorMsg,
+              stack: retryError.stack,
+            };
+            
+            if (errorMsg.includes('Evaluation failed')) {
+              console.error(`❌ Full error details:`, errorContext);
+            } else {
+              console.warn(`⚠️ Error context:`, errorContext);
+            }
+            
+            // Don't retry for certain errors - mark as failed immediately
             if (errorMsg.includes('not registered') || 
                 errorMsg.includes('Invalid phone number') ||
                 errorMsg.includes('not found')) {
+              if (contactStatus) {
+                contactStatus.status = 'failed';
+                contactStatus.error = errorMsg;
+              }
               break;
             }
           }
@@ -675,14 +767,34 @@ async function sendBatchMessages(
         if (success) {
           job.progress.messagesSent++;
         } else {
+          // Mark as failed if all retries exhausted
+          const contactStatus = job.contactStatuses.get(contact.phone);
+          if (contactStatus) {
+            contactStatus.status = 'failed';
+            contactStatus.error = lastError?.message || 'Failed after retries';
+          }
           throw lastError || new Error('Failed after retries');
         }
         
         job.progress.contactsProcessed++;
       } catch (error) {
         const errorMsg = error.message || error.toString() || 'Unknown error';
+        const contactStatus = job.contactStatuses.get(contact.phone);
+        
+        // Ensure contact is marked as failed
+        if (contactStatus && contactStatus.status !== 'sent') {
+          contactStatus.status = 'failed';
+          contactStatus.error = errorMsg;
+        }
+        
         console.error(`❌ Error sending to ${contact.phone}:`, errorMsg);
-        console.error(`❌ Full error:`, error);
+        console.error(`❌ Full error:`, {
+          error: error,
+          stack: error.stack,
+          phone: contact.phone,
+          name: contact.name,
+          timestamp: new Date().toISOString(),
+        });
         
         // Provide more helpful error messages
         let userFriendlyError = errorMsg;
@@ -692,11 +804,18 @@ async function sendBatchMessages(
           userFriendlyError = 'Message send timeout - WhatsApp may be slow or contact unavailable';
         } else if (errorMsg.includes('not registered')) {
           userFriendlyError = 'Phone number not registered on WhatsApp';
+        } else if (errorMsg.includes('Invalid phone number')) {
+          userFriendlyError = 'Invalid phone number format';
         }
         
         job.progress.messagesFailed++;
         job.progress.contactsProcessed++;
-        job.errors.push(`Failed to send to ${contact.phone}: ${userFriendlyError}`);
+        job.errors.push({
+          phone: contact.phone,
+          name: contact.name || 'Unknown',
+          error: userFriendlyError,
+          timestamp: new Date().toISOString(),
+        });
       }
 
       // Random delay between messages
@@ -720,8 +839,22 @@ async function sendBatchMessages(
     }
   }
 
-  job.status = 'completed';
-  job.completedAt = new Date().toISOString();
+    job.status = 'completed';
+    job.completedAt = new Date().toISOString();
+  } catch (error) {
+    console.error(`Error in sendBatchMessages for job ${jobId}:`, error);
+    const job = jobs.get(jobId);
+    if (job) {
+      job.status = 'error';
+      job.completedAt = new Date().toISOString();
+      job.errors.push({
+        phone: 'SYSTEM',
+        name: 'System Error',
+        error: error.message || 'Unknown error in batch processing',
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
 }
 
 // Create batches with random sizes

@@ -35,7 +35,7 @@ interface InfluencerFormData extends BaseFormData {
 // Password strength calculator
 function calculatePasswordStrength(password: string): { strength: number; label: string; color: string } {
   if (!password) return { strength: 0, label: '', color: '' };
-  
+
   let strength = 0;
   if (password.length >= 8) strength += 1;
   if (password.length >= 12) strength += 1;
@@ -43,7 +43,7 @@ function calculatePasswordStrength(password: string): { strength: number; label:
   if (/[A-Z]/.test(password)) strength += 1;
   if (/[0-9]/.test(password)) strength += 1;
   if (/[^a-zA-Z0-9]/.test(password)) strength += 1;
-  
+
   if (strength <= 2) return { strength, label: 'Weak', color: 'bg-red-500' };
   if (strength <= 4) return { strength, label: 'Medium', color: 'bg-yellow-500' };
   if (strength <= 5) return { strength, label: 'Strong', color: 'bg-blue-500' };
@@ -57,19 +57,19 @@ function generatePassword(length: number = 16): string {
   const numbers = '0123456789';
   const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
   const all = uppercase + lowercase + numbers + symbols;
-  
+
   let password = '';
   // Ensure at least one of each type
   password += uppercase[Math.floor(Math.random() * uppercase.length)];
   password += lowercase[Math.floor(Math.random() * lowercase.length)];
   password += numbers[Math.floor(Math.random() * numbers.length)];
   password += symbols[Math.floor(Math.random() * symbols.length)];
-  
+
   // Fill the rest randomly
   for (let i = password.length; i < length; i++) {
     password += all[Math.floor(Math.random() * all.length)];
   }
-  
+
   // Shuffle the password
   return password.split('').sort(() => Math.random() - 0.5).join('');
 }
@@ -88,14 +88,14 @@ function ReferralCodeDisplay({ code, role }: { code: string; role: string }) {
     }
   };
 
-  const roleLabel = role === 'affiliate' ? 'Affiliate Code' : 
-                   role === 'agent' ? 'Agent Referral Code' :
-                   role === 'influencer' ? 'Influencer Referral Code' :
-                   role === 'seller' ? 'Seller Referral Code' :
-                   role === 'staff' ? 'Staff Referral Code' :
-                   role === 'team' ? 'Team Referral Code' :
-                   role === 'trainee' ? 'Trainee Referral Code' :
-                   'Referral Code';
+  const roleLabel = role === 'affiliate' ? 'Affiliate Code' :
+    role === 'agent' ? 'Agent Referral Code' :
+      role === 'influencer' ? 'Influencer Referral Code' :
+        role === 'seller' ? 'Seller Referral Code' :
+          role === 'staff' ? 'Staff Referral Code' :
+            role === 'team' ? 'Team Referral Code' :
+              role === 'trainee' ? 'Trainee Referral Code' :
+                'Referral Code';
 
   return (
     <div className="col-span-2">
@@ -218,7 +218,7 @@ export default function CreateUserPage() {
       const session = getTeamSession();
       if (session?.email) {
         setCurrentUserEmail(session.email);
-        
+
         // Check if user can create staff accounts (requires super admin)
         try {
           const token = getAuthToken();
@@ -233,7 +233,7 @@ export default function CreateUserPage() {
           console.error('Error checking admin status:', error);
           setCanCreateStaff(false);
         }
-        
+
         // Fetch user's referral code
         fetch(`${API_BASE_URL}/api/staff/affiliate`, {
           credentials: 'include',
@@ -250,7 +250,7 @@ export default function CreateUserPage() {
           .catch(err => console.error('Failed to fetch referral code:', err));
       }
     };
-    
+
     checkAdminStatus();
   }, []);
 
@@ -270,7 +270,7 @@ export default function CreateUserPage() {
     formType: RoleType
   ) => {
     const { name, value } = e.target;
-    
+
     switch (formType) {
       case 'seller':
         setSellerFormData(prev => ({ ...prev, [name]: value }));
@@ -298,7 +298,7 @@ export default function CreateUserPage() {
 
   const generatePasswordForForm = (formType: RoleType) => {
     const newPassword = generatePassword(16);
-    
+
     switch (formType) {
       case 'seller':
         setSellerFormData(prev => ({ ...prev, password: newPassword, confirmPassword: newPassword }));
@@ -395,7 +395,7 @@ export default function CreateUserPage() {
       case 'seller':
         formData = sellerFormData;
         endpoint = API_ENDPOINTS.CREATE_SELLER;
-        
+
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
           setIsLoading(false);
@@ -423,7 +423,7 @@ export default function CreateUserPage() {
       case 'agent':
         formData = agentFormData;
         endpoint = `${API_BASE_URL}/api/agents/create`;
-        
+
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
           setIsLoading(false);
@@ -446,7 +446,7 @@ export default function CreateUserPage() {
       case 'affiliate':
         formData = affiliateFormData;
         endpoint = `${API_BASE_URL}/api/affiliates/register`;
-        
+
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
           setIsLoading(false);
@@ -462,14 +462,14 @@ export default function CreateUserPage() {
           email: formData.email,
           fullName: formData.fullName,
           phone: formData.phone || undefined,
-          password: formData.password,  
+          password: formData.password,
         };
         break;
 
       case 'influencer':
         formData = influencerFormData;
         endpoint = `${API_BASE_URL}/api/influencers/register`;
-        
+
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
           setIsLoading(false);
@@ -497,7 +497,7 @@ export default function CreateUserPage() {
       case 'staff':
         formData = staffFormData;
         endpoint = `${API_BASE_URL}/api/staff/auth/register`;
-        
+
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
           setIsLoading(false);
@@ -520,7 +520,7 @@ export default function CreateUserPage() {
       case 'team':
         formData = teamFormData;
         endpoint = `${API_BASE_URL}/api/team/users/create`;
-        
+
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
           setIsLoading(false);
@@ -543,7 +543,7 @@ export default function CreateUserPage() {
       case 'trainee':
         formData = traineeFormData;
         endpoint = `${API_BASE_URL}/api/team/trainees/create`;
-        
+
         if (formData.password !== formData.confirmPassword) {
           setError('Passwords do not match');
           setIsLoading(false);
@@ -593,9 +593,9 @@ export default function CreateUserPage() {
         } else if (result.data.influencer?.referralCode) {
           referralCode = result.data.influencer.referralCode; // Influencer
         }
-        
-        setCreatedUser({ 
-          ...result.data, 
+
+        setCreatedUser({
+          ...result.data,
           role: roleType,
           referralCode: referralCode // Store referral code at top level for easier access
         });
@@ -643,7 +643,7 @@ export default function CreateUserPage() {
             <User className="h-5 w-5" />
             Required Information
           </h3>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor={`${roleType}-fullName`} className="block text-sm font-medium mb-1">
@@ -659,7 +659,7 @@ export default function CreateUserPage() {
                 className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
               />
             </div>
-            
+
             <div>
               <label htmlFor={`${roleType}-email`} className="block text-sm font-medium mb-1">
                 Email *
@@ -675,7 +675,7 @@ export default function CreateUserPage() {
                 className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
               />
             </div>
-            
+
             <div>
               <label htmlFor={`${roleType}-phone`} className="block text-sm font-medium mb-1">
                 Phone
@@ -700,7 +700,7 @@ export default function CreateUserPage() {
               <Sparkles className="h-5 w-5" />
               Social Media Details
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="influencer-instagramHandle" className="block text-sm font-medium mb-1">
@@ -719,7 +719,7 @@ export default function CreateUserPage() {
                   />
                 </div>
               </div>
-              
+
               <div>
                 <label htmlFor="influencer-instagramFollowers" className="block text-sm font-medium mb-1">
                   Instagram Followers *
@@ -736,7 +736,7 @@ export default function CreateUserPage() {
                   className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="influencer-youtubeHandle" className="block text-sm font-medium mb-1">
                   YouTube Handle
@@ -753,7 +753,7 @@ export default function CreateUserPage() {
                   />
                 </div>
               </div>
-              
+
               <div>
                 <label htmlFor="influencer-youtubeSubscribers" className="block text-sm font-medium mb-1">
                   YouTube Subscribers
@@ -769,7 +769,7 @@ export default function CreateUserPage() {
                   className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="influencer-tier" className="block text-sm font-medium mb-1">
                   Tier *
@@ -792,7 +792,7 @@ export default function CreateUserPage() {
           </div>
         )}
 
-      
+
         {/* Seller-specific optional fields */}
         {roleType === 'seller' && (
           <div className="space-y-4">
@@ -800,7 +800,7 @@ export default function CreateUserPage() {
               <Store className="h-5 w-5" />
               Business Information (Optional)
             </h3>
-            
+
             <div>
               <label htmlFor="seller-businessName" className="block text-sm font-medium mb-1">
                 Business Name
@@ -814,7 +814,7 @@ export default function CreateUserPage() {
                 className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
               />
             </div>
-            
+
             <div>
               <label htmlFor="seller-address" className="block text-sm font-medium mb-1">
                 Address
@@ -829,7 +829,7 @@ export default function CreateUserPage() {
                 className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
               />
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label htmlFor="seller-city" className="block text-sm font-medium mb-1">
@@ -844,7 +844,7 @@ export default function CreateUserPage() {
                   className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="seller-state" className="block text-sm font-medium mb-1">
                   State
@@ -858,7 +858,7 @@ export default function CreateUserPage() {
                   className="w-full px-3 py-2 border border-primary-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-accent"
                 />
               </div>
-              
+
               <div>
                 <label htmlFor="seller-pincode" className="block text-sm font-medium mb-1">
                   Pincode
@@ -892,7 +892,7 @@ export default function CreateUserPage() {
               Generate Password
             </button>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label htmlFor={`${roleType}-password`} className="block text-sm font-medium mb-1">
@@ -934,7 +934,7 @@ export default function CreateUserPage() {
                 </div>
               )}
             </div>
-            
+
             <div>
               <label htmlFor={`${roleType}-confirmPassword`} className="block text-sm font-medium mb-1">
                 Confirm Password *
@@ -1008,7 +1008,8 @@ export default function CreateUserPage() {
       agent: 'Agent',
       seller: 'Seller',
       influencer: 'Influencer',
-      staff: 'Team'
+      staff: 'Team',
+      trainee: 'Trainee'
     };
 
     return (
@@ -1040,7 +1041,7 @@ export default function CreateUserPage() {
                     <span className="font-medium">Role:</span> {roleNames[createdUser.role as RoleType] || createdUser.role}
                   </div>
                   {(createdUser.referralCode || createdUser.agent?.referralCode || createdUser.user?.referralCode || createdUser.affiliate?.code || createdUser.influencer?.referralCode) && (
-                    <ReferralCodeDisplay 
+                    <ReferralCodeDisplay
                       code={createdUser.referralCode || createdUser.agent?.referralCode || createdUser.user?.referralCode || createdUser.affiliate?.code || createdUser.influencer?.referralCode || ''}
                       role={createdUser.role}
                     />
@@ -1052,9 +1053,9 @@ export default function CreateUserPage() {
                   )}
                 </div>
               </div>
-              
+
               <div className="flex gap-3">
-                <button 
+                <button
                   onClick={() => {
                     setSuccess(false);
                     setCreatedUser(null);
@@ -1063,7 +1064,7 @@ export default function CreateUserPage() {
                 >
                   Create Another
                 </button>
-                <button 
+                <button
                   onClick={() => window.location.href = '/dashboard'}
                   className="flex-1 px-4 py-2 border border-primary-border rounded-lg hover:bg-gray-50"
                 >

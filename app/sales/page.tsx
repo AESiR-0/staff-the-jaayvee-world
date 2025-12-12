@@ -223,25 +223,33 @@ export default function SalesPage() {
     }
     formData.append('csv', csvFile);
 
-    // Delete old and create new with updated data
-    await authenticatedFetch(`/api/csv-lists/${csvId}`, {
-      method: 'DELETE',
-    });
-
-    const createResponse = await authenticatedFetch('/api/csv-lists', {
-      method: 'POST',
+    // Use PUT to update the CSV in place (no need to delete and recreate)
+    const updateResponse = await authenticatedFetch(`/api/csv-lists/${csvId}`, {
+      method: 'PUT',
       body: formData,
     });
 
-    const createData = await createResponse.json();
-    if (!createData.success) {
-      throw new Error('Failed to save CSV');
+    const updateData = await updateResponse.json();
+
+    // Log detailed error for debugging
+    if (!updateResponse.ok || !updateData.success) {
+      console.error('❌ Failed to update CSV:', {
+        status: updateResponse.status,
+        statusText: updateResponse.statusText,
+        responseData: updateData,
+        csvMetadata: {
+          name: csvData.data.name,
+          category: csvData.data.category,
+          description: csvData.data.description,
+          rowCount: rows.length,
+          headerCount: headers.length
+        }
+      });
+      throw new Error(updateData.error || updateData.message || 'Failed to save CSV');
     }
 
-    // Update the preview with new ID
-    const newId = createData.data.id;
-    setPreviewingCsvId(newId);
-    setSelectedCsvId(newId);
+    // CSV ID remains the same, just refresh the data
+    fetchCsvContacts(csvId);
   };
 
   const handleExportCsv = async (csv: CSVListItem) => {
@@ -293,15 +301,15 @@ export default function SalesPage() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
-    
+
     link.setAttribute('href', url);
     link.setAttribute('download', `${filename.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
-    
+
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     URL.revokeObjectURL(url);
   };
 
@@ -450,7 +458,7 @@ export default function SalesPage() {
               handlePreviewCsv(id);
             }
           }}
-          onSelectAll={() => {}}
+          onSelectAll={() => { }}
           onEdit={handleEditCsv}
           onDelete={handleDeleteCsv}
           onPreview={handlePreviewCsv}

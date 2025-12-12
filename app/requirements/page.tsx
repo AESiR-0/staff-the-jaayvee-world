@@ -201,7 +201,7 @@ export default function RequirementsPage() {
           <div className="card text-center py-12">
             <FileText className="h-12 w-12 mx-auto text-primary-muted mb-4" />
             <p className="text-primary-muted">No requirements found</p>
-            <p className="text-sm text-primary-muted mt-2">Click "Send Requirement" to create one</p>
+            <p className="text-sm text-primary-muted mt-2">Click &ldquo;Send Requirement&rdquo; to create one</p>
           </div>
         ) : (
           requirements.map((req) => (
